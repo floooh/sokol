@@ -15974,6 +15974,13 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    if (@available(macOS 10.15, iOS 13.0, *)) {
+        // A8-class GPUs (Apple TV HD) are Apple2: no baseVertex/baseInstance draws
+        if ([_sg.mtl.device supportsFamily:MTLGPUFamilyApple1] && ![_sg.mtl.device supportsFamily:MTLGPUFamilyApple3]) {
+            _sg.features.draw_base_vertex = false;
+            _sg.features.draw_base_instance = false;
+        }
+    }
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
 
@@ -17575,12 +17582,38 @@ _SOKOL_PRIVATE void _sg_mtl_apply_uniforms(int ub_slot, const sg_range* data) {
     _sg.mtl.cur_ub_offset = _sg_roundup_pow2(_sg.mtl.cur_ub_offset + (int)data->size, _SG_MTL_UB_ALIGN);
 }
 
-_SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+_SOKOL_PRIVATE void _sg_mtl_draw_base0(int base_element, int num_elements, int num_instances) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     if (_sg.use_indexed_draw) {
         // indexed rendering
+        const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.cache.cur_ibuf);
+        SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
+        const NSUInteger index_buffer_offset = (NSUInteger) (_sg.mtl.cache.cur_ibuf_offset + base_element * pip->mtl.index_size);
+        [_sg.mtl.render_cmd_encoder drawIndexedPrimitives:pip->mtl.prim_type
+                                               indexCount:(NSUInteger)num_elements
+                                                indexType:pip->mtl.index_type
+                                              indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
+                                        indexBufferOffset:index_buffer_offset
+                                            instanceCount:(NSUInteger)num_instances];
+    } else {
+        // non-indexed rendering
+        [_sg.mtl.render_cmd_encoder drawPrimitives:pip->mtl.prim_type
+                                       vertexStart:(NSUInteger)base_element
+                                       vertexCount:(NSUInteger)num_elements
+                                     instanceCount:(NSUInteger)num_instances];
+    }
+}
+
+_SOKOL_PRIVATE void _sg_mtl_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
+    SOKOL_ASSERT(_sg.features.draw_base_instance);
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    if (_sg.use_indexed_draw) {
+        // indexed rendering
+        SOKOL_ASSERT(_sg.features.draw_base_vertex);
         const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.cache.cur_ibuf);
         SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
         const NSUInteger index_buffer_offset = (NSUInteger) (_sg.mtl.cache.cur_ibuf_offset + base_element * pip->mtl.index_size);
@@ -17599,6 +17632,14 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
             vertexCount:(NSUInteger)num_elements
             instanceCount:(NSUInteger)num_instances
             baseInstance:(NSUInteger)base_instance];
+    }
+}
+
+_SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
+    if (base_vertex == 0 && base_instance == 0) {
+        _sg_mtl_draw_base0(base_element, num_elements, num_instances);
+    } else {
+        _sg_mtl_draw_ex(base_element, num_elements, num_instances, base_vertex, base_instance);
     }
 }
 
