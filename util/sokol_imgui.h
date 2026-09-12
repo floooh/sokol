@@ -2417,7 +2417,7 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     io->ConfigWindowsResizeFromEdges = !_simgui.desc.disable_windows_resize_from_edges;
 
     // create sokol-gfx resources
-    sg_push_debug_group("sokol-imgui");
+    sg_push_debug_group("sokol-imgui-setup");
 
     // shader object for using the embedded shader source (or bytecode)
     sg_shader_desc shd_desc;
@@ -2587,7 +2587,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     _simgui_imgui_destroy_context();
 
     // NOTE: it's valid to call the destroy funcs with SG_INVALID_ID
-    sg_push_debug_group("sokol-imgui");
+    sg_push_debug_group("sokol-imgui-shutdown");
     sg_destroy_pipeline(_simgui.pip_unfilterable);
     sg_destroy_shader(_simgui.shd_unfilterable);
     sg_destroy_pipeline(_simgui.def_pip);
@@ -2705,6 +2705,7 @@ SOKOL_API_IMPL void simgui_render(void) {
     }
 
     // update vertex and index buffer
+    sg_push_debug_group("sokol-imgui-write");
     size_t vb_offset = 0;
     size_t ib_offset = 0;
     int cmd_list_count = 0;
@@ -2741,12 +2742,13 @@ SOKOL_API_IMPL void simgui_render(void) {
         vb_offset += vtx_size;
         ib_offset = _simgui_roundup4(ib_offset + idx_size);
     }
+    sg_pop_debug_group();
     if (0 == cmd_list_count) {
         return;
     }
 
     // render the ImGui command list
-    sg_push_debug_group("sokol-imgui");
+    sg_push_debug_group("sokol-imgui-draw");
     const int fb_width = (int) (io->DisplaySize.x * draw_data->FramebufferScale.x);
     const int fb_height = (int) (io->DisplaySize.y * draw_data->FramebufferScale.y);
     sg_apply_viewport(0, 0, fb_width, fb_height, true);
