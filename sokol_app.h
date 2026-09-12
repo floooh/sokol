@@ -3184,6 +3184,7 @@ typedef struct {
     Window root;
     Colormap colormap;
     Window window;
+    bool window_focused;
     Cursor hidden_cursor;
     Cursor standard_cursors[_SAPP_MOUSECURSOR_NUM];
     Cursor custom_cursors[_SAPP_MOUSECURSOR_NUM];
@@ -13413,15 +13414,15 @@ _SOKOL_PRIVATE int _sapp_x11_get_window_state(void) {
     return result;
 }
 
+_SOKOL_PRIVATE bool _sapp_x11_window_focused(void) {
+    return _sapp.x11.window_focused;
+}
+
 _SOKOL_PRIVATE void _sapp_x11_lock_mouse(bool lock) {
     _sapp.x11.requested_mouse_lock = lock;
 }
 
 _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
-    if (!_sapp_x11_window_visible()) {
-        return;
-    }
-
     int result = XGrabPointer(
         _sapp.x11.display,          // display
         _sapp.x11.window,           // grab_window
@@ -13449,10 +13450,6 @@ _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_do_unlock_mouse(void) {
-    if (!_sapp_x11_window_visible()) {
-        return;
-    }
-
     if (_sapp.x11.xi.available) {
         XIEventMask em;
         unsigned char mask[] = { 0 };
@@ -13471,6 +13468,15 @@ _SOKOL_PRIVATE void _sapp_x11_do_unlock_mouse(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_x11_update_mouse_lock(void) {
+    // mouse lock can only be active when we're the active window
+    if (!_sapp_x11_window_focused()) {
+        // unlock mouse if currently locked
+        if (_sapp.mouse.locked) {
+            _sapp_x11_do_unlock_mouse();
+        }
+        return;
+    }
+
     // nothing to do if requested lock state matches current lock state
     const bool lock = _sapp.x11.requested_mouse_lock;
     if (lock == _sapp.mouse.locked) {
@@ -13769,17 +13775,15 @@ _SOKOL_PRIVATE void _sapp_x11_on_genericevent(XEvent* event) {
 _SOKOL_PRIVATE void _sapp_x11_on_focusin(XEvent* event) {
     // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
     if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+        _sapp.x11.window_focused = true;
         _sapp_x11_app_event(SAPP_EVENTTYPE_FOCUSED);
     }
 }
 
 _SOKOL_PRIVATE void _sapp_x11_on_focusout(XEvent* event) {
-    // if focus is lost for any reason, and we're in mouse locked mode, disable mouse lock
-    if (_sapp.mouse.locked) {
-        _sapp_x11_do_unlock_mouse();
-    }
     // NOTE: ignoring NotifyGrab and NotifyUngrab is same behaviour as GLFW
     if ((event->xfocus.mode != NotifyGrab) && (event->xfocus.mode != NotifyUngrab)) {
+        _sapp.x11.window_focused = false;
         _sapp_x11_app_event(SAPP_EVENTTYPE_UNFOCUSED);
     }
 }
