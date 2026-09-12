@@ -1,5 +1,22 @@
 ## Updates
 
+### 12-Sep-2026
+
+- sokol_gfx.h mtl: fix for some older Apple GPUs (used on tvOS devices)
+  not supporting base-vertex/instance draws. Unfortunately the baseVertex/baseInstance
+  variant of the Metal drawPrimitive doesn't have a silent fallback on such devices when
+  baseVertex and baseInstance are zero, but instead throws an error as soon as
+  the method is called, which then required two separate code paths in the
+  sokol-gfx Metal backend.
+
+  PR: https://github.com/floooh/sokol/pull/1601
+
+  Many thanks to @tomasandrle for the PR!
+
+  PS: I also forgot to mention another recently merged PR by @tomasandrle with
+  a minor tvOS specific event handling behaviour change in sokol_app.h's
+  iOS backend: https://github.com/floooh/sokol/pull/1600
+
 ### 11-Sep-2026
 
 - sokol_gfx.h: the validation layer checks which make sure that
@@ -12,6 +29,8 @@
   See ticket https://github.com/floooh/sokol/issues/1598 for details.
 
   PR: https://github.com/floooh/sokol/pull/1599
+
+  Many thanks to @DctrNoob for raising the issue!
 
 ### 07-Sep-2026
 
