@@ -1104,6 +1104,7 @@ void glSamplerParameteri(GLuint sampler, GLenum pname, GLint param) {
         case GL_TEXTURE_WRAP_R: smp->wrap_r = param; break;
         case GL_TEXTURE_COMPARE_MODE: smp->compare_mode = param; break;
         case GL_TEXTURE_COMPARE_FUNC: smp->compare_func = param; break;
+        case GL_TEXTURE_MAX_ANISOTROPY_EXT: smp->max_anisotropy = (GLfloat)param; break;
         default: assert(false && "gl_mock: unhandled glSamplerParameteri pname"); break;
     }
 }
