@@ -618,6 +618,14 @@
             }
         },
         {
+            "name": "win_d3d11_mock",
+            "binaryDir": "build/win_d3d11_mock",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "BACKEND_MOCK_ONLY": "ON"
+            }
+        },
+        {
             "name": "win_glcore_mock",
             "binaryDir": "build/win_glcore_mock",
             "cacheVariables": {
@@ -876,6 +884,16 @@
         {
             "name": "win_d3d11_analyze",
             "configurePreset": "win_d3d11_analyze"
+        },
+        {
+            "name": "win_d3d11_mock_debug",
+            "configurePreset": "win_d3d11_mock",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_d3d11_mock_release",
+            "configurePreset": "win_d3d11_mock",
+            "configuration": "Release"
         },
         {
             "name": "win_glcore_mock_debug",
