@@ -27,6 +27,46 @@
             }
         },
         {
+            "name": "glcore_mock_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/glcore_mock_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "glcore_mock_release",
+            "generator": "Ninja",
+            "binaryDir": "build/glcore_mock_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "gles3_mock_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/gles3_mock_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "gles3_mock_release",
+            "generator": "Ninja",
+            "binaryDir": "build/gles3_mock_release",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "macos_gl_debug",
             "generator": "Ninja",
             "binaryDir": "build/macos_gl_debug",
@@ -576,6 +616,30 @@
                 "CMAKE_C_COMPILER": "clang",
                 "CMAKE_CXX_COMPILER": "clang++"
             }
+        },
+        {
+            "name": "win_d3d11_mock",
+            "binaryDir": "build/win_d3d11_mock",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_D3D11",
+                "BACKEND_MOCK_ONLY": "ON"
+            }
+        },
+        {
+            "name": "win_glcore_mock",
+            "binaryDir": "build/win_glcore_mock",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLCORE",
+                "BACKEND_MOCK_ONLY": "ON"
+            }
+        },
+        {
+            "name": "win_gles3_mock",
+            "binaryDir": "build/win_gles3_mock",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_GLES3",
+                "BACKEND_MOCK_ONLY": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -586,6 +650,22 @@
         {
             "name": "d3d11_mock_release",
             "configurePreset": "d3d11_mock_release"
+        },
+        {
+            "name": "glcore_mock_debug",
+            "configurePreset": "glcore_mock_debug"
+        },
+        {
+            "name": "glcore_mock_release",
+            "configurePreset": "glcore_mock_release"
+        },
+        {
+            "name": "gles3_mock_debug",
+            "configurePreset": "gles3_mock_debug"
+        },
+        {
+            "name": "gles3_mock_release",
+            "configurePreset": "gles3_mock_release"
         },
         {
             "name": "macos_gl_debug",
@@ -804,6 +884,36 @@
         {
             "name": "win_d3d11_analyze",
             "configurePreset": "win_d3d11_analyze"
+        },
+        {
+            "name": "win_d3d11_mock_debug",
+            "configurePreset": "win_d3d11_mock",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_d3d11_mock_release",
+            "configurePreset": "win_d3d11_mock",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_glcore_mock_debug",
+            "configurePreset": "win_glcore_mock",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_glcore_mock_release",
+            "configurePreset": "win_glcore_mock",
+            "configuration": "Release"
+        },
+        {
+            "name": "win_gles3_mock_debug",
+            "configurePreset": "win_gles3_mock",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_gles3_mock_release",
+            "configurePreset": "win_gles3_mock",
+            "configuration": "Release"
         }
     ]
 }

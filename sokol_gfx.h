@@ -4997,6 +4997,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED, "sg_pipeline_desc.depth.write_enabled cannot be true when sg_pipeline_desc.depth.pixel_format is SG_PIXELFORMAT_NONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH, "sg_pipeline_desc.depth.compare must be SG_COMPAREFUNC_ALWAYS or SG_COMPAREFUNC_NEVER when sg_pipeline_desc.pixel_format is SG_PIXELFORMAT_NONE") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_COLOR_COUNT, "sg_pipeline_desc.color_count is out of range (must be >= 0 and <= SG_MAX_COLOR_ATTACHMENTS)") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_CANARY, "sg_view_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_UNIQUE_VIEWTYPE, "sg_view_desc: only one view type can be active") \
     _SG_LOGITEM_XMACRO(VALIDATE_VIEWDESC_ANY_VIEWTYPE, "sg_view_desc: exactly one view type must be active") \
@@ -6070,6 +6071,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
         #endif
         #if defined(GL_VERSION_3_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
         #endif
     #elif defined(__APPLE__)
         #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
@@ -6084,6 +6086,8 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #define _SOKOL_GL_HAS_COLORMASKI (1)
             #define _SOKOL_GL_HAS_BASEVERTEX (1)
             #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
+            // NOTE: apparently macOS doesn't support MSAA texture bindings
+            // despite being a GL 3.2 core feature
         #endif
     #elif defined(__EMSCRIPTEN__)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
@@ -6109,6 +6113,7 @@ inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_
             #endif
             #if defined(GL_VERSION_3_2)
                 #define _SOKOL_GL_HAS_BASEVERTEX (1)
+                #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
             #endif
         #else
             #define _SOKOL_GL_HAS_COMPUTE (1)
@@ -10498,10 +10503,10 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.mrt_independent_write_mask = true;
     _sg.features.compute = version >= 430;
     _sg.features.gl_texture_views = version >= 430;
-    #if defined(__APPLE__)
-    _sg.features.msaa_texture_bindings = false;
-    #else
+    #if defined(_SOKOL_GL_HAS_MSAA_TEXTURES)
     _sg.features.msaa_texture_bindings = true;
+    #else
+    _sg.features.msaa_texture_bindings = false;
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
@@ -11359,7 +11364,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
-                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
+                #if defined(_SOKOL_GL_HAS_MSAA_TEXTURES)
                     if (msaa) {
                         glTexImage2DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, GL_TRUE);
                     } else {
@@ -11377,7 +11382,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
-                #if defined(SOKOL_GLCORE) && !defined(__APPLE__)
+                #if defined(_SOKOL_GL_HAS_MSAA_TEXTURES)
                     if (msaa) {
                         // NOTE: MSAA works only for array textures, not 3D textures
                         glTexImage3DMultisample(tgt, img->cmn.sample_count, ifmt, w, h, depth, GL_TRUE);
@@ -14528,8 +14533,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_pipeline(_sg_pipeline_t* pip, 
     bs_desc.AlphaToCoverageEnable = desc->alpha_to_coverage_enabled;
     bs_desc.IndependentBlendEnable = TRUE;
     {
-        size_t i = 0;
-        for (i = 0; i < (size_t)desc->color_count; i++) {
+        int i = 0;
+        for (; i < desc->color_count; i++) {
             const sg_blend_state* src = &desc->colors[i].blend;
             D3D11_RENDER_TARGET_BLEND_DESC* dst = &bs_desc.RenderTarget[i];
             dst->BlendEnable = src->enabled;
@@ -22732,7 +22737,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
         ds_state.back.reference = desc->stencil.ref;
 
         _SG_STRUCT(VkPipelineColorBlendAttachmentState, att_states[SG_MAX_COLOR_ATTACHMENTS]);
-        SOKOL_ASSERT(desc->color_count < SG_MAX_COLOR_ATTACHMENTS);
+        SOKOL_ASSERT(desc->color_count <= SG_MAX_COLOR_ATTACHMENTS);
         for (int i = 0; i < desc->color_count; i++) {
             att_states[i].blendEnable = desc->colors[i].blend.enabled;
             att_states[i].srcColorBlendFactor = _sg_vk_blend_factor(desc->colors[i].blend.src_factor_rgb);
@@ -24546,7 +24551,7 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     #endif
                 }
                 // must only use readonly storage buffer bindings in render pipelines
-                for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
+                for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
                     if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
                         _SG_VALIDATE(shd->cmn.views[i].sbuf_readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
                     }
@@ -24564,8 +24569,13 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
             _SG_VALIDATE(desc->depth.write_enabled == false, VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED);
             _SG_VALIDATE((desc->depth.compare == SG_COMPAREFUNC_ALWAYS) || (desc->depth.compare == SG_COMPAREFUNC_NEVER), VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_COMPARE_FUNC_MISMATCH);
         }
-        for (size_t color_index = 0; color_index < (size_t)desc->color_count; color_index++) {
-            SOKOL_ASSERT(color_index < SG_MAX_COLOR_ATTACHMENTS);
+        // NOTE: technically color_count > SG_MAX_COLOR_ATTACHMENTS can't happen because
+        // color_count is clamped in _sg_pipeline_desc_defaults()
+        _SG_VALIDATE((desc->color_count >= 0) && (desc->color_count <= SG_MAX_COLOR_ATTACHMENTS), VALIDATE_PIPELINEDESC_COLOR_COUNT);
+        for (int color_index = 0; color_index < desc->color_count; color_index++) {
+            if (color_index >= SG_MAX_COLOR_ATTACHMENTS) {
+                break;
+            }
             const sg_blend_state* bs = &desc->colors[color_index].blend;
             if ((bs->op_rgb == SG_BLENDOP_MIN) || (bs->op_rgb == SG_BLENDOP_MAX)) {
                 _SG_VALIDATE((bs->src_factor_rgb == SG_BLENDFACTOR_ONE) && (bs->dst_factor_rgb == SG_BLENDFACTOR_ONE), VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE);
