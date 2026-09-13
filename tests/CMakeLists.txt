@@ -128,6 +128,17 @@ elseif (WINDOWS)
     endif()
 endif()
 
+# Mock mode builds sokol_gfx.h only, against the stub backend libraries. No
+# window-system or GPU libs are needed, and linking the real GL would clash
+# with the GL mock's own function symbols.
+if (BACKEND_MOCK_ONLY)
+    if (LINUX)
+        set(system_libs m dl Threads::Threads)
+    else()
+        set(system_libs)
+    endif()
+endif()
+
 macro(configure_common target)
     if (SOKOL_FORCE_EGL)
         target_compile_definitions(${target} PRIVATE SOKOL_FORCE_EGL)
@@ -145,6 +156,9 @@ macro(configure_common target)
     # matching mock library in tests/mocks/.
     if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_D3D11)
         target_link_libraries(${target} PRIVATE sokol_d3d11_mock)
+    endif()
+    if (BACKEND_MOCK_ONLY AND (SOKOL_BACKEND STREQUAL SOKOL_GLCORE OR SOKOL_BACKEND STREQUAL SOKOL_GLES3))
+        target_link_libraries(${target} PRIVATE sokol_gl_mock)
     endif()
 endmacro()
 

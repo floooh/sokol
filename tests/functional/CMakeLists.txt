@@ -31,4 +31,10 @@ if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_D3D11)
     add_subdirectory(d3d11)
 endif()
 
+# GL backend tests. Only built in mock mode with SOKOL_GLCORE or SOKOL_GLES3
+# selected.
+if (BACKEND_MOCK_ONLY AND (SOKOL_BACKEND STREQUAL SOKOL_GLCORE OR SOKOL_BACKEND STREQUAL SOKOL_GLES3))
+    add_subdirectory(gl)
+endif()
+
 endif()
