@@ -30,14 +30,24 @@
     sokol_gfx.h spells them '(1)' and so do we, so a later identical
     redefinition is not a diagnostic.
 
-    Known deviations on a macOS host:
+    Known deviations:
 
-    - GLCORE gets 'msaa_texture_bindings = false' and does not compile
-      glTexImage2DMultisample / glTexImage3DMultisample, because
-      sokol_gfx.h keys that on __APPLE__
-    - GLES3 additionally gets _SOKOL_GL_HAS_COLORMASKI, _BASEVERTEX and
-      _DUALSOURCEBLENDING from sokol_gfx.h; harmless because all use
-      sites of those macros are also gated on a runtime _sg.features flag
+    sokol_gfx.h can only add feature macros on top of the set predefined
+    here, never remove them, and what it adds depends on the *host*
+    platform. So the macros are a superset of the selected version:
+
+    - Linux host, GLES3: adds _SOKOL_GL_HAS_COMPUTE, _COLORMASKI and
+      _BASEVERTEX at every version, so GL_MOCK_VERSION 300 and 310
+      compile in code which the selected version does not have
+    - macOS host, GLES3: adds _SOKOL_GL_HAS_COLORMASKI, _BASEVERTEX and
+      _DUALSOURCEBLENDING
+    - Windows host, GLES3: adds _SOKOL_GL_HAS_COLORMASKI
+    - GLCORE matches the selected version exactly on all three hosts
+
+    The extra macros are harmless at runtime: every use site is also
+    gated on an _sg.features flag derived from the version the mock
+    reports. But tests must never key on _SOKOL_GL_HAS_*, gate on
+    GL_MOCK_VERSION instead (see TEST_HAS_* in sokol_gfx_gl_test.c).
 */
 #ifndef GL_MOCK_GL_H_INCLUDED
 #define GL_MOCK_GL_H_INCLUDED
@@ -104,6 +114,7 @@
     #define _SOKOL_GL_HAS_COLORMASKI (1)
     #define _SOKOL_GL_HAS_BASEVERTEX (1)
     #define _SOKOL_GL_HAS_DUALSOURCEBLENDING (1)
+    #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
     #if GL_MOCK_VERSION >= 420
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #define _SOKOL_GL_HAS_BASEINSTANCE (1)

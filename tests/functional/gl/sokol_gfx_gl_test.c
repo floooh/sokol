@@ -39,11 +39,31 @@
 #include <string.h>
 
 #define T(b) EXPECT_TRUE(b)
+// TA() aborts the current test, use it before dereferencing a returned pointer
+#define TA(b) ASSERT_TRUE(b)
 
 #if defined(SOKOL_GLCORE)
     #define EXPECTED_BACKEND SG_BACKEND_GLCORE
 #else
     #define EXPECTED_BACKEND SG_BACKEND_GLES3
+#endif
+
+// Backend feature gates, keyed on GL_MOCK_VERSION and never on sokol_gfx.h's
+// private _SOKOL_GL_HAS_* macros. Those macros are the union of what the mock
+// predefines (tests/mocks/gl/gl.h) and what the *host* platform branch in
+// sokol_gfx.h adds on top, so they differ per host -- on a Linux host for
+// example GLES3 always gets _SOKOL_GL_HAS_COMPUTE, even at GL_MOCK_VERSION
+// 300. GL_MOCK_VERSION is the same on every host, and the mock declares all
+// GL enums and functions regardless of version, so a version-gated test body
+// compiles everywhere.
+//
+// The thresholds must match the feature macro block in tests/mocks/gl/gl.h.
+#if defined(SOKOL_GLCORE)
+    #define TEST_HAS_COMPUTE    (GL_MOCK_VERSION >= 430)
+    #define TEST_HAS_TEXSTORAGE (GL_MOCK_VERSION >= 420)
+#else
+    #define TEST_HAS_COMPUTE    (GL_MOCK_VERSION >= 310)
+    #define TEST_HAS_TEXSTORAGE (1)
 #endif
 
 //------------------------------------------------------------------------------
@@ -254,7 +274,7 @@ UTEST(sokol_gfx_gl, buffer_create_destroy) {
     T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 1);
 
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[0].i == GL_ARRAY_BUFFER);
     T(call->args[1].i == (int64_t)sizeof(data));
     T(call->args[3].i == GL_STATIC_DRAW);
@@ -322,7 +342,7 @@ UTEST(sokol_gfx_gl, sampler_create_destroy) {
     // desc (compare == NEVER, max_anisotropy == 0), sokol_gfx sets 6 int
     // parameters: min/mag filter, wrap s/t/r and compare mode.
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glSamplerParameteri);
-    T(call != 0);
+    TA(call != 0);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glSamplerParameteri) == 6);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glSamplerParameterf) == 2);   // min/max lod
 
@@ -439,7 +459,7 @@ UTEST(sokol_gfx_gl, buffer_dynamic_uses_dynamic_draw) {
     // dynamic buffer uses SG_NUM_INFLIGHT_FRAMES renaming slots
     T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == SG_NUM_INFLIGHT_FRAMES);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[3].i == GL_DYNAMIC_DRAW);
     sg_destroy_buffer(buf);
     T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
@@ -453,7 +473,7 @@ UTEST(sokol_gfx_gl, buffer_stream_uses_stream_draw) {
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[3].i == GL_STREAM_DRAW);
     sg_destroy_buffer(buf);
     teardown();
@@ -468,13 +488,13 @@ UTEST(sokol_gfx_gl, buffer_index_uses_element_array_target) {
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[0].i == GL_ELEMENT_ARRAY_BUFFER);
     sg_destroy_buffer(buf);
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, buffer_storage_uses_shader_storage_target) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
@@ -482,7 +502,7 @@ UTEST(sokol_gfx_gl, buffer_storage_uses_shader_storage_target) {
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[0].i == GL_SHADER_STORAGE_BUFFER);
     sg_destroy_buffer(buf);
     teardown();
@@ -521,14 +541,14 @@ UTEST(sokol_gfx_gl, image_3d_takes_texstorage3d_or_teximage3d) {
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == SG_NUM_INFLIGHT_FRAMES);
-    #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
+    #if TEST_HAS_TEXSTORAGE
         T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage3D) == SG_NUM_INFLIGHT_FRAMES);
     #else
         T(gl_mock_count_calls(GL_MOCK_FUNC_glTexImage3D) > 0);
     #endif
     // bind target must be GL_TEXTURE_3D
     const gl_mock_call_t* bind = gl_mock_last_call(GL_MOCK_FUNC_glBindTexture);
-    T(bind != 0);
+    TA(bind != 0);
     T(bind->args[0].i == GL_TEXTURE_3D);
     sg_destroy_image(img);
     teardown();
@@ -546,7 +566,7 @@ UTEST(sokol_gfx_gl, image_cube_uses_texture_cube_map_target) {
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* bind = gl_mock_last_call(GL_MOCK_FUNC_glBindTexture);
-    T(bind != 0);
+    TA(bind != 0);
     T(bind->args[0].i == GL_TEXTURE_CUBE_MAP);
     sg_destroy_image(img);
     teardown();
@@ -562,7 +582,7 @@ UTEST(sokol_gfx_gl, image_array_uses_2d_array_target) {
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* bind = gl_mock_last_call(GL_MOCK_FUNC_glBindTexture);
-    T(bind != 0);
+    TA(bind != 0);
     T(bind->args[0].i == GL_TEXTURE_2D_ARRAY);
     sg_destroy_image(img);
     teardown();
@@ -601,7 +621,7 @@ UTEST(sokol_gfx_gl, image_msaa_attachment_only) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, image_storage_creates_texture) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
@@ -626,7 +646,7 @@ UTEST(sokol_gfx_gl, image_compressed_uses_compressed_upload) {
         .data.mip_levels[0] = SG_RANGE(bc1),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
-    #if defined(_SOKOL_GL_HAS_TEXSTORAGE)
+    #if TEST_HAS_TEXSTORAGE
         T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexSubImage2D) == 1);
     #else
         T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) == 1);
@@ -751,7 +771,7 @@ UTEST(sokol_gfx_gl, shader_with_texture_sampler_pair) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, shader_compute) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
@@ -811,7 +831,7 @@ UTEST(sokol_gfx_gl, pipeline_index_types) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, pipeline_compute) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
@@ -921,7 +941,7 @@ UTEST(sokol_gfx_gl, view_resolve_attachment_creates_helper_framebuffer) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, view_storage_image_cpu_only) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
@@ -1038,7 +1058,7 @@ UTEST(sokol_gfx_gl, offscreen_msaa_pass_blit_resolves) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, compute_pass_no_framebuffer_bind) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
@@ -1316,7 +1336,7 @@ UTEST(sokol_gfx_gl, buffer_append_uses_offset) {
     T(off2 == 32);
     // second append uses non-zero offset in glBufferSubData
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
-    T(call != 0);
+    TA(call != 0);
     T(call->args[1].i == 32);
     sg_destroy_buffer(buf);
     teardown();
@@ -1368,7 +1388,7 @@ UTEST(sokol_gfx_gl, apply_bindings_binds_vertex_buffer) {
     teardown();
 }
 
-#if defined(_SOKOL_GL_HAS_COMPUTE)
+#if TEST_HAS_COMPUTE
 UTEST(sokol_gfx_gl, storage_image_binding_uses_bindImageTexture) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){

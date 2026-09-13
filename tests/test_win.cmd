@@ -20,17 +20,23 @@ cmake --preset win_gles3_mock || exit /b 10
 cmake --build --preset win_gles3_mock_debug || exit /b 10
 cmake --build --preset win_gles3_mock_release || exit /b 10
 
-cd build\win_d3d11\Debug
-sokol-test.exe || exit /b 10
-cd ..\..\..
+call :runtest win_d3d11 sokol-test || exit /b 10
 
-cd build\win_glcore_mock\Debug
-sokol-gl41-test.exe || exit /b 10
-sokol-gl43-test.exe || exit /b 10
-cd ..\..\..
+call :runtest win_glcore_mock sokol-gl41-test || exit /b 10
+call :runtest win_glcore_mock sokol-gl43-test || exit /b 10
 
-cd build\win_gles3_mock\Debug
-sokol-gles30-test.exe || exit /b 10
-sokol-gles31-test.exe || exit /b 10
-sokol-gles32-test.exe || exit /b 10
+call :runtest win_gles3_mock sokol-gles30-test || exit /b 10
+call :runtest win_gles3_mock sokol-gles31-test || exit /b 10
+call :runtest win_gles3_mock sokol-gles32-test || exit /b 10
+
+goto :eof
+
+rem runtest <preset> <binary> -- mirrors the runtest function in test_common.sh
+:runtest
+echo ===============================================================
+echo === RUNNING: %2 [%1]
+echo ===============================================================
+cd build\%1\Debug
+%2.exe || exit /b 10
 cd ..\..\..
+goto :eof

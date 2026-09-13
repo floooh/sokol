@@ -2253,6 +2253,62 @@ UTEST(sokol_gfx, make_sampler_validate_anistropic_requires_linear_filtering) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, make_pipeline_depth_only) {
+    setup(&(sg_desc){0});
+    // a NONE color format in colors[0] selects depth-only rendering, the desc
+    // defaults then force color_count to zero, which must pass validation
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = create_shader(),
+        .colors[0].pixel_format = SG_PIXELFORMAT_NONE,
+        .depth = {
+            .pixel_format = SG_PIXELFORMAT_DEPTH,
+            .write_enabled = true,
+            .compare = SG_COMPAREFUNC_LESS_EQUAL,
+        },
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_desc(pip).color_count == 0);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pipeline_validate_color_count) {
+    setup(&(sg_desc){0});
+    sg_shader shd = create_shader();
+    sg_pipeline pip;
+
+    // a negative color count is rejected
+    pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .color_count = -1,
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PIPELINEDESC_COLOR_COUNT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+
+    // the maximum color count is valid
+    reset_log_items();
+    pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .color_count = SG_MAX_COLOR_ATTACHMENTS,
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_desc(pip).color_count == SG_MAX_COLOR_ATTACHMENTS);
+    T(num_log_called == 0);
+
+    // too many color attachments are clamped by the desc defaults, not rejected
+    reset_log_items();
+    pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .color_count = SG_MAX_COLOR_ATTACHMENTS + 1,
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_desc(pip).color_count == SG_MAX_COLOR_ATTACHMENTS);
+    T(num_log_called == 0);
+
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_view_validate_start_canary) {
     setup(&(sg_desc){0});
     sg_view view = sg_make_view(&(sg_view_desc){

@@ -1,3 +1,4 @@
+# LLM maintained.
 setup_emsdk() {
     if [ ! -d "build/emsdk" ] ; then
         mkdir -p build && cd build
@@ -45,6 +46,9 @@ analyze() {
 runtest() {
     cfg=$1
     binary=${2:-sokol-test}
+    echo "==============================================================="
+    echo "=== RUNNING: $binary [$cfg]"
+    echo "==============================================================="
     cd build/$cfg
     ./$binary
     cd ../..
