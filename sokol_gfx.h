@@ -16707,11 +16707,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     if (desc->compute_func.source || desc->compute_func.bytecode.ptr) {
         shd_valid &= _sg_mtl_create_shader_func(&desc->compute_func, desc->label, "cs", &shd->mtl.compute_func);
     }
-    if (!shd_valid) {
-        _sg_mtl_discard_shader_func(&shd->mtl.vertex_func);
-        _sg_mtl_discard_shader_func(&shd->mtl.fragment_func);
-        _sg_mtl_discard_shader_func(&shd->mtl.compute_func);
-    }
+    // NOTE: no eager cleanup on partial failure happening here,
+    // this is deferred into _sg_mtl_discard_shader, which is the
+    // same pattern as in the other _sg_mtl_create_* funcs
     return shd_valid ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
 }
 
