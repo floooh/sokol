@@ -39,6 +39,32 @@ if (NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
         -Wall -Wextra -Werror -Wstrict-prototypes)
 endif()
 
+# Metal mock library. Provides a stubbed Metal.framework (and the
+# CAMetalDrawable part of QuartzCore) so the sokol_gfx.h Metal backend can be
+# built and unit-tested without a device, a driver or a window. macOS only,
+# because the mock is written in Objective-C against the real Foundation.
+if (CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    add_library(sokol_metal_mock STATIC
+        metal/metal_mock.m
+        metal/metal_mock.h
+        metal/include/Metal/Metal.h
+        metal/include/QuartzCore/CoreAnimation.h)
+
+    # Callers get the mock Metal.h / CoreAnimation.h from this include dir.
+    # BEFORE keeps it ahead of every other include path, so `#import
+    # <Metal/Metal.h>` cannot reach the real framework headers.
+    target_include_directories(sokol_metal_mock BEFORE PUBLIC metal/include)
+    target_include_directories(sokol_metal_mock PUBLIC metal)
+
+    # Foundation is the real system framework, only Metal itself is mocked.
+    target_link_libraries(sokol_metal_mock PUBLIC "-framework Foundation")
+
+    # The mock manages its own object lifetimes, so it is always built
+    # without ARC, no matter how the test target is built.
+    target_compile_options(sokol_metal_mock PRIVATE
+        -fno-objc-arc -Wall -Wextra -Werror -Wstrict-prototypes)
+endif()
+
 # GL 4.x / GLES 3.x mock library. Provides a stubbed gl.h plus linkable
 # implementations of every GL function which sokol_gfx.h calls, so the GL
 # backend can be built and unit-tested without a GL driver or a window.

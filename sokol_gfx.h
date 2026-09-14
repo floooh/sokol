@@ -4772,6 +4772,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_TEXTUREVIEW_FAILED, "failed to create texture view object (metal)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPS_POOL_EXHAUSTED, "bindgroups pool exhausted (increase sg_desc.bindgroups_cache_size) (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_GREATER_ONE, "sg_desc.wgpu.bindgroups_cache_size must be > 1 (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_POW2, "sg_desc.wgpu.bindgroups_cache_size must be a power of 2 (wgpu)") \
@@ -16178,6 +16179,7 @@ _SOKOL_PRIVATE void _sg_mtl_setup_backend(const sg_desc* desc) {
     _sg.mtl.ub_size = desc->uniform_buffer_size;
     _sg.mtl.sem = dispatch_semaphore_create(SG_NUM_INFLIGHT_FRAMES);
     _sg.mtl.device = (__bridge id<MTLDevice>) desc->environment.metal.device;
+    _SG_OBJC_RETAIN(_sg.mtl.device);
     _sg.mtl.cmd_queue = [_sg.mtl.device newCommandQueue];
 
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -16251,6 +16253,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const 
         if (injected) {
             SOKOL_ASSERT(desc->mtl_buffers[slot]);
             mtl_buf = (__bridge id<MTLBuffer>) desc->mtl_buffers[slot];
+            _SG_OBJC_RETAIN(mtl_buf);
         } else {
             if (desc->data.ptr) {
                 SOKOL_ASSERT(desc->data.size > 0);
@@ -16457,6 +16460,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
         if (injected) {
             SOKOL_ASSERT(desc->mtl_textures[slot]);
             mtl_tex = (__bridge id<MTLTexture>) desc->mtl_textures[slot];
+            _SG_OBJC_RETAIN(mtl_tex);
         } else {
             mtl_tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
             if (nil == mtl_tex) {
@@ -16501,6 +16505,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_sampler(_sg_sampler_t* smp, cons
     if (injected) {
         SOKOL_ASSERT(desc->mtl_sampler);
         mtl_smp = (__bridge id<MTLSamplerState>) desc->mtl_sampler;
+        _SG_OBJC_RETAIN(mtl_smp);
     } else {
         MTLSamplerDescriptor* mtl_desc = [[MTLSamplerDescriptor alloc] init];
         mtl_desc.sAddressMode = _sg_mtl_address_mode(desc->wrap_u);
@@ -16702,11 +16707,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_shader(_sg_shader_t* shd, const 
     if (desc->compute_func.source || desc->compute_func.bytecode.ptr) {
         shd_valid &= _sg_mtl_create_shader_func(&desc->compute_func, desc->label, "cs", &shd->mtl.compute_func);
     }
-    if (!shd_valid) {
-        _sg_mtl_discard_shader_func(&shd->mtl.vertex_func);
-        _sg_mtl_discard_shader_func(&shd->mtl.fragment_func);
-        _sg_mtl_discard_shader_func(&shd->mtl.compute_func);
-    }
+    // NOTE: no eager cleanup on partial failure happening here,
+    // this is deferred into _sg_mtl_discard_shader, which is the
+    // same pattern as in the other _sg_mtl_create_* funcs
     return shd_valid ? SG_RESOURCESTATE_VALID : SG_RESOURCESTATE_FAILED;
 }
 
@@ -16928,6 +16931,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_
                 textureType: _sg_mtl_texture_type(img->cmn.type, img->cmn.sample_count > 1)
                 levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
                 slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
+            if (nil == mtl_tex_view) {
+                _SG_ERROR(METAL_CREATE_TEXTUREVIEW_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
             #if defined(SOKOL_DEBUG)
                 if (desc->label) {
                     mtl_tex_view.label = [NSString stringWithFormat:@"%s.%d", desc->label, slot];
