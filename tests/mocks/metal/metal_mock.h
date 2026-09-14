@@ -341,10 +341,12 @@ extern const void* metal_mock_device(void);
 // swapchain helpers, feed into sg_swapchain.metal.*, release when done
 extern const void* metal_mock_create_drawable(int width, int height, MTLPixelFormat fmt);
 extern const void* metal_mock_create_texture(int width, int height, MTLPixelFormat fmt, int sample_count);
-// refcount helpers, needed when handing an object to sokol-gfx resource
-// injection (sokol-gfx takes ownership of the injected reference)
+// refcount helpers for objects which the test owns, for example the swapchain
+// textures above
 extern void metal_mock_retain(const void* obj);
 extern void metal_mock_release(const void* obj);
+// current refcount, to check that sokol-gfx balances its retains and releases
+extern int metal_mock_retain_count(const void* obj);
 
 // run the completion handlers of all committed command buffers
 extern void metal_mock_complete_pending(void);

@@ -8,9 +8,9 @@
 
     Object lifetime notes:
 
-    - the device is an immortal singleton. sokol_gfx.h releases the device in
-      _sg_mtl_discard_backend() without having retained it, so the device must
-      survive an unbalanced release
+    - the device is a singleton owned by the mock and lives for the whole
+      process. Its refcount is real, so an unbalanced release in sokol_gfx.h
+      aborts
     - command buffers, command encoders and render pass descriptors are
       autoreleased into a pool owned by the mock, matching the real Metal
       behaviour. Call metal_mock_drain_pool() to free them
@@ -1199,18 +1199,13 @@ static void _mtlm_snapshot_pass(MTLRenderPassDescriptor* desc) {
 
 //== device ====================================================================
 
-// The device is an immortal singleton. sokol_gfx.h releases the device in
-// _sg_mtl_discard_backend() without having retained it first, so retain,
-// release and autorelease must be no-ops here.
+// The device is a singleton owned by the mock, created on first setup and
+// never released. Refcounting is left to NSObject, so an unbalanced release
+// by sokol_gfx.h aborts the test.
 @interface _mtlm_device : NSObject <MTLDevice>
 @end
 
 @implementation _mtlm_device
-
-- (instancetype)retain { return self; }
-- (oneway void)release { }
-- (instancetype)autorelease { return self; }
-- (NSUInteger)retainCount { return NSUIntegerMax; }
 
 - (BOOL)supportsFamily:(MTLGPUFamily)gpuFamily {
     metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_supportsFamily, self);
@@ -1537,6 +1532,10 @@ void metal_mock_retain(const void* obj) {
 
 void metal_mock_release(const void* obj) {
     [(id)obj release];
+}
+
+int metal_mock_retain_count(const void* obj) {
+    return (int)[(id)obj retainCount];
 }
 
 void metal_mock_complete_pending(void) {

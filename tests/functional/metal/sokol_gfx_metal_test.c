@@ -114,6 +114,9 @@ static void teardown_impl(int* utest_result) {
     sg_shutdown();
     // a truncated call log makes the call counts of a test meaningless
     T(!metal_mock_call_log_overflow());
+    // sokol-gfx must return the device with the refcount it got it with,
+    // the mock owns the only other reference
+    T(metal_mock_retain_count(metal_mock_device()) == 1);
     metal_mock_drain_pool();
     metal_mock_shutdown();
 }
@@ -350,7 +353,7 @@ UTEST(sokol_gfx_metal, create_buffer_injected) {
         .data = { .ptr = scratch, .size = 64 },
     });
     const void* mtl_buf = sg_mtl_query_buffer_info(src).buf[0];
-    metal_mock_retain(mtl_buf);
+    const int rc = metal_mock_retain_count(mtl_buf);
     metal_mock_clear_calls();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .usage = { .vertex_buffer = true, .immutable = true },
@@ -359,6 +362,9 @@ UTEST(sokol_gfx_metal, create_buffer_injected) {
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     T(sg_mtl_query_buffer_info(buf).buf[0] == mtl_buf);
+    // sokol-gfx must retain the injected buffer instead of taking the reference
+    // of the caller
+    T(metal_mock_retain_count(mtl_buf) == (rc + 1));
     // no new MTLBuffer is created for the injected slot
     T(metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithBytes) == 0);
     sg_destroy_buffer(buf);
@@ -377,6 +383,10 @@ UTEST(sokol_gfx_metal, create_image_injected) {
         .mtl_textures[0] = mtl_tex,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    // sokol-gfx must retain the injected texture instead of taking the
+    // reference of the caller, so the test can drop its own reference
+    T(metal_mock_retain_count(mtl_tex) == 2);
+    metal_mock_release(mtl_tex);
     T(sg_mtl_query_image_info(img).tex[0] == mtl_tex);
     T(metal_mock_count_calls(METAL_MOCK_FUNC_newTextureWithDescriptor) == 0);
     sg_destroy_image(img);
@@ -387,12 +397,16 @@ UTEST(sokol_gfx_metal, create_sampler_injected) {
     setup();
     sg_sampler src = sg_make_sampler(&(sg_sampler_desc){0});
     const void* mtl_smp = sg_mtl_query_sampler_info(src).smp;
-    metal_mock_retain(mtl_smp);
+    const int rc = metal_mock_retain_count(mtl_smp);
     metal_mock_clear_calls();
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){ .mtl_sampler = mtl_smp });
     T(sg_query_sampler_state(smp) == SG_RESOURCESTATE_VALID);
     T(sg_mtl_query_sampler_info(smp).smp == mtl_smp);
+    // sokol-gfx must retain the injected sampler instead of taking the
+    // reference of the caller
+    T(metal_mock_retain_count(mtl_smp) == (rc + 1));
     T(metal_mock_count_calls(METAL_MOCK_FUNC_newSamplerStateWithDescriptor) == 0);
+    sg_destroy_sampler(smp);
     teardown();
 }
 
