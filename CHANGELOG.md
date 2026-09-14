@@ -1,5 +1,17 @@
 ## Updates
 
+### 14-Sep-2026
+
+- sokol_app.h x11: the mouse lock code has been rewritten to match the
+  'deferred lock' model on Windows: Calling sapp_lock_mouse(true/false)
+  will only update an internal 'mouse-lock requested' flag, and the
+  actual lock state will be updated at most once per frame after the
+  sokol-app frame callback.
+
+  PR: https://github.com/floooh/sokol/pull/1602
+
+  Many thanks to @xXAbieGamingXx!
+
 ### 12-Sep-2026
 
 - sokol_gfx.h mtl: fix for some older Apple GPUs (used on tvOS devices)
