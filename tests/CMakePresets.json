@@ -27,6 +27,17 @@
             }
         },
         {
+            "name": "metal_mock_arc_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/metal_mock_arc_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_METAL",
+                "BACKEND_MOCK_ONLY": "ON",
+                "USE_ARC": { "type": "BOOL", "value": "ON" },
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
             "name": "glcore_mock_debug",
             "generator": "Ninja",
             "binaryDir": "build/glcore_mock_debug",
@@ -630,6 +641,10 @@
         {
             "name": "metal_mock_debug",
             "configurePreset": "metal_mock_debug"
+        },
+        {
+            "name": "metal_mock_arc_debug",
+            "configurePreset": "metal_mock_arc_debug"
         },
         {
             "name": "glcore_mock_debug",

@@ -60,6 +60,7 @@ static struct {
     int num_created[METAL_MOCK_OBJ_NUM];
     int num_live[METAL_MOCK_OBJ_NUM];
     int fail_next[METAL_MOCK_OBJ_NUM];
+    int fail_skip[METAL_MOCK_OBJ_NUM];
     char err_msg[METAL_MOCK_MAX_STRING];
     _mtlm_family_t families[_MTLM_MAX_FAMILIES];
     int num_families;
@@ -141,6 +142,10 @@ static void _mtlm_log_str(metal_mock_call_t* call, int arg_index, NSString* src)
 
 static bool _mtlm_fail(metal_mock_obj_t kind) {
     if (_mtlm.fail_next[kind] > 0) {
+        if (_mtlm.fail_skip[kind] > 0) {
+            _mtlm.fail_skip[kind]--;
+            return false;
+        }
         _mtlm.fail_next[kind]--;
         return true;
     }
@@ -1721,6 +1726,14 @@ const char* metal_mock_func_name(metal_mock_func_t func) {
 void metal_mock_fail_next(metal_mock_obj_t kind, int n) {
     _MTLM_ASSERT((kind >= 0) && (kind < METAL_MOCK_OBJ_NUM));
     _mtlm.fail_next[kind] = n;
+    _mtlm.fail_skip[kind] = 0;
+}
+
+void metal_mock_fail_next_after(metal_mock_obj_t kind, int skip, int n) {
+    _MTLM_ASSERT((kind >= 0) && (kind < METAL_MOCK_OBJ_NUM));
+    _MTLM_ASSERT(skip >= 0);
+    _mtlm.fail_next[kind] = n;
+    _mtlm.fail_skip[kind] = skip;
 }
 
 void metal_mock_set_error_message(const char* msg) {

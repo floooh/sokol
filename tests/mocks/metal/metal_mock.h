@@ -389,6 +389,8 @@ extern const char* metal_mock_func_name(metal_mock_func_t func);
 
 // fault injection
 extern void metal_mock_fail_next(metal_mock_obj_t kind, int n);
+// let the next 'n' creations fail, but only after 'skip' successful ones
+extern void metal_mock_fail_next_after(metal_mock_obj_t kind, int skip, int n);
 extern void metal_mock_set_error_message(const char* msg);
 extern void metal_mock_set_supports_family(MTLGPUFamily family, bool supported);
 
