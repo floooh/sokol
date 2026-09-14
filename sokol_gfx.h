@@ -4772,6 +4772,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_FAILED, "failed to create render pipeline state (metal)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_RPS_OUTPUT, "") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_DSS_FAILED, "failed to create depth stencil state (metal)") \
+    _SG_LOGITEM_XMACRO(METAL_CREATE_TEXTUREVIEW_FAILED, "failed to create texture view object (metal)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPS_POOL_EXHAUSTED, "bindgroups pool exhausted (increase sg_desc.bindgroups_cache_size) (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_GREATER_ONE, "sg_desc.wgpu.bindgroups_cache_size must be > 1 (wgpu)") \
     _SG_LOGITEM_XMACRO(WGPU_BINDGROUPSCACHE_SIZE_POW2, "sg_desc.wgpu.bindgroups_cache_size must be a power of 2 (wgpu)") \
@@ -16932,6 +16933,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_view(_sg_view_t* view, const sg_
                 textureType: _sg_mtl_texture_type(img->cmn.type, img->cmn.sample_count > 1)
                 levels: NSMakeRange((NSUInteger)cmn->mip_level, (NSUInteger)cmn->mip_level_count)
                 slices: NSMakeRange((NSUInteger)cmn->slice, (NSUInteger)cmn->slice_count)];
+            if (nil == mtl_tex_view) {
+                _SG_ERROR(METAL_CREATE_TEXTUREVIEW_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
             #if defined(SOKOL_DEBUG)
                 if (desc->label) {
                     mtl_tex_view.label = [NSString stringWithFormat:@"%s.%d", desc->label, slot];
