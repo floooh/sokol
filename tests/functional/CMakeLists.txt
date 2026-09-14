@@ -37,4 +37,10 @@ if (BACKEND_MOCK_ONLY AND (SOKOL_BACKEND STREQUAL SOKOL_GLCORE OR SOKOL_BACKEND 
     add_subdirectory(gl)
 endif()
 
+# Metal backend tests. Only built in mock mode with SOKOL_METAL selected. The
+# Metal mock is Objective-C, so this is macOS only.
+if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_METAL AND OSX_MACOS)
+    add_subdirectory(metal)
+endif()
+
 endif()

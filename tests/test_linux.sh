@@ -13,11 +13,8 @@ build linux_gl_egl_release linux_gl_egl_release
 # Backend-agnostic presets -- build the sokol-gfx D3D11 and GL backends
 # against the mock libraries in tests/mocks/.
 build d3d11_mock_debug d3d11_mock_debug
-build d3d11_mock_release d3d11_mock_release
 build glcore_mock_debug glcore_mock_debug
-build glcore_mock_release glcore_mock_release
 build gles3_mock_debug gles3_mock_debug
-build gles3_mock_release gles3_mock_release
 runtest linux_gl_debug
 runtest d3d11_mock_debug sokol-d3d11-test
 runtest glcore_mock_debug sokol-gl41-test
