@@ -12,6 +12,32 @@
 
   Many thanks to @xXAbieGamingXx!
 
+- Also, over the last two weeks I started to improve sokol-gfx test coverage via
+  3D API mocking libraries for (so far) D3D11, GL and Metal, and on top
+  of those libraries new tests which specifically hammer the sokol_gfx.h
+  3D backends (disclaimer: both the mocking libraries and tests are LLM
+  maintained). This uncovered a couple of lingering minor bugs in the sokol-gfx
+  Metal backend (most are fairly exotic edge cases):
+
+    - the Metal device injected in `sg_setup` was not retained, but then
+      released in `sg_discard()` (non-issue when ARC is enabled)
+    - same for injected external Metal buffers (`sg_make_buffer`), textures
+      (`sg_make_image`), and samplers (`sg_make_sampler`), those were missing
+      an internal retain call (also a non-issue on ARC builds)
+    - in `sg_make_view()` the usual error path was missing when the Metal
+      texture view creation fails, now an error is logged and the view is
+      created in `SG_RESOURCESTATE_FAILED` state
+    - in `sg_make_shader()` and `sg_destroy_shader()` a 'double cleanup'
+      could happen when shader function creation partially failed (i.e.
+      some succeeded and some failed), this would have been caught by an
+      assert in debug mode, but is now properly fixed
+
+  The other new mock tests for the D3D11 and GL backends only led to some minor
+  code cleanup fixes, e.g. no actual bugs were discovered).
+
+  Those new mocking libraries also unlock a couple more interesting testing
+  scenarios for the future (like fuzzing).
+
 ### 12-Sep-2026
 
 - sokol_gfx.h mtl: fix for some older Apple GPUs (used on tvOS devices)
