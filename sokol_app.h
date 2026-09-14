@@ -13445,7 +13445,7 @@ _SOKOL_PRIVATE void _sapp_x11_do_lock_mouse(void) {
             em.mask = mask;
             XISetMask(mask, XI_RawMotion);
             XISelectEvents(_sapp.x11.display, _sapp.x11.root, &em, 1);
-         }
+        }
     }
 }
 
@@ -13463,7 +13463,7 @@ _SOKOL_PRIVATE void _sapp_x11_do_unlock_mouse(void) {
     _sapp.mouse.dy = 0.0f;
     _sapp.mouse.locked = false;
 
-    XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int) _sapp.mouse.x, _sapp.mouse.y);
+    XWarpPointer(_sapp.x11.display, None, _sapp.x11.window, 0, 0, 0, 0, (int)_sapp.mouse.x, (int)_sapp.mouse.y);
     XUngrabPointer(_sapp.x11.display, CurrentTime);
 }
 
