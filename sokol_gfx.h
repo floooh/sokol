@@ -3353,8 +3353,8 @@ typedef struct sg_buffer_usage {
     bool immutable;
     bool write_unsealed;
     bool write_transient;
-    // deprecated:
-    bool dynamic_update;
+    bool copy_src;
+    bool copy_dst;
 } sg_buffer_usage;
 
 /*
@@ -3677,6 +3677,17 @@ typedef struct sg_write_buffer_desc {
     sg_buffer_location dst;
     size_t size;
 } sg_write_buffer_desc;
+
+/*
+    sg_copy_buffer_to_buffer_desc
+
+    FIXME
+*/
+typedef struct sg_copy_buffer_to_buffer_desc {
+    sg_buffer_location src;
+    sg_buffer_location dst;
+    size_t size;
+} sg_copy_buffer_to_buffer_desc;
 
 /*
     sg_image_desc
@@ -5533,13 +5544,10 @@ SOKOL_GFX_API_DECL void sg_write_buffer_unsealed(const sg_write_buffer_desc* des
 SOKOL_GFX_API_DECL void sg_write_image_unsealed(const sg_write_image_desc* desc);
 SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_seal_image(sg_image img);
+SOKOL_GFX_API_DECL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc* desc);
 
 // update functions (will be deprecated by new resource update functions)
-SOKOL_GFX_API_DECL void sg_update_buffer(sg_buffer buf, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
-SOKOL_GFX_API_DECL int sg_append_buffer(sg_buffer buf, const sg_range* data);
-SOKOL_GFX_API_DECL bool sg_query_buffer_overflow(sg_buffer buf);
-SOKOL_GFX_API_DECL bool sg_query_buffer_will_overflow(sg_buffer buf, size_t size);
 
 // getting information
 SOKOL_GFX_API_DECL sg_desc sg_query_desc(void);
@@ -5854,8 +5862,6 @@ inline void sg_write_image_transient(const sg_write_image_desc& desc) { return s
 inline void sg_write_buffer_unsealed(const sg_write_buffer_desc& desc) { return sg_write_buffer_unsealed(&desc); }
 inline void sg_write_image_unsealed(const sg_write_image_desc& desc) { return sg_write_image_unsealed(&desc); }
 inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
-inline void sg_update_buffer(sg_buffer buf_id, const sg_range& data) { return sg_update_buffer(buf_id, &data); }
-inline int sg_append_buffer(sg_buffer buf_id, const sg_range& data) { return sg_append_buffer(buf_id, &data); }
 #endif
 #endif // SOKOL_GFX_INCLUDED
 
