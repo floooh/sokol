@@ -20,7 +20,7 @@
   Metal backend (most are fairly exotic edge cases):
 
     - the Metal device injected in `sg_setup` was not retained, but then
-      released in `sg_discard()` (non-issue when ARC is enabled)
+      released in `sg_shutdown()` (non-issue when ARC is enabled)
     - same for injected external Metal buffers (`sg_make_buffer`), textures
       (`sg_make_image`), and samplers (`sg_make_sampler`), those were missing
       an internal retain call (also a non-issue on ARC builds)
