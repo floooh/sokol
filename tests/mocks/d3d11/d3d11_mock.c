@@ -360,6 +360,10 @@ static void ctx_Draw(ID3D11DeviceContext* self, UINT n, UINT s)                 
 static void ctx_DrawInstanced(ID3D11DeviceContext* self, UINT n, UINT i, UINT s, UINT bi)                                                                                                     { (void)self; (void)n; (void)i; (void)s; (void)bi; }
 static void ctx_Dispatch(ID3D11DeviceContext* self, UINT x, UINT y, UINT z)                                                                                                                   { (void)self; (void)x; (void)y; (void)z; }
 
+static void ctx_DrawIndexedInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* args, UINT offset) { (void)self; (void)args; (void)offset; }
+static void ctx_DrawInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* args, UINT offset) { (void)self; (void)args; (void)offset; }
+static void ctx_DispatchIndirect(ID3D11DeviceContext* self, ID3D11Buffer* args, UINT offset) { (void)self; (void)args; (void)offset; }
+
 static HRESULT ctx_Map(ID3D11DeviceContext* self, ID3D11Resource* pRes, UINT sub, D3D11_MAP mt, UINT flags, D3D11_MAPPED_SUBRESOURCE* pMapped) {
     (void)self; (void)sub; (void)mt; (void)flags;
     mock_obj_t* res = (mock_obj_t*)pRes;
@@ -445,6 +449,9 @@ static const struct ID3D11DeviceContextVtbl context_vtbl = {
     ctx_Draw,
     ctx_DrawInstanced,
     ctx_Dispatch,
+    ctx_DrawIndexedInstancedIndirect,
+    ctx_DrawInstancedIndirect,
+    ctx_DispatchIndirect,
     ctx_Map,
     ctx_Unmap,
     (ULONG (STDMETHODCALLTYPE*)(ID3D11DeviceContext*))mock_addref,

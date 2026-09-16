@@ -106,7 +106,10 @@
     _MTLM_XMACRO(setBufferOffset) \
     _MTLM_XMACRO(setTexture) \
     _MTLM_XMACRO(setSamplerState) \
-    _MTLM_XMACRO(dispatchThreadgroups)
+    _MTLM_XMACRO(dispatchThreadgroups) \
+    _MTLM_XMACRO(drawPrimitivesIndirect) \
+    _MTLM_XMACRO(drawIndexedPrimitivesIndirect) \
+    _MTLM_XMACRO(dispatchThreadgroupsIndirect)
 
 typedef enum {
     METAL_MOCK_FUNC_INVALID = 0,

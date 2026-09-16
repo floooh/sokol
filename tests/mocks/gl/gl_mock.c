@@ -270,6 +270,8 @@ static gl_mock_buffer_info_t* _glm_cur_buf(GLenum target) {
         case GL_ARRAY_BUFFER: name = _glm.bindings.array_buffer; break;
         case GL_ELEMENT_ARRAY_BUFFER: name = _glm.bindings.element_array_buffer; break;
         case GL_SHADER_STORAGE_BUFFER: name = _glm.bindings.shader_storage_buffer; break;
+        case GL_DRAW_INDIRECT_BUFFER: name = _glm.bindings.draw_indirect_buffer; break;
+        case GL_DISPATCH_INDIRECT_BUFFER: name = _glm.bindings.dispatch_indirect_buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, name)) {
@@ -374,6 +376,8 @@ static void _glm_unbind_buffer(GLuint name) {
     if (_glm.bindings.array_buffer == name) { _glm.bindings.array_buffer = 0; }
     if (_glm.bindings.element_array_buffer == name) { _glm.bindings.element_array_buffer = 0; }
     if (_glm.bindings.shader_storage_buffer == name) { _glm.bindings.shader_storage_buffer = 0; }
+    if (_glm.bindings.draw_indirect_buffer == name) { _glm.bindings.draw_indirect_buffer = 0; }
+    if (_glm.bindings.dispatch_indirect_buffer == name) { _glm.bindings.dispatch_indirect_buffer = 0; }
     for (int i = 0; i < GL_MOCK_MAX_BUFFER_BINDINGS; i++) {
         if (_glm.sbuf_bindings[i].buffer == name) {
             memset(&_glm.sbuf_bindings[i], 0, sizeof(_glm.sbuf_bindings[i]));
@@ -718,6 +722,8 @@ void glBindBuffer(GLenum target, GLuint buffer) {
         case GL_ARRAY_BUFFER: _glm.bindings.array_buffer = buffer; break;
         case GL_ELEMENT_ARRAY_BUFFER: _glm.bindings.element_array_buffer = buffer; break;
         case GL_SHADER_STORAGE_BUFFER: _glm.bindings.shader_storage_buffer = buffer; break;
+        case GL_DRAW_INDIRECT_BUFFER: _glm.bindings.draw_indirect_buffer = buffer; break;
+        case GL_DISPATCH_INDIRECT_BUFFER: _glm.bindings.dispatch_indirect_buffer = buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, buffer)) {
@@ -1711,6 +1717,18 @@ void glDispatchCompute(GLuint num_groups_x, GLuint num_groups_y, GLuint num_grou
     _glm.last_dispatch.num_groups_x = num_groups_x;
     _glm.last_dispatch.num_groups_y = num_groups_y;
     _glm.last_dispatch.num_groups_z = num_groups_z;
+}
+
+void glDrawArraysIndirect(GLenum mode, const void* indirect) {
+    _GLM_REC(glDrawArraysIndirect, _glm_ai(mode), _glm_ap(indirect));
+}
+
+void glDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect) {
+    _GLM_REC(glDrawElementsIndirect, _glm_ai(mode), _glm_ai(type), _glm_ap(indirect));
+}
+
+void glDispatchComputeIndirect(GLintptr indirect) {
+    _GLM_REC(glDispatchComputeIndirect, _glm_ai(indirect));
 }
 
 void glMemoryBarrier(GLbitfield barriers) {

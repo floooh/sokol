@@ -354,6 +354,9 @@ typedef uint64_t        GLuint64;
 #define GL_SCISSOR_TEST                                0x0C11
 #define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT             0x00000020
 #define GL_SHADER_STORAGE_BARRIER_BIT                  0x2000
+#define GL_DRAW_INDIRECT_BUFFER                        0x8F3F
+#define GL_DISPATCH_INDIRECT_BUFFER                    0x90EE
+#define GL_COMMAND_BARRIER_BIT                         0x00000040
 #define GL_SHADER_STORAGE_BUFFER                       0x90D2
 #define GL_SHORT                                       0x1402
 #define GL_SRC1_ALPHA                                  0x8589
@@ -530,6 +533,9 @@ typedef uint64_t        GLuint64;
     _GLM_XMACRO(glTexImage2DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
     _GLM_XMACRO(glTexImage3DMultisample,           void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)) \
     _GLM_XMACRO(glDispatchCompute,                 void, (GLuint num_groups_x, GLuint num_groups_y, GLuint num_groups_z)) \
+    _GLM_XMACRO(glDrawArraysIndirect,              void, (GLenum mode, const void* indirect)) \
+    _GLM_XMACRO(glDrawElementsIndirect,            void, (GLenum mode, GLenum type, const void* indirect)) \
+    _GLM_XMACRO(glDispatchComputeIndirect,         void, (GLintptr indirect)) \
     _GLM_XMACRO(glMemoryBarrier,                   void, (GLbitfield barriers)) \
     _GLM_XMACRO(glBindImageTexture,                void, (GLuint unit, GLuint texture, GLint level, GLboolean layered, GLint layer, GLenum access, GLenum format)) \
     _GLM_XMACRO(glTexStorage2DMultisample,         void, (GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLboolean fixedsamplelocations)) \
