@@ -788,6 +788,7 @@ UTEST(sokol_gfx_d3d11, draw_indexed_and_instanced) {
     ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
     sg_shader shd = make_test_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
         .shader = shd, .index_type = SG_INDEXTYPE_UINT16,
         .layout = { .attrs = { [0] = { .format = SG_VERTEXFORMAT_FLOAT3 }, [1] = { .format = SG_VERTEXFORMAT_UBYTE4N } } },
     });
@@ -826,6 +827,7 @@ UTEST(sokol_gfx_d3d11, draw_non_indexed_and_instanced) {
     sg_shader shd = make_test_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
         .layout = { .attrs = { [0] = { .format = SG_VERTEXFORMAT_FLOAT3 }, [1] = { .format = SG_VERTEXFORMAT_UBYTE4N } } },
     });
     static const float verts[24] = {0};
