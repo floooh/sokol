@@ -981,6 +981,33 @@ static NSError* _mtlm_error(void) {
     c->args[6].i = baseVertex;
     c->args[7].u = baseInstance;
 }
+- (void)drawPrimitives:(MTLPrimitiveType)primitiveType
+       indirectBuffer:(id<MTLBuffer>)indirectBuffer
+ indirectBufferOffset:(NSUInteger)indirectBufferOffset
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_drawPrimitivesIndirect, self);
+    c->num_args = 3;
+    c->args[0].u = primitiveType;
+    c->args[1].p = indirectBuffer;
+    c->args[2].u = indirectBufferOffset;
+}
+
+- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType
+                   indexType:(MTLIndexType)indexType
+                 indexBuffer:(id<MTLBuffer>)indexBuffer
+           indexBufferOffset:(NSUInteger)indexBufferOffset
+              indirectBuffer:(id<MTLBuffer>)indirectBuffer
+        indirectBufferOffset:(NSUInteger)indirectBufferOffset
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_drawIndexedPrimitivesIndirect, self);
+    c->num_args = 6;
+    c->args[0].u = primitiveType;
+    c->args[1].u = indexType;
+    c->args[2].p = indexBuffer;
+    c->args[3].u = indexBufferOffset;
+    c->args[4].p = indirectBuffer;
+    c->args[5].u = indirectBufferOffset;
+}
 @end
 
 @implementation _mtlm_compute_encoder
@@ -1062,6 +1089,20 @@ static NSError* _mtlm_error(void) {
     c->args[4].u = threadsPerThreadgroup.height;
     c->args[5].u = threadsPerThreadgroup.depth;
     _mtlm.compute_encoder_state.last_threadgroups_per_grid = threadgroupsPerGrid;
+    _mtlm.compute_encoder_state.last_threads_per_threadgroup = threadsPerThreadgroup;
+    _mtlm.compute_encoder_state.num_dispatches++;
+}
+- (void)dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer>)indirectBuffer
+                        indirectBufferOffset:(NSUInteger)indirectBufferOffset
+                       threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect, self);
+    c->num_args = 5;
+    c->args[0].p = indirectBuffer;
+    c->args[1].u = indirectBufferOffset;
+    c->args[2].u = threadsPerThreadgroup.width;
+    c->args[3].u = threadsPerThreadgroup.height;
+    c->args[4].u = threadsPerThreadgroup.depth;
     _mtlm.compute_encoder_state.last_threads_per_threadgroup = threadsPerThreadgroup;
     _mtlm.compute_encoder_state.num_dispatches++;
 }

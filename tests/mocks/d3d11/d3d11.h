@@ -160,6 +160,7 @@ typedef enum D3D11_USAGE {
 
 /* D3D11_RESOURCE_MISC_FLAG */
 #define D3D11_RESOURCE_MISC_TEXTURECUBE            0x0004u
+#define D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS       0x0010u
 #define D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS 0x0020u
 
 typedef enum D3D11_FILTER {
@@ -837,6 +838,9 @@ typedef struct ID3D11DeviceContextVtbl {
     void    (STDMETHODCALLTYPE *Draw)(ID3D11DeviceContext* self, UINT VertexCount, UINT StartVertexLocation);
     void    (STDMETHODCALLTYPE *DrawInstanced)(ID3D11DeviceContext* self, UINT VertexCountPerInstance, UINT InstanceCount, UINT StartVertexLocation, UINT StartInstanceLocation);
     void    (STDMETHODCALLTYPE *Dispatch)(ID3D11DeviceContext* self, UINT X, UINT Y, UINT Z);
+    void    (STDMETHODCALLTYPE *DrawIndexedInstancedIndirect)(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs);
+    void    (STDMETHODCALLTYPE *DrawInstancedIndirect)(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs);
+    void    (STDMETHODCALLTYPE *DispatchIndirect)(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs);
     HRESULT (STDMETHODCALLTYPE *Map)(ID3D11DeviceContext* self, ID3D11Resource* pResource, UINT Subresource, D3D11_MAP MapType, UINT MapFlags, D3D11_MAPPED_SUBRESOURCE* pMapped);
     void    (STDMETHODCALLTYPE *Unmap)(ID3D11DeviceContext* self, ID3D11Resource* pResource, UINT Subresource);
     ULONG   (STDMETHODCALLTYPE *AddRef)(ID3D11DeviceContext* self);

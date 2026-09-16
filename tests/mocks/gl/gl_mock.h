@@ -151,6 +151,8 @@ typedef struct {
     GLuint array_buffer;
     GLuint element_array_buffer;
     GLuint shader_storage_buffer;
+    GLuint draw_indirect_buffer;
+    GLuint dispatch_indirect_buffer;
     GLenum active_texture;      // GL_TEXTURE0 + unit
 } gl_mock_bindings_t;
 

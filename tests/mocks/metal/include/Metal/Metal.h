@@ -717,6 +717,15 @@ typedef struct {
                 instanceCount:(NSUInteger)instanceCount
                    baseVertex:(NSInteger)baseVertex
                  baseInstance:(NSUInteger)baseInstance;
+- (void)drawPrimitives:(MTLPrimitiveType)primitiveType
+       indirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+ indirectBufferOffset:(NSUInteger)indirectBufferOffset;
+- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType
+                   indexType:(MTLIndexType)indexType
+                 indexBuffer:(id<MTLBuffer> _Nonnull)indexBuffer
+           indexBufferOffset:(NSUInteger)indexBufferOffset
+              indirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+        indirectBufferOffset:(NSUInteger)indirectBufferOffset;
 @end
 
 //== MTLComputeCommandEncoder.h ================================================
@@ -728,6 +737,9 @@ typedef struct {
 - (void)setTexture:(id<MTLTexture> _Nullable)texture atIndex:(NSUInteger)index;
 - (void)setSamplerState:(id<MTLSamplerState> _Nullable)sampler atIndex:(NSUInteger)index;
 - (void)dispatchThreadgroups:(MTLSize)threadgroupsPerGrid threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup;
+- (void)dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+                        indirectBufferOffset:(NSUInteger)indirectBufferOffset
+                       threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup;
 @end
 
 //== MTLDrawable.h =============================================================

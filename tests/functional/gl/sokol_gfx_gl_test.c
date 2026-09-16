@@ -1066,9 +1066,22 @@ UTEST(sokol_gfx_gl, compute_pass_no_framebuffer_bind) {
     });
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd, .compute = true });
     gl_mock_clear_calls();
+    sg_buffer indirect = {0};
+    if (sg_query_features().compute) {
+        const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+        indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+        T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
+    }
     sg_begin_pass(&(sg_pass){ .compute = true });
     sg_apply_pipeline(pip);
     sg_dispatch(4, 4, 1);
+    if (sg_query_features().compute) {
+        sg_dispatch_indirect(indirect, 4);
+        const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glDispatchComputeIndirect);
+        TA(call != 0);
+        T(call->args[0].i == 4);
+        T(gl_mock_bindings()->dispatch_indirect_buffer == 0);
+    }
     sg_end_pass();
     sg_commit();
     // compute pass does not touch framebuffer state
@@ -1077,6 +1090,7 @@ UTEST(sokol_gfx_gl, compute_pass_no_framebuffer_bind) {
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 #endif
@@ -1093,6 +1107,12 @@ UTEST(sokol_gfx_gl, draw_arrays_non_indexed_and_instanced) {
     });
     static const float verts[9] = {0};
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
+    sg_buffer indirect = {0};
+    if (sg_query_features().compute) {
+        const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+        indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+        T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
+    }
     sg_begin_pass(&(sg_pass){
         .swapchain = { .width = 64, .height = 64, .sample_count = 1,
                        .color_format = SG_PIXELFORMAT_RGBA8, .depth_format = SG_PIXELFORMAT_DEPTH_STENCIL },
@@ -1102,6 +1122,14 @@ UTEST(sokol_gfx_gl, draw_arrays_non_indexed_and_instanced) {
     gl_mock_clear_calls();
     sg_draw(0, 3, 1);                       // glDrawArrays
     sg_draw(0, 3, 4);                       // glDrawArraysInstanced
+    if (sg_query_features().compute) {
+        sg_draw_indirect(indirect, 4);
+        const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glDrawArraysIndirect);
+        TA(call != 0);
+        T(call->args[0].i == GL_TRIANGLES);
+        T(call->args[1].p == (const void*)(uintptr_t)4);
+        T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    }
     sg_end_pass();
     sg_commit();
     T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawArrays) == 1);
@@ -1110,6 +1138,7 @@ UTEST(sokol_gfx_gl, draw_arrays_non_indexed_and_instanced) {
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 
@@ -1126,6 +1155,12 @@ UTEST(sokol_gfx_gl, draw_indexed_and_instanced) {
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){
         .usage.index_buffer = true, .data = SG_RANGE(indices),
     });
+    sg_buffer indirect = {0};
+    if (sg_query_features().compute) {
+        const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+        indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+        T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
+    }
     sg_begin_pass(&(sg_pass){
         .swapchain = { .width = 64, .height = 64, .sample_count = 1,
                        .color_format = SG_PIXELFORMAT_RGBA8, .depth_format = SG_PIXELFORMAT_DEPTH_STENCIL },
@@ -1135,6 +1170,15 @@ UTEST(sokol_gfx_gl, draw_indexed_and_instanced) {
     gl_mock_clear_calls();
     sg_draw(0, 6, 1);
     sg_draw(0, 6, 4);
+    if (sg_query_features().compute) {
+        sg_draw_indirect(indirect, 4);
+        const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glDrawElementsIndirect);
+        TA(call != 0);
+        T(call->args[0].i == GL_TRIANGLES);
+        T(call->args[1].i == GL_UNSIGNED_SHORT);
+        T(call->args[2].p == (const void*)(uintptr_t)4);
+        T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    }
     sg_end_pass();
     sg_commit();
     // no base_vertex/base_instance in the bindings, so sokol_gfx picks the
@@ -1146,6 +1190,7 @@ UTEST(sokol_gfx_gl, draw_indexed_and_instanced) {
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 
