@@ -1942,6 +1942,9 @@ UTEST(sokol_gfx_metal, draw_variants) {
         .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
         .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
     });
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
     sg_apply_pipeline(pip);
     sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
@@ -1964,6 +1967,12 @@ UTEST(sokol_gfx_metal, draw_variants) {
     const int num_draws = metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitives);
     sg_draw(0, 0, 1);
     T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitives) == num_draws);
+    sg_draw_indirect(indirect, 4);
+    call = metal_mock_last_call(METAL_MOCK_FUNC_drawPrimitivesIndirect);
+    ASSERT_TRUE(call != 0);
+    T(call->args[0].u == MTLPrimitiveTypeTriangleStrip);
+    T(call->args[1].p == sg_mtl_query_buffer_info(indirect).buf[0]);
+    T(call->args[2].u == 4);
     sg_end_pass();
     sg_commit();
     teardown();
@@ -1985,6 +1994,9 @@ UTEST(sokol_gfx_metal, draw_indexed) {
         .usage = { .index_buffer = true, .immutable = true },
         .data = { .ptr = scratch, .size = 64 },
     });
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
     sg_apply_pipeline(pip);
     sg_apply_bindings(&(sg_bindings){
@@ -2007,6 +2019,15 @@ UTEST(sokol_gfx_metal, draw_indexed) {
     T(call != 0);
     T(call->args[6].i == 4);
     T(call->args[7].u == 5);
+    sg_draw_indirect(indirect, 4);
+    call = metal_mock_last_call(METAL_MOCK_FUNC_drawIndexedPrimitivesIndirect);
+    ASSERT_TRUE(call != 0);
+    T(call->args[0].u == MTLPrimitiveTypeTriangle);
+    T(call->args[1].u == MTLIndexTypeUInt16);
+    T(call->args[2].p == sg_mtl_query_buffer_info(ibuf).buf[0]);
+    T(call->args[3].u == 8);
+    T(call->args[4].p == sg_mtl_query_buffer_info(indirect).buf[0]);
+    T(call->args[5].u == 4);
     sg_end_pass();
     sg_commit();
     teardown();
@@ -2033,6 +2054,9 @@ UTEST(sokol_gfx_metal, dispatch) {
         .usage = { .storage_image = true, .immutable = true },
     });
     sg_view view = sg_make_view(&(sg_view_desc){ .storage_image.image = img });
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){ .compute = true });
     sg_apply_pipeline(pip);
     sg_apply_bindings(&(sg_bindings){ .views[0] = view });
@@ -2045,6 +2069,15 @@ UTEST(sokol_gfx_metal, dispatch) {
     T(state->last_threadgroups_per_grid.height == 3);
     T(state->last_threads_per_threadgroup.width == 8);
     T(state->last_threads_per_threadgroup.height == 4);
+    sg_dispatch_indirect(indirect, 4);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect);
+    ASSERT_TRUE(call != 0);
+    T(call->args[0].p == sg_mtl_query_buffer_info(indirect).buf[0]);
+    T(call->args[1].u == 4);
+    T(call->args[2].u == 8);
+    T(call->args[3].u == 4);
+    T(call->args[4].u == 1);
+    T(state->num_dispatches == 2);
     sg_end_pass();
     sg_commit();
     teardown();

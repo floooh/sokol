@@ -797,6 +797,9 @@ UTEST(sokol_gfx_d3d11, draw_indexed_and_instanced) {
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
 
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){
         .swapchain = { .width = 64, .height = 64, .sample_count = 1,
                        .color_format = SG_PIXELFORMAT_BGRA8, .depth_format = SG_PIXELFORMAT_NONE,
@@ -809,6 +812,8 @@ UTEST(sokol_gfx_d3d11, draw_indexed_and_instanced) {
     });
     sg_draw(0, 6, 1);              // exercises DrawIndexed
     sg_draw(0, 6, 4);              // DrawIndexedInstanced
+    sg_draw_indirect(indirect, 4);
+    T(num_log_items == 0);
     sg_end_pass();
     sg_commit();
 
@@ -818,6 +823,7 @@ UTEST(sokol_gfx_d3d11, draw_indexed_and_instanced) {
     sg_destroy_shader(shd);
     rtv->lpVtbl->Release(rtv);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 
@@ -826,12 +832,15 @@ UTEST(sokol_gfx_d3d11, draw_non_indexed_and_instanced) {
     ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
     sg_shader shd = make_test_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd,
         .depth.pixel_format = SG_PIXELFORMAT_NONE,
+        .shader = shd,
         .layout = { .attrs = { [0] = { .format = SG_VERTEXFORMAT_FLOAT3 }, [1] = { .format = SG_VERTEXFORMAT_UBYTE4N } } },
     });
     static const float verts[24] = {0};
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){
         .swapchain = { .width = 64, .height = 64, .sample_count = 1,
                        .color_format = SG_PIXELFORMAT_BGRA8, .depth_format = SG_PIXELFORMAT_NONE,
@@ -841,6 +850,8 @@ UTEST(sokol_gfx_d3d11, draw_non_indexed_and_instanced) {
     sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
     sg_draw(0, 3, 1);              // Draw
     sg_draw(0, 3, 8);              // DrawInstanced
+    sg_draw_indirect(indirect, 4);
+    T(num_log_items == 0);
     sg_end_pass();
     sg_commit();
     sg_destroy_buffer(vbuf);
@@ -848,6 +859,7 @@ UTEST(sokol_gfx_d3d11, draw_non_indexed_and_instanced) {
     sg_destroy_shader(shd);
     rtv->lpVtbl->Release(rtv);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 
@@ -896,14 +908,20 @@ UTEST(sokol_gfx_d3d11, dispatch_compute) {
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd, .compute = true,
     });
+    const uint32_t args[8] = {0, 3, 1, 0, 0, 0, 0, 0};
+    sg_buffer indirect = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(indirect) == SG_RESOURCESTATE_VALID);
     sg_begin_pass(&(sg_pass){ .compute = true });
     sg_apply_pipeline(pip);
     sg_dispatch(4, 4, 1);
+    sg_dispatch_indirect(indirect, 4);
+    T(num_log_items == 0);
     sg_end_pass();
     sg_commit();
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
     T(sg_isvalid());
+    sg_destroy_buffer(indirect);
     teardown();
 }
 
