@@ -3350,11 +3350,12 @@ typedef struct sg_buffer_usage {
     bool vertex_buffer;
     bool index_buffer;
     bool storage_buffer;
-    bool immutable;
     bool write_unsealed;
     bool write_transient;
     bool copy_src;
     bool copy_dst;
+    // FIXME: deprecated
+    bool immutable;
 } sg_buffer_usage;
 
 /*
@@ -3475,10 +3476,13 @@ typedef struct sg_image_usage {
     bool color_attachment;
     bool resolve_attachment;
     bool depth_stencil_attachment;
-    bool immutable;
     bool write_unsealed;
     bool write_transient;
     bool dynamic_update;
+    bool copy_src;
+    bool copy_dst;
+    // FIXME: deprecated
+    bool immutable;
 } sg_image_usage;
 
 /*
@@ -4355,6 +4359,7 @@ typedef struct sg_trace_hooks {
     void (*write_image_unsealed)(const sg_write_image_desc* desc, void* user_data);
     void (*seal_buffer)(sg_buffer buf, void* user_data);
     void (*seal_image)(sg_image img, void* user_data);
+    void (*copy_buffer_to_buffer)(const sg_copy_buffer_to_buffer_desc* desc, void* user_data);
     void (*begin_pass)(const sg_pass* pass, void* user_data);
     void (*apply_viewport)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
     void (*apply_scissor_rect)(int x, int y, int width, int height, bool origin_top_left, void* user_data);
@@ -4678,6 +4683,7 @@ typedef struct sg_frame_stats {
     uint32_t num_write_image_unsealed;
     uint32_t num_seal_buffer;
     uint32_t num_seal_image;
+    uint32_t num_copy_buffer_to_buffer;
 
     uint32_t size_apply_uniforms;
     uint32_t size_update_buffer;
@@ -4882,6 +4888,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(WRITE_IMAGE_UNSEALED_IMAGE_ALIVE, "sg_write_image_unsealed: image is no longer alive") \
     _SG_LOGITEM_XMACRO(SEAL_BUFFER_ALIVE, "sg_seal_buffer: buffer is no longer alive") \
     _SG_LOGITEM_XMACRO(SEAL_IMAGE_ALIVE, "sg_seal_image: image is no longer alive") \
+    _SG_LOGITEM_XMACRO(COPY_BUFFER_TO_BUFFER_ALIVE, "sg_copy_buffer_to_buffer: src and/or dst buffer no longer alive") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -5218,6 +5225,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE, "sg_write_buffer_unsealed: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be !.immutable && .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
@@ -5245,6 +5253,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_*: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC, "sg_copy_buffer_to_buffer: source buffer must have .copy_src usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_DST, "sg_copy_buffer_to_buffer: destination buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -6639,6 +6649,7 @@ typedef struct {
     int num_slots;
     int active_slot;
     uint32_t bind_frame_index;  // last frame index the buffer was bound
+    uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
     uint32_t write_transient_frame_index; // last frame index when written to
     sg_buffer_usage usage;
     // deprecated
@@ -8588,6 +8599,7 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
     cmn->active_slot = 0;
     cmn->bind_frame_index = 0;
+    cmn->copy_src_frame_index = 0;
     cmn->write_transient_frame_index = 0;
     cmn->usage = desc->usage;
     // deprecated
@@ -9568,6 +9580,13 @@ _SOKOL_PRIVATE void _sg_dummy_seal_buffer(_sg_buffer_t* buf) {
 _SOKOL_PRIVATE void _sg_dummy_seal_image(_sg_image_t* img) {
     SOKOL_ASSERT(img);
     _SOKOL_UNUSED(img);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    _SOKOL_UNUSED(src_buf);
+    _SOKOL_UNUSED(dst_buf);
+    _SOKOL_UNUSED(desc);
 }
 
 //  ██████  ██████  ███████ ███    ██  ██████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -15517,11 +15536,11 @@ _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_resource_options_storage_mode_managed_
 }
 
 _SOKOL_PRIVATE MTLResourceOptions _sg_mtl_buffer_resource_options(const sg_buffer_usage* usage) {
-    if (usage->immutable) {
-        return _sg_mtl_resource_options_storage_mode_managed_or_shared();
-    } else {
-        return MTLResourceCPUCacheModeWriteCombined | _sg_mtl_resource_options_storage_mode_managed_or_shared();
+    MTLResourceOptions res = _sg_mtl_resource_options_storage_mode_managed_or_shared();
+    if (usage->write_transient || usage->write_unsealed) {
+        res |= MTLResourceCPUCacheModeWriteCombined;
     }
+    return res;
 }
 
 _SOKOL_PRIVATE MTLVertexStepFunction _sg_mtl_step_function(sg_vertex_step step) {
@@ -17797,6 +17816,14 @@ _SOKOL_PRIVATE void _sg_mtl_write_image_unsealed(_sg_image_t* img, const sg_writ
         desc->size.width,
         desc->size.height,
         desc->size.num_slices);
+}
+
+_SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME: _sg_mtl_copy_buffer_to_buffer");
 }
 
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
@@ -23934,6 +23961,25 @@ static inline void _sg_seal_image(_sg_image_t* img) {
     #endif
 }
 
+static inline void _sg_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+
+}
+
 static inline void _sg_push_debug_group(const char* name) {
     #if defined(SOKOL_METAL)
     _sg_mtl_push_debug_group(name);
@@ -23991,7 +24037,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->size > 0, VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
-        _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.dynamic_update, desc->usage.write_transient), VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE);
+        _SG_VALIDATE(_sg_one(desc->usage.immutable, desc->usage.write_transient, desc->usage.copy_dst), VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE);
         if (_sg.features.separate_buffer_types) {
             _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
         }
@@ -25540,8 +25586,9 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         SOKOL_ASSERT(buf && desc);
         _sg_validate_begin();
         _SG_VALIDATE(!buf->cmn.usage.immutable && buf->cmn.usage.write_transient, VALIDATE_WRITEBUFFERTRANSIENT_USAGE);
-        // write-transient is only allowed before resource is bound in current frame
+        // write-transient is only allowed before resource is 'used' in current frame
         _SG_VALIDATE(buf->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(buf->cmn.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
         // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);
@@ -25657,6 +25704,24 @@ _SOKOL_PRIVATE bool _sg_validate_seal_image(const _sg_image_t* img) {
         _SG_VALIDATE(img->slot.state == SG_RESOURCESTATE_UNSEALED, VALIDATE_SEALIMAGE_RESOURCESTATE);
         return _sg_validate_end();
     #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_buf, const _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(src_buf && dst_buf && desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(src_buf && dst_buf && desc);
+        _sg_validate_begin();
+        _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
+        _SG_VALIDATE(dst_buf->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOBUFFER_COPY_DST);
+        // FIXME: more validations
+        return _sg_validate_end();
+    #endif
+
 }
 
 _SOKOL_PRIVATE bool _sg_validate_shader_binding_limits(const sg_shader_desc* desc) {
@@ -25797,7 +25862,7 @@ _SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* 
     if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer)) {
         def.vertex_buffer = true;
     }
-    if (!(def.immutable || def.write_transient || def.dynamic_update)) {
+    if (!(def.immutable || def.write_transient || def.copy_dst)) {
         def.immutable = true;
     }
     return def;
@@ -27739,6 +27804,23 @@ SOKOL_API_IMPL void sg_seal_image(sg_image img_id) {
         _SG_ERROR(SEAL_IMAGE_ALIVE);
     }
     _SG_TRACE_ARGS(seal_image, img_id);
+}
+
+SOKOL_API_IMPL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(_sg.valid);
+    SOKOL_ASSERT(desc);
+    _sg_stats_inc(num_copy_buffer_to_buffer);
+    _sg_buffer_t* src_buf = _sg_lookup_buffer(desc->src.buffer.id);
+    _sg_buffer_t* dst_buf = _sg_lookup_buffer(desc->dst.buffer.id);
+    if (src_buf && dst_buf) {
+        if (_sg_validate_copy_buffer_to_buffer(src_buf, dst_buf, desc)) {
+            src_buf->cmn.copy_src_frame_index = _sg.frame_index;
+            _sg_copy_buffer_to_buffer(src_buf, dst_buf, desc);
+        }
+    } else {
+        _SG_ERROR(COPY_BUFFER_TO_BUFFER_ALIVE);
+    }
+    _SG_TRACE_ARGS(copy_buffer_to_buffer, desc);
 }
 
 SOKOL_API_IMPL void sg_push_debug_group(const char* name) {
