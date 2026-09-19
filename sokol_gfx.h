@@ -4350,9 +4350,7 @@ typedef struct sg_trace_hooks {
     void (*destroy_shader)(sg_shader shd, void* user_data);
     void (*destroy_pipeline)(sg_pipeline pip, void* user_data);
     void (*destroy_view)(sg_view view, void* user_data);
-    void (*update_buffer)(sg_buffer buf, const sg_range* data, void* user_data);
     void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
-    void (*append_buffer)(sg_buffer buf, const sg_range* data, int result, void* user_data);
     void (*write_buffer_transient)(const sg_write_buffer_desc* desc, void* user_data);
     void (*write_image_transient)(const sg_write_image_desc* desc, void* user_data);
     void (*write_buffer_unsealed)(const sg_write_buffer_desc* desc, void* user_data);
@@ -4438,11 +4436,6 @@ typedef struct sg_buffer_info {
     sg_slot_info slot;              // resource pool slot info
     int num_slots;                  // number of renaming-slots for dynamically updated buffers
     int active_slot;                // currently active write-slot for dynamically updated buffers
-    // deprecated
-    uint32_t update_frame_index;    // frame index of last sg_update_buffer()
-    uint32_t append_frame_index;    // frame index of last sg_append_buffer()
-    int append_pos;                 // current position in buffer for sg_append_buffer()
-    bool append_overflow;           // is buffer in overflow state (due to sg_append_buffer)
 } sg_buffer_info;
 
 typedef struct sg_image_info {
@@ -4674,8 +4667,6 @@ typedef struct sg_frame_stats {
     uint32_t num_draw;
     uint32_t num_draw_ex;
     uint32_t num_dispatch;
-    uint32_t num_update_buffer;
-    uint32_t num_append_buffer;
     uint32_t num_update_image;
     uint32_t num_write_buffer_transient;
     uint32_t num_write_image_transient;
@@ -4686,9 +4677,8 @@ typedef struct sg_frame_stats {
     uint32_t num_copy_buffer_to_buffer;
 
     uint32_t size_apply_uniforms;
-    uint32_t size_update_buffer;
-    uint32_t size_append_buffer;
     uint32_t size_update_image;
+    uint32_t size_copy_buffer_to_buffer;
 
     sg_frame_resource_stats buffers;
     sg_frame_resource_stats images;
@@ -4767,8 +4757,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED, "CreateRenderTargetView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED, "CreateDepthStencilView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_UAV_FAILED, "CreateUnorderedAccessView() failed (d3d11)") \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED, "Map() failed when updating buffer (d3d11)") \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_APPEND_BUFFER_FAILED, "Map() failed when appending to buffer (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED, "Map() failed during sg_write_buffer_transient(d3d11)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_BUFFER_FAILED, "failed to create buffer object (metal)") \
@@ -4902,7 +4890,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE, "sg_buffer_desc.usage: only one of .immutable, .dynamic_update, .write_transient can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_IMMUTABLE_VS_WRITABLE, "sg_buffer_desc.usage: only one of .immutable, .copy_dst, .write_transient can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_UNSEALED_VS_IMMUTABLE, "sg_buffer_desc.usage: .write_unsealed only allowed for .immutable buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE, "sg_buffer_desc.size must be greater zero") \
@@ -5151,12 +5139,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBUF, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_ALIVE, "sg_apply_bindings: vertex buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_USAGE, "sg_apply_bindings: buffer in vertex buffer bind slot must have usage.vertex_buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_OVERFLOW, "sg_apply_bindings: buffer in vertex buffer bind slot is overflown") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBUF, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBUF, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_USAGE, "sg_apply_bindings: buffer in index buffer bind slot must have usage.index_buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_OVERFLOW, "sg_apply_bindings: buffer in index buffer slot is overflown") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VIEW_BINDING, "sg_apply_bindings: view binding is missing or the view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VIEW_ALIVE, "sg_apply_bindings: view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_TEXVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a texture view)") \
@@ -5212,13 +5198,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_USAGE, "sg_update_buffer: cannot update immutable buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_SIZE, "sg_update_buffer: update size is bigger than buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_ONCE, "sg_update_buffer: only one update allowed per buffer and frame") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDATEBUF_APPEND, "sg_update_buffer: cannot call sg_update_buffer and sg_append_buffer in same frame") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APPENDBUF_USAGE, "sg_append_buffer: cannot append to immutable buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APPENDBUF_SIZE, "sg_append_buffer: overall appended size is bigger than buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_APPENDBUF_UPDATE, "sg_append_buffer: cannot call sg_append_buffer and sg_update_buffer in same frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_USAGE, "sg_update_image: cannot update immutable image") \
     _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_ONCE, "sg_update_image: only one update allowed per image and frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .immutable && .write_unsealed") \
@@ -6656,11 +6635,6 @@ typedef struct {
     uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
     uint32_t write_transient_frame_index; // last frame index when written to
     sg_buffer_usage usage;
-    // deprecated
-    int append_pos;
-    bool append_overflow;
-    uint32_t update_frame_index;
-    uint32_t append_frame_index;
 } _sg_buffer_common_t;
 
 typedef struct {
@@ -8600,17 +8574,12 @@ _SOKOL_PRIVATE bool _sg_is_dualsource_blendfactor(sg_blend_factor f) {
 
 _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_buffer_desc* desc) {
     cmn->size = (int)desc->size;
-    cmn->num_slots = desc->usage.immutable ? 1 : SG_NUM_INFLIGHT_FRAMES;
+    cmn->num_slots = desc->usage.write_transient ? SG_NUM_INFLIGHT_FRAMES : 1;
     cmn->active_slot = 0;
     cmn->bind_frame_index = 0;
     cmn->copy_src_frame_index = 0;
     cmn->write_transient_frame_index = 0;
     cmn->usage = desc->usage;
-    // deprecated
-    cmn->append_pos = 0;
-    cmn->append_overflow = false;
-    cmn->update_frame_index = 0;
-    cmn->append_frame_index = 0;
 }
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
@@ -9521,25 +9490,6 @@ _SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int n
     _SOKOL_UNUSED(num_groups_x);
     _SOKOL_UNUSED(num_groups_y);
     _SOKOL_UNUSED(num_groups_z);
-}
-
-_SOKOL_PRIVATE void _sg_dummy_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    _SOKOL_UNUSED(data);
-    if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-        buf->cmn.active_slot = 0;
-    }
-}
-
-_SOKOL_PRIVATE bool _sg_dummy_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    _SOKOL_UNUSED(data);
-    if (new_frame) {
-        if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-            buf->cmn.active_slot = 0;
-        }
-    }
-    return true;
 }
 
 _SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data* data) {
@@ -12829,43 +12779,6 @@ _SOKOL_PRIVATE void _sg_gl_commit(void) {
     _sg_gl_cache_clear_texture_sampler_bindings(false);
 }
 
-_SOKOL_PRIVATE void _sg_gl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    // only one update per buffer per frame allowed
-    if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-        buf->cmn.active_slot = 0;
-    }
-    GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
-    SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
-    SOKOL_ASSERT(gl_buf);
-    _SG_GL_CHECK_ERROR();
-    _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
-    glBufferSubData(gl_tgt, 0, (GLsizeiptr)data->size, data->ptr);
-    _sg_gl_cache_restore_buffer_binding(gl_tgt);
-    _SG_GL_CHECK_ERROR();
-}
-
-_SOKOL_PRIVATE void _sg_gl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    if (new_frame) {
-        if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-            buf->cmn.active_slot = 0;
-        }
-    }
-    GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
-    SOKOL_ASSERT(buf->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
-    SOKOL_ASSERT(gl_buf);
-    _SG_GL_CHECK_ERROR();
-    _sg_gl_cache_store_buffer_binding(gl_tgt);
-    _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
-    glBufferSubData(gl_tgt, buf->cmn.append_pos, (GLsizeiptr)data->size, data->ptr);
-    _sg_gl_cache_restore_buffer_binding(gl_tgt);
-    _SG_GL_CHECK_ERROR();
-}
-
 _SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     // only one update per image per frame allowed
@@ -15245,32 +15158,6 @@ _SOKOL_PRIVATE void _sg_d3d11_dispatch(int num_groups_x, int num_groups_y, int n
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
     // empty
-}
-
-_SOKOL_PRIVATE void _sg_d3d11_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    void* mapped_ptr = _sg_d3d11_map_buffer(buf, D3D11_MAP_WRITE_DISCARD);
-    if (mapped_ptr) {
-        memcpy(mapped_ptr, data->ptr, data->size);
-        _sg_d3d11_unmap_buffer(buf);
-    } else {
-        _SG_ERROR(D3D11_MAP_FOR_UPDATE_BUFFER_FAILED);
-    }
-}
-
-_SOKOL_PRIVATE void _sg_d3d11_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(buf->d3d11.buf);
-    D3D11_MAP d3d11_map_type = new_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
-    void* mapped_ptr = _sg_d3d11_map_buffer(buf, d3d11_map_type);
-    if (mapped_ptr) {
-        uint8_t* dst_ptr = (uint8_t*)mapped_ptr + buf->cmn.append_pos;
-        memcpy(dst_ptr, data->ptr, data->size);
-        _sg_d3d11_unmap_buffer(buf);
-    } else {
-        _SG_ERROR(D3D11_MAP_FOR_APPEND_BUFFER_FAILED);
-    }
 }
 
 // see: https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-subresources
@@ -17696,39 +17583,6 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
     [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_threadgroup];
 }
 
-_SOKOL_PRIVATE void _sg_mtl_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-        buf->cmn.active_slot = 0;
-    }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
-    void* dst_ptr = [mtl_buf contents];
-    memcpy(dst_ptr, data->ptr, data->size);
-    #if defined(_SG_TARGET_MACOS)
-    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        [mtl_buf didModifyRange:NSMakeRange(0, data->size)];
-    }
-    #endif
-}
-
-_SOKOL_PRIVATE void _sg_mtl_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    if (new_frame) {
-        if (++buf->cmn.active_slot >= buf->cmn.num_slots) {
-            buf->cmn.active_slot = 0;
-        }
-    }
-    __unsafe_unretained id<MTLBuffer> mtl_buf = _sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot]);
-    uint8_t* dst_ptr = (uint8_t*) [mtl_buf contents];
-    dst_ptr += buf->cmn.append_pos;
-    memcpy(dst_ptr, data->ptr, data->size);
-    #if defined(_SG_TARGET_MACOS)
-    if (_sg_mtl_resource_options_storage_mode_managed_or_shared() == MTLResourceStorageModeManaged) {
-        [mtl_buf didModifyRange:NSMakeRange((NSUInteger)buf->cmn.append_pos, (NSUInteger)data->size)];
-    }
-    #endif
-}
-
 _SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     if (++img->cmn.active_slot >= img->cmn.num_slots) {
@@ -19978,17 +19832,6 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
         (uint32_t)num_groups_x,
         (uint32_t)num_groups_y,
         (uint32_t)num_groups_z);
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    _sg_wgpu_copy_buffer_data(buf, 0, data, 0, data->size);
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    _SOKOL_UNUSED(new_frame);
-    _sg_wgpu_copy_buffer_data(buf, (uint64_t)buf->cmn.append_pos, data, 0, data->size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
@@ -23277,19 +23120,6 @@ _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_
     vkCmdDispatch(cmd_buf, (uint32_t)num_groups_x, (uint32_t)num_groups_y, (uint32_t)num_groups_z);
 }
 
-_SOKOL_PRIVATE void _sg_vk_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(!buf->cmn.usage.write_transient);
-    _sg_vk_staging_copy_buffer_data(buf, data, 0, 0, data->size, true);
-}
-
-_SOKOL_PRIVATE void _sg_vk_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    SOKOL_ASSERT(buf && data && data->ptr && (data->size > 0));
-    SOKOL_ASSERT(!buf->cmn.usage.write_transient);
-    _SOKOL_UNUSED(new_frame);
-    _sg_vk_staging_copy_buffer_data(buf, data, 0, (size_t)buf->cmn.append_pos, data->size, true);
-}
-
 _SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
     SOKOL_ASSERT(img && data);
     SOKOL_ASSERT(!img->cmn.usage.write_transient);
@@ -23815,42 +23645,6 @@ static inline void _sg_commit(void) {
     _sg_vk_commit();
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_commit();
-    #else
-    #error("INVALID BACKEND");
-    #endif
-}
-
-static inline void _sg_update_buffer(_sg_buffer_t* buf, const sg_range* data) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_update_buffer(buf, data);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_update_buffer(buf, data);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_update_buffer(buf, data);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_update_buffer(buf, data);
-    #elif defined(SOKOL_VULKAN)
-    _sg_vk_update_buffer(buf, data);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_update_buffer(buf, data);
-    #else
-    #error("INVALID BACKEND");
-    #endif
-}
-
-static inline void _sg_append_buffer(_sg_buffer_t* buf, const sg_range* data, bool new_frame) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_VULKAN)
-    _sg_vk_append_buffer(buf, data, new_frame);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_append_buffer(buf, data, new_frame);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -25229,7 +25023,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
-                            _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_VBUF_OVERFLOW);
                             if (buf->cmn.usage.write_transient) {
                                 _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                             }
@@ -25257,7 +25050,6 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
-                    _SG_VALIDATE(!buf->cmn.append_overflow, VALIDATE_ABND_IBUF_OVERFLOW);
                     if (buf->cmn.usage.write_transient) {
                         _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                     }
@@ -25520,43 +25312,6 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING);
         _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING);
-        return _sg_validate_end();
-    #endif
-}
-
-_SOKOL_PRIVATE bool _sg_validate_update_buffer(const _sg_buffer_t* buf, const sg_range* data) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(buf);
-        _SOKOL_UNUSED(data);
-        return true;
-    #else
-        if (_sg.desc.disable_validation) {
-            return true;
-        }
-        SOKOL_ASSERT(buf && data && data->ptr);
-        _sg_validate_begin();
-        _SG_VALIDATE(!buf->cmn.usage.immutable, VALIDATE_UPDATEBUF_USAGE);
-        _SG_VALIDATE(buf->cmn.size >= (int)data->size, VALIDATE_UPDATEBUF_SIZE);
-        _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_ONCE);
-        _SG_VALIDATE(buf->cmn.append_frame_index != _sg.frame_index, VALIDATE_UPDATEBUF_APPEND);
-        return _sg_validate_end();
-    #endif
-}
-
-_SOKOL_PRIVATE bool _sg_validate_append_buffer(const _sg_buffer_t* buf, const sg_range* data) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(buf);
-        _SOKOL_UNUSED(data);
-        return true;
-    #else
-        if (_sg.desc.disable_validation) {
-            return true;
-        }
-        SOKOL_ASSERT(buf && data && data->ptr);
-        _sg_validate_begin();
-        _SG_VALIDATE(!buf->cmn.usage.immutable, VALIDATE_APPENDBUF_USAGE);
-        _SG_VALIDATE(buf->cmn.size >= (buf->cmn.append_pos + (int)data->size), VALIDATE_APPENDBUF_SIZE);
-        _SG_VALIDATE(buf->cmn.update_frame_index != _sg.frame_index, VALIDATE_APPENDBUF_UPDATE);
         return _sg_validate_end();
     #endif
 }
@@ -27613,90 +27368,6 @@ SOKOL_API_IMPL void sg_reset_state_cache(void) {
     _SG_TRACE_NOARGS(reset_state_cache);
 }
 
-SOKOL_API_IMPL void sg_update_buffer(sg_buffer buf_id, const sg_range* data) {
-    SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
-    _sg_stats_inc(num_update_buffer);
-    _sg_stats_add(size_update_buffer, (uint32_t)data->size);
-    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    if ((data->size > 0) && buf && (buf->slot.state == SG_RESOURCESTATE_VALID)) {
-        if (_sg_validate_update_buffer(buf, data)) {
-            SOKOL_ASSERT(data->size <= (size_t)buf->cmn.size);
-            // only one update allowed per buffer and frame
-            SOKOL_ASSERT(buf->cmn.update_frame_index != _sg.frame_index);
-            // update and append on same buffer in same frame not allowed
-            SOKOL_ASSERT(buf->cmn.append_frame_index != _sg.frame_index);
-            _sg_update_buffer(buf, data);
-            buf->cmn.update_frame_index = _sg.frame_index;
-        }
-    }
-    _SG_TRACE_ARGS(update_buffer, buf_id, data);
-}
-
-SOKOL_API_IMPL int sg_append_buffer(sg_buffer buf_id, const sg_range* data) {
-    SOKOL_ASSERT(_sg.valid);
-    SOKOL_ASSERT(data && data->ptr);
-    _sg_stats_inc(num_append_buffer);
-    _sg_stats_add(size_append_buffer, (uint32_t)data->size);
-    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    int result;
-    if (buf) {
-        // rewind append cursor in a new frame
-        if (buf->cmn.append_frame_index != _sg.frame_index) {
-            buf->cmn.append_pos = 0;
-            buf->cmn.append_overflow = false;
-        }
-        if (((size_t)buf->cmn.append_pos + data->size) > (size_t)buf->cmn.size) {
-            buf->cmn.append_overflow = true;
-        }
-        const int start_pos = buf->cmn.append_pos;
-        // NOTE: the multiple-of-4 requirement for the buffer offset is coming
-        // from WebGPU, but we want identical behaviour between backends
-        SOKOL_ASSERT(_sg_multiple(start_pos, 4));
-        if (buf->slot.state == SG_RESOURCESTATE_VALID) {
-            if (_sg_validate_append_buffer(buf, data)) {
-                if (!buf->cmn.append_overflow && (data->size > 0)) {
-                    // update and append on same buffer in same frame not allowed
-                    SOKOL_ASSERT(buf->cmn.update_frame_index != _sg.frame_index);
-                    _sg_append_buffer(buf, data, buf->cmn.append_frame_index != _sg.frame_index);
-                    buf->cmn.append_pos += (int) _sg_roundup_pow2_u64(data->size, 4);
-                    buf->cmn.append_frame_index = _sg.frame_index;
-                }
-            }
-        }
-        result = start_pos;
-    } else {
-        // FIXME: should we return -1 here?
-        result = 0;
-    }
-    _SG_TRACE_ARGS(append_buffer, buf_id, data, result);
-    return result;
-}
-
-SOKOL_API_IMPL bool sg_query_buffer_overflow(sg_buffer buf_id) {
-    SOKOL_ASSERT(_sg.valid);
-    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    bool result = buf ? buf->cmn.append_overflow : false;
-    return result;
-}
-
-SOKOL_API_IMPL bool sg_query_buffer_will_overflow(sg_buffer buf_id, size_t size) {
-    SOKOL_ASSERT(_sg.valid);
-    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    bool result = false;
-    if (buf) {
-        int append_pos = buf->cmn.append_pos;
-        // rewind append cursor in a new frame
-        if (buf->cmn.append_frame_index != _sg.frame_index) {
-            append_pos = 0;
-        }
-        if ((append_pos + _sg_roundup_pow2((int)size, 4)) > buf->cmn.size) {
-            result = true;
-        }
-    }
-    return result;
-}
-
 SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_update_image);
@@ -27833,6 +27504,7 @@ SOKOL_API_IMPL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
     _sg_stats_inc(num_copy_buffer_to_buffer);
+    _sg_stats_add(size_copy_buffer_to_buffer, (uint32_t)desc->size);
     _sg_buffer_t* src_buf = _sg_lookup_buffer(desc->src.buffer.id);
     _sg_buffer_t* dst_buf = _sg_lookup_buffer(desc->dst.buffer.id);
     if (src_buf && dst_buf) {
@@ -27891,10 +27563,6 @@ SOKOL_API_IMPL sg_buffer_info sg_query_buffer_info(sg_buffer buf_id) {
         info.slot.state = buf->slot.state;
         info.slot.res_id = buf->slot.id;
         info.slot.uninit_count = buf->slot.uninit_count;
-        info.update_frame_index = buf->cmn.update_frame_index;
-        info.append_frame_index = buf->cmn.append_frame_index;
-        info.append_pos = buf->cmn.append_pos;
-        info.append_overflow = buf->cmn.append_overflow;
         #if defined(SOKOL_D3D11)
         info.num_slots = 1;
         info.active_slot = 0;
