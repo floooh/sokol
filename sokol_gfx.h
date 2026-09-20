@@ -5233,6 +5233,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS, "sg_copy_buffer_to_buffer: must not be called inside a pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_VALID, "sg_copy_buffer_to_buffer: source buffer resource state must be SG_RESOURCESTATE_VALID") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_VALID, "sg_copy_buffer_to_buffer: destination buffer resource state must be SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC, "sg_copy_buffer_to_buffer: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_DST, "sg_copy_buffer_to_buffer: destination buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE, "sg_copy_buffer_to_buffer: desc.size must be > 0") \
@@ -25511,6 +25513,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         SOKOL_ASSERT(src_buf && dst_buf && desc);
         _sg_validate_begin();
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS);
+        _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOBUFFER_SRC_VALID);
+        _SG_VALIDATE(dst_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOBUFFER_DST_VALID);
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
         _SG_VALIDATE(dst_buf->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOBUFFER_COPY_DST);
         _SG_VALIDATE(desc->size > 0, VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE);
