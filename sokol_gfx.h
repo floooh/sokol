@@ -7246,6 +7246,7 @@ typedef struct {
     id<MTLCommandBuffer> cmd_buffer;
     id<MTLRenderCommandEncoder> render_cmd_encoder;
     id<MTLComputeCommandEncoder> compute_cmd_encoder;
+    id<MTLBlitCommandEncoder> blit_cmd_encoder;
     id<CAMetalDrawable> cur_drawable;
     id<MTLBuffer> uniform_buffers[SG_NUM_INFLIGHT_FRAMES];
 } _sg_mtl_backend_t;
@@ -16149,10 +16150,11 @@ _SOKOL_PRIVATE void _sg_mtl_discard_backend(void) {
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
         _SG_OBJC_RELEASE(_sg.mtl.uniform_buffers[i]);
     }
-    // NOTE: MTLCommandBuffer, MTLRenderCommandEncoder and MTLComputeCommandEncoder are auto-released
+    // NOTE: MTLCommandBuffer and command encoders are auto-released
     _sg.mtl.cmd_buffer = nil;
     _sg.mtl.render_cmd_encoder = nil;
     _sg.mtl.compute_cmd_encoder = nil;
+    _sg.mtl.blit_cmd_encoder = nil;
 }
 
 _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
@@ -17077,7 +17079,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_mtl_acquire_command_buffer(void) {
+_SOKOL_PRIVATE void _sg_mtl_acquire_cmd_buffer(void) {
     if (nil == _sg.mtl.cmd_buffer) {
         // block until the oldest frame in flight has finished
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
@@ -17095,6 +17097,22 @@ _SOKOL_PRIVATE void _sg_mtl_acquire_command_buffer(void) {
     }
 }
 
+_SOKOL_PRIVATE void _sg_mtl_acquire_blit_cmd_encoder(void) {
+    SOKOL_ASSERT(nil != _sg.mtl.cmd_buffer);
+    if (nil == _sg.mtl.blit_cmd_encoder) {
+        _sg.mtl.blit_cmd_encoder = [_sg.mtl.cmd_buffer blitCommandEncoder];
+    }
+    SOKOL_ASSERT(nil != _sg.mtl.blit_cmd_encoder);
+}
+
+_SOKOL_PRIVATE void _sg_mtl_finish_blit_cmd_encoder(void) {
+    // NOTE: command encoders are auto-releasing
+    if (nil != _sg.mtl.blit_cmd_encoder) {
+        [_sg.mtl.blit_cmd_encoder endEncoding];
+        _sg.mtl.blit_cmd_encoder = nil;
+    }
+}
+
 _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     SOKOL_ASSERT(_sg.mtl.cmd_queue);
@@ -17102,8 +17120,9 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(const sg_pass* pass, const _sg_attachment
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.cur_drawable);
 
+    _sg_mtl_finish_blit_cmd_encoder();
     _sg_mtl_clear_state_cache();
-    _sg_mtl_acquire_command_buffer();
+    _sg_mtl_acquire_cmd_buffer();
     SOKOL_ASSERT(_sg.mtl.cmd_buffer);
 
     // if this is first pass in frame, get uniform buffer base pointer
@@ -17145,6 +17164,8 @@ _SOKOL_PRIVATE void _sg_mtl_end_pass(const _sg_attachments_ptrs_t* atts) {
 _SOKOL_PRIVATE void _sg_mtl_commit(void) {
     SOKOL_ASSERT(nil == _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(nil == _sg.mtl.compute_cmd_encoder);
+
+    _sg_mtl_finish_blit_cmd_encoder();
 
     // commit the frame's command buffer
     if (_sg.mtl.cmd_buffer) {
@@ -17685,20 +17706,18 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buf
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
 
-    _sg_mtl_acquire_command_buffer();
+    _sg_mtl_acquire_cmd_buffer();
     SOKOL_ASSERT(_sg.mtl.cmd_buffer);
+    _sg_mtl_acquire_blit_cmd_encoder();
+    SOKOL_ASSERT(_sg.mtl.blit_cmd_encoder);
 
     __unsafe_unretained id<MTLBuffer> mtl_src_buf = _sg_mtl_id(src_buf->mtl.buf[src_buf->cmn.active_slot]);
     __unsafe_unretained id<MTLBuffer> mtl_dst_buf = _sg_mtl_id(dst_buf->mtl.buf[dst_buf->cmn.active_slot]);
-    // need to create adhoc MTLBlitCommandEncoder since we don't want 'blit passes' in sokol_gfx.h
-    id<MTLBlitCommandEncoder> blit_cmd_encoder = [_sg.mtl.cmd_buffer blitCommandEncoder];
-    [blit_cmd_encoder copyFromBuffer:mtl_src_buf
+    [_sg.mtl.blit_cmd_encoder copyFromBuffer:mtl_src_buf
         sourceOffset:desc->src.offset
         toBuffer:mtl_dst_buf
         destinationOffset:desc->dst.offset
         size:desc->size];
-    [blit_cmd_encoder endEncoding];
-    // NOTE: CommandEncoders are autoreleased
 }
 
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
