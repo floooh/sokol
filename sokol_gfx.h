@@ -5259,6 +5259,23 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT, "sg_copy_buffer_to_buffer: desc.dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS, "sg_copy_buffer_to_image: must not be called inside a pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID, "sg_copy_buffer_to_image: source buffer resource state must be SG_RESOURCESTATE_VALID") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_VALID, "sg_copy_buffer_to_image: destination image resource state must be SG_RESOURCESTATE_VALID") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC, "sg_copy_buffer_to_image: source buffer must have .copy_src usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_src usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: (desc.src.offset + copy size) is greater than desc.src.buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be >= 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be >= 0 and <= destination image heigth") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES, "sg_copy_buffer_to_image: desc.size.num_slices must be >= 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE, "sg_copy_buffer_to_image: desc.dst.x must be >= 0 and < miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE, "sg_copy_buffer_to_image: desc.dst.y must be >= 0 and < miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE, "sg_copy_buffer_to_image: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.src.x + desc.size.width must be <= destination mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.src.y + desc.size.height must be <= destination mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_buffer_to_image: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -25591,7 +25608,27 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         }
         SOKOL_ASSERT(src_buf && dst_img && desc);
         _sg_validate_begin();
-        // FIXME!!!
+        const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
+        const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
+        const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
+        const int copy_size = _sg_surface_pitch(dst_img->cmn.pixel_format, mip_width, mip_height, 0) * mip_depth_or_slices;
+        _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS);
+        _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID);
+        _SG_VALIDATE(dst_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_DST_VALID);
+        _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
+        _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
+        _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
+        _SG_VALIDATE((desc->src.offset + copy_size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+        _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL);
+        _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
+        _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
+        _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES);
+        _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE);
+        _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE);
+        _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE);
+        _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW);
+        _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW);
+        _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW);
         return _sg_validate_end();
     #endif
 }
@@ -26365,6 +26402,17 @@ _SOKOL_PRIVATE sg_write_image_desc _sg_write_image_desc_defaults(const _sg_image
     const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
     res.src.bytes_per_row = _sg_def(res.src.bytes_per_row, _sg_row_pitch(fmt, mip_width, 1));
     res.src.bytes_per_slice = _sg_def(res.src.bytes_per_slice, _sg_surface_pitch(fmt, mip_width, mip_height, 1));
+    res.size.width = _sg_def(res.size.width, mip_width - desc->dst.x);
+    res.size.height = _sg_def(res.size.height, mip_height - desc->dst.y);
+    res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->dst.slice);
+    return res;
+}
+
+_SOKOL_PRIVATE sg_copy_buffer_to_image_desc _sg_copy_buffer_to_image_desc_defaults(const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+    sg_copy_buffer_to_image_desc res = *desc;
+    const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
+    const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
+    const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
     res.size.width = _sg_def(res.size.width, mip_width - desc->dst.x);
     res.size.height = _sg_def(res.size.height, mip_height - desc->dst.y);
     res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->dst.slice);
@@ -27631,10 +27679,10 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
         _SG_ERROR(COPY_BUFFER_TO_IMAGE_DST_ALIVE);
         return;
     }
-    if (_sg_validate_copy_buffer_to_image(src_buf, dst_img, desc)) {
-        // FIXME: desc defaults?
+    sg_copy_buffer_to_image_desc desc_def = _sg_copy_buffer_to_image_desc_defaults(dst_img, desc);
+    if (_sg_validate_copy_buffer_to_image(src_buf, dst_img, &desc_def)) {
         src_buf->cmn.copy_src_frame_index = _sg.frame_index;
-        _sg_copy_buffer_to_image(src_buf, dst_img, desc);
+        _sg_copy_buffer_to_image(src_buf, dst_img, &desc_def);
     }
     _SG_TRACE_ARGS(copy_buffer_to_image, desc);
 }
