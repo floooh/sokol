@@ -27533,7 +27533,6 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
     _sg_stats_inc(num_copy_buffer_to_buffer);
-    // FIXME: size_copy_buffer_to_image stats
     _sg_buffer_t* src_buf = _sg_lookup_buffer(desc->src.buffer.id);
     _sg_image_t* dst_img = _sg_lookup_image(desc->dst.image.id);
     if (!src_buf) {
@@ -27545,6 +27544,7 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
         return;
     }
     sg_copy_buffer_to_image_desc desc_def = _sg_copy_buffer_to_image_desc_defaults(dst_img, desc);
+    _sg_stats_add(size_copy_buffer_to_image, (uint32_t)(desc_def.src.bytes_per_slice * desc_def.size.num_slices));
     if (_sg_validate_copy_buffer_to_image(src_buf, dst_img, &desc_def)) {
         src_buf->cmn.copy_src_frame_index = _sg.frame_index;
         _sg_copy_buffer_to_image(src_buf, dst_img, &desc_def);
