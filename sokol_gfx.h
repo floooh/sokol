@@ -5255,6 +5255,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC, "sg_copy_buffer_to_buffer: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_DST, "sg_copy_buffer_to_buffer: destination buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE, "sg_copy_buffer_to_buffer: desc.size must be > 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_buffer: desc.src.offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT, "sg_copy_buffer_to_buffer: desc.dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
@@ -25571,6 +25573,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
         _SG_VALIDATE(dst_buf->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOBUFFER_COPY_DST);
         _SG_VALIDATE(desc->size > 0, VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE);
+        _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOBUFFER_SRC_OFFSET_ALIGNMENT);
+        _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT);
         _SG_VALIDATE((desc->src.offset + desc->size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
         _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)dst_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW);
         return _sg_validate_end();
