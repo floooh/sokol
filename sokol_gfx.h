@@ -3478,7 +3478,6 @@ typedef struct sg_image_usage {
     bool depth_stencil_attachment;
     bool write_unsealed;
     bool write_transient;
-    bool dynamic_update;
     bool copy_src;
     bool copy_dst;
     // FIXME: deprecated
@@ -3646,6 +3645,20 @@ typedef struct sg_buffer_location {
 } sg_buffer_location;
 
 /*
+    sg_buffer_image_location
+
+    A buffer location for image data with row- and surface-pitch.
+
+    NOTE: .offset must be 4-byte aligned (ensured by the validation layer)
+*/
+typedef struct sg_buffer_image_location {
+    sg_buffer buffer;
+    size_t offset;
+    int bytes_per_row;
+    int bytes_per_slice;
+} sg_buffer_image_location;
+
+/*
     sg_write_buffer_source
 
     Describes the CPU-side source data to be written into a buffer.
@@ -3699,7 +3712,7 @@ typedef struct sg_copy_buffer_to_buffer_desc {
     FIXME
 */
 typedef struct sg_copy_buffer_to_image_desc {
-    sg_buffer_location src;
+    sg_buffer_image_location src;
     sg_image_location dst;
     sg_image_extent size;
 } sg_copy_buffer_to_image_desc;
@@ -4454,8 +4467,6 @@ typedef struct sg_image_info {
     sg_slot_info slot;              // resource pool slot info
     int num_slots;                  // number of renaming-slots for dynamically updated images
     int active_slot;                // currently active write-slot for dynamically updated images
-    // deprecated
-    uint32_t upd_frame_index;       // frame index of last sg_update_image()
 } sg_image_info;
 
 typedef struct sg_sampler_info {
@@ -4679,7 +4690,6 @@ typedef struct sg_frame_stats {
     uint32_t num_draw;
     uint32_t num_draw_ex;
     uint32_t num_dispatch;
-    uint32_t num_update_image;
     uint32_t num_write_buffer_transient;
     uint32_t num_write_image_transient;
     uint32_t num_write_buffer_unsealed;
@@ -4690,7 +4700,6 @@ typedef struct sg_frame_stats {
     uint32_t num_copy_buffer_to_image;
 
     uint32_t size_apply_uniforms;
-    uint32_t size_update_image;
     uint32_t size_copy_buffer_to_buffer;
     uint32_t size_copy_buffer_to_image;
 
@@ -4771,7 +4780,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(D3D11_CREATE_RTV_FAILED, "CreateRenderTargetView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_DSV_FAILED, "CreateDepthStencilView() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_UAV_FAILED, "CreateUnorderedAccessView() failed (d3d11)") \
-    _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED, "Map() failed when updating image (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED, "Map() failed during sg_write_buffer_transient(d3d11)") \
     _SG_LOGITEM_XMACRO(METAL_CREATE_BUFFER_FAILED, "failed to create buffer object (metal)") \
     _SG_LOGITEM_XMACRO(METAL_TEXTURE_FORMAT_NOT_SUPPORTED, "pixel format not supported for texture (metal)") \
@@ -4920,11 +4928,11 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_NODATA, "sg_image_data: no data (.ptr and/or .size is zero)") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE, "sg_image_desc.usage: only one of .immutable, .dynamic_update, .write_transient can be true") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE, "sg_image_desc.usage: only one of .immutable, .write_transient, .copy_dst can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT, "sg_image_desc.usage: .write_transient not allowed for images with attachment usage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT, "sg_image_desc.usage: .dynamic_update not allowed for images with attachment usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT, "sg_image_desc.usage: .copy_dst not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_CUBE_NUMSLICES, "sg_image_desc.num_slices must be exactly 6 for SG_IMAGETYPE_CUBE") \
@@ -5215,8 +5223,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_USAGE, "sg_update_image: cannot update immutable image") \
-    _SG_LOGITEM_XMACRO(VALIDATE_UPDIMG_ONCE, "sg_update_image: only one update allowed per image and frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .immutable && .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE, "sg_write_buffer_unsealed: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be !.immutable && .write_transient") \
@@ -5266,6 +5272,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: (desc.src.offset + copy size) is greater than desc.src.buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be >= 0 and <= destination image width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be >= 0 and <= destination image heigth") \
@@ -5577,9 +5585,6 @@ SOKOL_GFX_API_DECL void sg_seal_buffer(sg_buffer buf);
 SOKOL_GFX_API_DECL void sg_seal_image(sg_image img);
 SOKOL_GFX_API_DECL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc* desc);
 SOKOL_GFX_API_DECL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* desc);
-
-// update functions (will be deprecated by new resource update functions)
-SOKOL_GFX_API_DECL void sg_update_image(sg_image img, const sg_image_data* data);
 
 // getting information
 SOKOL_GFX_API_DECL sg_desc sg_query_desc(void);
@@ -5895,7 +5900,6 @@ inline void sg_write_buffer_unsealed(const sg_write_buffer_desc& desc) { return 
 inline void sg_write_image_unsealed(const sg_write_image_desc& desc) { return sg_write_image_unsealed(&desc); }
 inline void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc& desc) { return sg_copy_buffer_to_buffer(&desc); }
 inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { return sg_copy_buffer_to_image(&desc); }
-inline void sg_update_image(sg_image img, const sg_image_data& data) { return sg_update_image(img, &data); }
 #endif
 #endif // SOKOL_GFX_INCLUDED
 
@@ -9534,14 +9538,6 @@ _SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int n
     _SOKOL_UNUSED(num_groups_z);
 }
 
-_SOKOL_PRIVATE void _sg_dummy_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    _SOKOL_UNUSED(data);
-    if (++img->cmn.active_slot >= img->cmn.num_slots) {
-        img->cmn.active_slot = 0;
-    }
-}
-
 _SOKOL_PRIVATE void _sg_dummy_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
     SOKOL_ASSERT(buf && desc);
     _SOKOL_UNUSED(buf);
@@ -12828,38 +12824,6 @@ _SOKOL_PRIVATE void _sg_gl_commit(void) {
     _sg_gl_cache_clear_texture_sampler_bindings(false);
 }
 
-_SOKOL_PRIVATE void _sg_gl_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    // only one update per image per frame allowed
-    if (++img->cmn.active_slot >= img->cmn.num_slots) {
-        img->cmn.active_slot = 0;
-    }
-    SOKOL_ASSERT(img->cmn.active_slot < SG_NUM_INFLIGHT_FRAMES);
-    SOKOL_ASSERT(0 != img->gl.tex[img->cmn.active_slot]);
-    _sg_gl_cache_store_texture_sampler_binding(0);
-    _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[img->cmn.active_slot], 0);
-    const int num_mips = img->cmn.num_mipmaps;
-    for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-        const uint8_t* data_ptr = (const uint8_t*)data->mip_levels[mip_index].ptr;
-        const size_t data_size = (size_t)data->mip_levels[mip_index].size;
-        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-        const int mip_depth_or_num_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
-        _sg_gl_write_miplevel_data(img,
-            data_ptr,
-            data_size,
-            0,  // src_offset
-            _sg_row_pitch(img->cmn.pixel_format, mip_width, 1),
-            _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1),
-            mip_index,
-            0, 0, 0,    // x, y, slice
-            mip_width,
-            mip_height,
-            mip_depth_or_num_slices);
-    }
-    _sg_gl_cache_restore_texture_sampler_binding(0);
-}
-
 _SOKOL_PRIVATE void _sg_gl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
@@ -15209,61 +15173,6 @@ _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
     // empty
 }
 
-// see: https://learn.microsoft.com/en-us/windows/win32/direct3d11/overviews-direct3d-11-resources-subresources
-// also see: https://learn.microsoft.com/en-us/windows/win32/api/d3d11/nf-d3d11-d3d11calcsubresource
-_SOKOL_PRIVATE void _sg_d3d11_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    SOKOL_ASSERT(_sg.d3d11.ctx);
-    SOKOL_ASSERT(img->d3d11.res);
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
-    const int num_depth_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? img->cmn.num_slices : 1;
-    UINT subres_index = 0;
-    HRESULT hr;
-    D3D11_MAPPED_SUBRESOURCE d3d11_msr;
-    for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
-            SOKOL_ASSERT(subres_index < _SG_D3D11_MAX_TEXTURE_SUBRESOURCES);
-            const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-            const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-            const int src_row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
-            const int src_depth_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
-            const sg_range* miplevel_data = &(data->mip_levels[mip_index]);
-            const size_t slice_size = miplevel_data->size / (size_t)num_slices;
-            SOKOL_ASSERT(slice_size == (size_t)(src_depth_pitch * num_depth_slices));
-            const size_t slice_offset = slice_size * (size_t)slice_index;
-            const uint8_t* slice_ptr = ((const uint8_t*)miplevel_data->ptr) + slice_offset;
-            hr = _sg_d3d11_Map(_sg.d3d11.ctx, img->d3d11.res, subres_index, D3D11_MAP_WRITE_DISCARD, 0, &d3d11_msr);
-            _sg_stats_inc(d3d11.num_map);
-            if (SUCCEEDED(hr)) {
-                const uint8_t* src_ptr = slice_ptr;
-                uint8_t* dst_ptr = (uint8_t*)d3d11_msr.pData;
-                for (int depth_index = 0; depth_index < num_depth_slices; depth_index++) {
-                    if (src_row_pitch == (int)d3d11_msr.RowPitch) {
-                        const size_t copy_size = slice_size / (size_t)num_depth_slices;
-                        SOKOL_ASSERT((copy_size * (size_t)num_depth_slices) == slice_size);
-                        memcpy(dst_ptr, src_ptr, copy_size);
-                    } else {
-                        SOKOL_ASSERT(src_row_pitch < (int)d3d11_msr.RowPitch);
-                        const uint8_t* src_row_ptr = src_ptr;
-                        uint8_t* dst_row_ptr = dst_ptr;
-                        for (int row_index = 0; row_index < mip_height; row_index++) {
-                            memcpy(dst_row_ptr, src_row_ptr, (size_t)src_row_pitch);
-                            src_row_ptr += src_row_pitch;
-                            dst_row_ptr += d3d11_msr.RowPitch;
-                        }
-                    }
-                    src_ptr += src_depth_pitch;
-                    dst_ptr += d3d11_msr.DepthPitch;
-                }
-                _sg_d3d11_Unmap(_sg.d3d11.ctx, img->d3d11.res, subres_index);
-                _sg_stats_inc(d3d11.num_unmap);
-            } else {
-                _SG_ERROR(D3D11_MAP_FOR_UPDATE_IMAGE_FAILED);
-            }
-        }
-    }
-}
-
 _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     ID3D11Resource* d3d11_res,
     const uint8_t* src_ptr,
@@ -16394,13 +16303,10 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
     mtl_desc.usage = mtl_tex_usage;
 
     MTLResourceOptions mtl_res_options = 0;
-    if (any_attachment || img->cmn.usage.storage_image) {
+    if (any_attachment || img->cmn.usage.storage_image || img->cmn.usage.copy_dst) {
         mtl_res_options |= MTLResourceStorageModePrivate;
     } else {
         mtl_res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
-        if (!img->cmn.usage.immutable) {
-            mtl_res_options |= MTLResourceCPUCacheModeWriteCombined;
-        }
     }
     mtl_desc.resourceOptions = mtl_res_options;
     return true;
@@ -17652,15 +17558,6 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
     [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_threadgroup];
 }
 
-_SOKOL_PRIVATE void _sg_mtl_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    if (++img->cmn.active_slot >= img->cmn.num_slots) {
-        img->cmn.active_slot = 0;
-    }
-    __unsafe_unretained id<MTLTexture> mtl_tex = _sg_mtl_id(img->mtl.tex[img->cmn.active_slot]);
-    _sg_mtl_copy_image_data(img, mtl_tex, data);
-}
-
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
@@ -17773,7 +17670,41 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_imag
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
 
-    SOKOL_ASSERT(false && "FIXME _sg_mtl_copy_buffer_to_image");
+    _sg_mtl_acquire_cmd_buffer();
+    SOKOL_ASSERT(_sg.mtl.cmd_buffer);
+    _sg_mtl_acquire_blit_cmd_encoder();
+    SOKOL_ASSERT(_sg.mtl.blit_cmd_encoder);
+
+    __unsafe_unretained id<MTLBuffer> mtl_src_buf = _sg_mtl_id(src_buf->mtl.buf[src_buf->cmn.active_slot]);
+    __unsafe_unretained id<MTLTexture> mtl_dst_tex = _sg_mtl_id(dst_img->mtl.tex[dst_img->cmn.active_slot]);
+
+    MTLSize mtl_size;
+    MTLOrigin mtl_origin;
+    int mtl_bytes_per_image;
+    if (dst_img->cmn.type == SG_IMAGETYPE_3D) {
+        mtl_size = MTLSizeMake((NSUInteger)desc->size.width, (NSUInteger)desc->size.height, (NSUInteger)desc->size.num_slices);
+        mtl_origin = MTLOriginMake((NSUInteger)desc->dst.x, (NSUInteger)desc->dst.y, (NSUInteger)desc->dst.slice);
+        mtl_bytes_per_image = desc->src.bytes_per_slice;
+    } else {
+        mtl_size = MTLSizeMake((NSUInteger)desc->size.width, (NSUInteger)desc->size.height, 1);
+        mtl_origin = MTLOriginMake((NSUInteger)desc->dst.x, (NSUInteger)desc->dst.y, 0);
+        mtl_bytes_per_image = 0;
+    }
+    const int mtl_slice_index = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 0 : desc->dst.slice;
+    const int mtl_num_slices = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 1 : desc->size.num_slices;
+    for (int i = 0; i < mtl_num_slices; i++) {
+        const size_t offset = desc->src.offset + (size_t)(i * desc->src.bytes_per_slice);
+        SOKOL_ASSERT((desc->src.offset + (size_t)desc->src.bytes_per_slice) <= (size_t)src_buf->cmn.size);
+        [_sg.mtl.blit_cmd_encoder copyFromBuffer:mtl_src_buf
+            sourceOffset:offset
+            sourceBytesPerRow:(NSUInteger)desc->src.bytes_per_row
+            sourceBytesPerImage:mtl_bytes_per_image
+            sourceSize:mtl_size
+            toTexture:mtl_dst_tex
+            destinationSlice:(NSUInteger)(mtl_slice_index + i)
+            destinationLevel:(NSUInteger)desc->dst.mip_level
+            destinationOrigin:mtl_origin];
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
@@ -19907,11 +19838,6 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
         (uint32_t)num_groups_x,
         (uint32_t)num_groups_y,
         (uint32_t)num_groups_z);
-}
-
-_SOKOL_PRIVATE void _sg_wgpu_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    _sg_wgpu_copy_image_data(img, data);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -23195,12 +23121,6 @@ _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_
     vkCmdDispatch(cmd_buf, (uint32_t)num_groups_x, (uint32_t)num_groups_y, (uint32_t)num_groups_z);
 }
 
-_SOKOL_PRIVATE void _sg_vk_update_image(_sg_image_t* img, const sg_image_data* data) {
-    SOKOL_ASSERT(img && data);
-    SOKOL_ASSERT(!img->cmn.usage.write_transient);
-    _sg_vk_staging_copy_image_data(img, data, true);
-}
-
 _SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
@@ -23725,24 +23645,6 @@ static inline void _sg_commit(void) {
     #endif
 }
 
-static inline void _sg_update_image(_sg_image_t* img, const sg_image_data* data) {
-    #if defined(_SOKOL_ANY_GL)
-    _sg_gl_update_image(img, data);
-    #elif defined(SOKOL_METAL)
-    _sg_mtl_update_image(img, data);
-    #elif defined(SOKOL_D3D11)
-    _sg_d3d11_update_image(img, data);
-    #elif defined(SOKOL_WGPU)
-    _sg_wgpu_update_image(img, data);
-    #elif defined(SOKOL_VULKAN)
-    _sg_vk_update_image(img, data);
-    #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_update_image(img, data);
-    #else
-    #error("INVALID BACKEND");
-    #endif
-}
-
 static inline void _sg_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
     #if defined(_SOKOL_ANY_GL)
     _sg_gl_write_buffer_transient(buf, desc, first_time_in_frame);
@@ -24010,7 +23912,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
-        _SG_VALIDATE(_sg_one(usg->immutable, usg->dynamic_update, usg->write_transient), VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE);
+        _SG_VALIDATE(_sg_one(usg->immutable, usg->write_transient, usg->copy_dst), VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE);
         _SG_VALIDATE(!(usg->color_attachment && usg->depth_stencil_attachment), VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL);
         switch (desc->type) {
             case SG_IMAGETYPE_2D:
@@ -24069,8 +23971,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (usg->write_transient) {
             _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT);
         }
-        if (usg->dynamic_update) {
-            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT);
+        if (usg->copy_dst) {
+            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT);
         }
         if (!any_attachment && !usg->storage_image) {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT);
@@ -25409,29 +25311,6 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_update_image(const _sg_image_t* img, const sg_image_data* data) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(img);
-        _SOKOL_UNUSED(data);
-        return true;
-    #else
-        if (_sg.desc.disable_validation) {
-            return true;
-        }
-        SOKOL_ASSERT(img && data);
-        _sg_validate_begin();
-        _SG_VALIDATE(!img->cmn.usage.immutable, VALIDATE_UPDIMG_USAGE);
-        _SG_VALIDATE(img->cmn.upd_frame_index != _sg.frame_index, VALIDATE_UPDIMG_ONCE);
-        _sg_validate_image_data(data,
-            img->cmn.pixel_format,
-            img->cmn.width,
-            img->cmn.height,
-            img->cmn.num_mipmaps,
-            img->cmn.num_slices);
-        return _sg_validate_end();
-    #endif
-}
-
 #if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sg_validate_write_buffer_common(const _sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
     _SG_VALIDATE(desc->src.data.ptr, VALIDATE_WRITEBUFFER_SRC_DATA_POINTER);
@@ -25611,7 +25490,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
-        const int copy_size = _sg_surface_pitch(dst_img->cmn.pixel_format, mip_width, mip_height, 0) * mip_depth_or_slices;
+        const int copy_size = _sg_surface_pitch(dst_img->cmn.pixel_format, mip_width, mip_height, 1) * mip_depth_or_slices;
+        const int bsize = _sg_block_bytesize(dst_img->cmn.pixel_format);
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS);
         _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID);
         _SG_VALIDATE(dst_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_DST_VALID);
@@ -25619,6 +25499,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
         _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
         _SG_VALIDATE((desc->src.offset + copy_size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
+        _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL);
         _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
         _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
@@ -25789,7 +25671,7 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
 
 _SOKOL_PRIVATE sg_image_usage _sg_image_usage_defaults(const sg_image_usage *usg) {
     sg_image_usage def = *usg;
-    if (!(def.immutable || def.write_transient || def.dynamic_update)) {
+    if (!(def.immutable || def.write_transient || def.copy_dst)) {
         def.immutable = true;
     }
     return def;
@@ -26410,9 +26292,12 @@ _SOKOL_PRIVATE sg_write_image_desc _sg_write_image_desc_defaults(const _sg_image
 
 _SOKOL_PRIVATE sg_copy_buffer_to_image_desc _sg_copy_buffer_to_image_desc_defaults(const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     sg_copy_buffer_to_image_desc res = *desc;
+    const sg_pixel_format fmt = dst_img->cmn.pixel_format;
     const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
     const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
     const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
+    res.src.bytes_per_row = _sg_def(res.src.bytes_per_row, _sg_row_pitch(fmt, mip_width, 1));
+    res.src.bytes_per_slice = _sg_def(res.src.bytes_per_slice, _sg_surface_pitch(fmt, mip_width, mip_height, 1));
     res.size.width = _sg_def(res.size.width, mip_width - desc->dst.x);
     res.size.height = _sg_def(res.size.height, mip_height - desc->dst.y);
     res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->dst.slice);
@@ -27510,26 +27395,6 @@ SOKOL_API_IMPL void sg_reset_state_cache(void) {
     _SG_TRACE_NOARGS(reset_state_cache);
 }
 
-SOKOL_API_IMPL void sg_update_image(sg_image img_id, const sg_image_data* data) {
-    SOKOL_ASSERT(_sg.valid);
-    _sg_stats_inc(num_update_image);
-    for (int mip_index = 0; mip_index < SG_MAX_MIPMAPS; mip_index++) {
-        if (data->mip_levels[mip_index].size == 0) {
-            break;
-        }
-        _sg_stats_add(size_update_image, (uint32_t)data->mip_levels[mip_index].size);
-    }
-    _sg_image_t* img = _sg_lookup_image(img_id.id);
-    if (img && img->slot.state == SG_RESOURCESTATE_VALID) {
-        if (_sg_validate_update_image(img, data)) {
-            SOKOL_ASSERT(img->cmn.upd_frame_index != _sg.frame_index);
-            _sg_update_image(img, data);
-            img->cmn.upd_frame_index = _sg.frame_index;
-        }
-    }
-    _SG_TRACE_ARGS(update_image, img_id, data);
-}
-
 SOKOL_API_IMPL void sg_write_buffer_transient(const sg_write_buffer_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
@@ -27751,7 +27616,6 @@ SOKOL_API_IMPL sg_image_info sg_query_image_info(sg_image img_id) {
         info.slot.state = img->slot.state;
         info.slot.res_id = img->slot.id;
         info.slot.uninit_count = img->slot.uninit_count;
-        info.upd_frame_index = img->cmn.upd_frame_index;
         #if defined(SOKOL_D3D11)
         info.num_slots = 1;
         info.active_slot = 0;
