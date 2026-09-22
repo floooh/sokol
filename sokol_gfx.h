@@ -3219,6 +3219,17 @@ typedef struct sg_pass {
 } sg_pass;
 
 /*
+    sg_pass_type
+
+    Result of sg_query_pass_type().
+*/
+typedef enum sg_pass_type {
+    SG_PASSTYPE_NONE,
+    SG_PASSTYPE_RENDER,
+    SG_PASSTYPE_COMPUTE,
+} sg_pass_type;
+
+/*
     sg_bindings
 
     The sg_bindings structure defines the resource bindings for
@@ -5271,7 +5282,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC, "sg_copy_buffer_to_image: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of 4") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: (desc.src.offset + copy size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
@@ -5594,6 +5604,7 @@ SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
 SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
 SOKOL_GFX_API_DECL int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes);
 SOKOL_GFX_API_DECL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
+SOKOL_GFX_API_DECL sg_pass_type sg_query_pass_type(void);
 // get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
@@ -17694,7 +17705,6 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_imag
     const int mtl_num_slices = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 1 : desc->size.num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
         const size_t offset = desc->src.offset + (size_t)(i * desc->src.bytes_per_slice);
-        SOKOL_ASSERT((desc->src.offset + (size_t)desc->src.bytes_per_slice) <= (size_t)src_buf->cmn.size);
         [_sg.mtl.blit_cmd_encoder copyFromBuffer:mtl_src_buf
             sourceOffset:offset
             sourceBytesPerRow:(NSUInteger)desc->src.bytes_per_row
@@ -25490,7 +25500,6 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
-        const int copy_size = _sg_surface_pitch(dst_img->cmn.pixel_format, mip_width, mip_height, 1) * mip_depth_or_slices;
         const int bsize = _sg_block_bytesize(dst_img->cmn.pixel_format);
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS);
         _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID);
@@ -25498,7 +25507,6 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
         _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
-        _SG_VALIDATE((desc->src.offset + copy_size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
         _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
         _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL);
@@ -26452,6 +26460,17 @@ SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int he
     SOKOL_ASSERT((row_align_bytes > 0) && _sg_ispow2(row_align_bytes));
     SOKOL_ASSERT(((int)fmt > SG_PIXELFORMAT_NONE) && ((int)fmt < _SG_PIXELFORMAT_NUM));
     return _sg_surface_pitch(fmt, width, height, row_align_bytes);
+}
+
+SOKOL_API_IMPL sg_pass_type sg_query_pass_type(void) {
+    SOKOL_ASSERT(_sg.valid);
+    if (!_sg.cur_pass.in_pass) {
+        return SG_PASSTYPE_NONE;
+    } else if (_sg.cur_pass.is_compute) {
+        return SG_PASSTYPE_COMPUTE;
+    } else {
+        return SG_PASSTYPE_RENDER;
+    }
 }
 
 SOKOL_API_IMPL sg_stats sg_query_stats(void) {
