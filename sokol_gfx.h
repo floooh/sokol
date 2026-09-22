@@ -3219,15 +3219,15 @@ typedef struct sg_pass {
 } sg_pass;
 
 /*
-    sg_pass_type
+    sg_pass_state
 
-    Result of sg_query_pass_type().
+    Result of sg_query_pass_state().
 */
-typedef enum sg_pass_type {
-    SG_PASSTYPE_NONE,
-    SG_PASSTYPE_RENDER,
-    SG_PASSTYPE_COMPUTE,
-} sg_pass_type;
+typedef enum sg_pass_state {
+    SG_PASSSTATE_NONE,
+    SG_PASSSTATE_RENDER,
+    SG_PASSSTATE_COMPUTE,
+} sg_pass_state;
 
 /*
     sg_bindings
@@ -5604,7 +5604,7 @@ SOKOL_GFX_API_DECL sg_limits sg_query_limits(void);
 SOKOL_GFX_API_DECL sg_pixelformat_info sg_query_pixelformat(sg_pixel_format fmt);
 SOKOL_GFX_API_DECL int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes);
 SOKOL_GFX_API_DECL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
-SOKOL_GFX_API_DECL sg_pass_type sg_query_pass_type(void);
+SOKOL_GFX_API_DECL sg_pass_state sg_query_pass_state(void);
 // get current state of a resource (INITIAL, ALLOC, VALID, FAILED, INVALID)
 SOKOL_GFX_API_DECL sg_resource_state sg_query_buffer_state(sg_buffer buf);
 SOKOL_GFX_API_DECL sg_resource_state sg_query_image_state(sg_image img);
@@ -26462,14 +26462,14 @@ SOKOL_API_IMPL int sg_query_surface_pitch(sg_pixel_format fmt, int width, int he
     return _sg_surface_pitch(fmt, width, height, row_align_bytes);
 }
 
-SOKOL_API_IMPL sg_pass_type sg_query_pass_type(void) {
+SOKOL_API_IMPL sg_pass_state sg_query_pass_state(void) {
     SOKOL_ASSERT(_sg.valid);
     if (!_sg.cur_pass.in_pass) {
-        return SG_PASSTYPE_NONE;
+        return SG_PASSSTATE_NONE;
     } else if (_sg.cur_pass.is_compute) {
-        return SG_PASSTYPE_COMPUTE;
+        return SG_PASSSTATE_COMPUTE;
     } else {
-        return SG_PASSTYPE_RENDER;
+        return SG_PASSSTATE_RENDER;
     }
 }
 

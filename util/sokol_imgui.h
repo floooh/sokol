@@ -2745,7 +2745,7 @@ SOKOL_API_IMPL void simgui_end_frame(void) {
     _simgui.begin_frame_called = false;
     _simgui.end_frame_called = true;
     _simgui.cmd_list_count = 0;
-    if (sg_query_pass_type() != SG_PASSTYPE_NONE) {
+    if (sg_query_pass_state() != SG_PASSSTATE_NONE) {
         _SIMGUI_ERROR(END_FRAME_CALLED_IN_SOKOLGFX_PASS);
         return;
     }
@@ -2829,7 +2829,7 @@ SOKOL_API_IMPL void simgui_draw_frame(void) {
         _SIMGUI_ERROR(END_FRAME_NOT_CALLED_BEFORE_DRAW_FRAME);
         return;
     }
-    if (sg_query_pass_type() != SG_PASSTYPE_RENDER) {
+    if (sg_query_pass_state() != SG_PASSSTATE_RENDER) {
         _SIMGUI_ERROR(DRAW_FRAME_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS);
         return;
     }
