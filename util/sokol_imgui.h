@@ -171,7 +171,7 @@
 
     --- At the start of a frame, call:
 
-        simgui_new_frame(&(simgui_frame_desc_t){
+        simgui_begin_frame(&(simgui_frame_desc_t){
             .width = ...,
             .height = ...,
             .delta_time = ...,
@@ -188,20 +188,25 @@
 
         For example, if you're using sokol_app.h and render to the default framebuffer:
 
-        simgui_new_frame(&(simgui_frame_desc_t){
+        simgui_begin_frame(&(simgui_frame_desc_t){
             .width = sapp_width(),
             .height = sapp_height(),
             .delta_time = sapp_frame_duration(),
             .dpi_scale = sapp_dpi_scale()
         });
 
-    --- at the end of the frame, before the sg_end_pass() where you
-        want to render the UI, call:
+    --- after issuing Dear ImGui UI calls and outside a sokol-gfx pass, call:
 
-        simgui_render()
+        simgui_end_frame();
 
-        This will first call ImGui::Render(), and then render ImGui's draw list
-        through sokol_gfx.h
+        this may create and update font textures and 'renders'
+        the Dear ImGui UI into command lists.
+
+    --- ...and finally inside a sokol-gfx render pass, call:
+
+        simgui_draw_frame();
+
+        To actually render the UI.
 
     --- if you're using sokol_app.h, from inside the sokol_app.h event callback,
         call:
@@ -421,7 +426,11 @@ extern "C" {
 */
 #define _SIMGUI_LOG_ITEMS \
     _SIMGUI_LOGITEM_XMACRO(OK, "Ok") \
-    _SIMGUI_LOGITEM_XMACRO(BUFFER_OVERFLOW, "internal vertex/index buffer overflow (increase simgui_desc_t.max_vertices)")
+    _SIMGUI_LOGITEM_XMACRO(BUFFER_OVERFLOW, "internal vertex/index buffer overflow (increase simgui_desc_t.max_vertices)") \
+    _SIMGUI_LOGITEM_XMACRO(BEGIN_FRAME_NOT_CALLED_BEFORE_END_FRAME, "simgui_begin_frame() must be called before simgui_end_frame()") \
+    _SIMGUI_LOGITEM_XMACRO(END_FRAME_CALLED_IN_SOKOLGFX_PASS, "simgui_end_frame() must be called outside a sokol-gfx pass") \
+    _SIMGUI_LOGITEM_XMACRO(END_FRAME_NOT_CALLED_BEFORE_DRAW_FRAME, "simgui_end_frame() must have been called before simgui_draw_frame()") \
+    _SIMGUI_LOGITEM_XMACRO(DRAW_FRAME_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS, "simgui_draw_frame() must be called inside a sokol-gfx render pass")
 
 #define _SIMGUI_LOGITEM_XMACRO(item,msg) SIMGUI_LOGITEM_##item,
 typedef enum simgui_log_item_t {
@@ -478,8 +487,9 @@ typedef struct simgui_font_tex_desc_t {
 } simgui_font_tex_desc_t;
 
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
-SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
-SOKOL_IMGUI_API_DECL void simgui_render(void);
+SOKOL_IMGUI_API_DECL void simgui_begin_frame(const simgui_frame_desc_t* desc);
+SOKOL_IMGUI_API_DECL void simgui_end_frame(void);
+SOKOL_IMGUI_API_DECL void simgui_draw_frame(void);
 
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(sg_view tex_view);
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid_with_sampler(sg_view tex_view, sg_sampler smp);
@@ -507,7 +517,7 @@ SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 // reference-based equivalents for C++
 inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
-inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_new_frame(&desc); }
+inline void simgui_begin_frame(const simgui_frame_desc_t& desc) { return simgui_begin_frame(&desc); }
 
 #endif
 #endif /* SOKOL_IMGUI_INCLUDED */
@@ -588,10 +598,16 @@ typedef struct {
     sg_sampler def_smp;     // used as default sampler for user images
     sg_shader def_shd;
     sg_pipeline def_pip;
+    sg_buffer staging_buf;      // staging buffer for font updates
+    int staging_buf_size;
     // separate shader and pipeline for unfilterable user images
     sg_shader shd_unfilterable;
     sg_pipeline pip_unfilterable;
     bool is_osx;
+    bool begin_frame_called;
+    bool end_frame_called;
+    bool draw_frame_called;
+    int cmd_list_count;
 } _simgui_state_t;
 static _simgui_state_t _simgui;
 
@@ -2309,6 +2325,12 @@ static void _simgui_destroy_texture(ImTextureData* tex) {
     _simgui_imtexturedata_setstatus(tex, ImTextureStatus_Destroyed);
 }
 
+/*
+    Use same texture update strategy as the Dear ImGui SDL3 backend:
+    An intermediate staging buffer is created and destroyed on demand
+    in the WantUpdates path, and the font atlas update goes through
+    the staging buffer via sg_write_buffer_transient() + sg_copy_buffer_to_image()
+*/
 static void _simgui_update_texture(ImTextureData* tex) {
     SOKOL_ASSERT(tex);
     SOKOL_ASSERT(tex->Format == ImTextureFormat_RGBA32);
@@ -2317,7 +2339,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
         SOKOL_ASSERT(tex->TexID == 0);
         sg_image_desc img_desc;
         _simgui_clear(&img_desc, sizeof(img_desc));
-        img_desc.usage.dynamic_update = true;
+        img_desc.usage.copy_dst = true;
         img_desc.width = tex->Width;
         img_desc.height = tex->Height;
         img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
@@ -2336,7 +2358,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
         smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
         smp_desc.min_filter = SG_FILTER_LINEAR;
         smp_desc.mag_filter = SG_FILTER_LINEAR;
-        smp_desc.label = "sokol-imgui-sampler";
+        smp_desc.label = "sokol-imgui-font-sampler";
         sg_sampler smp = sg_make_sampler(&smp_desc);
 
         _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(view, smp));
@@ -2346,11 +2368,56 @@ static void _simgui_update_texture(ImTextureData* tex) {
         const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
         const sg_image img = sg_query_view_image(view);
         SOKOL_ASSERT(img.id != SG_INVALID_ID);
-        sg_image_data img_data;
-        _simgui_clear(&img_data, sizeof(img_data));
-        img_data.mip_levels[0].ptr = _simgui_imtexturedata_getpixels(tex);
-        img_data.mip_levels[0].size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
-        sg_update_image(img, &img_data);
+
+        // Update full texture or selected blocks. We only ever write to textures regions which have never been used before!
+        // This backend choose to use tex->UpdateRect but you can use tex->Updates[] to upload individual regions.
+        // We could use the smaller rect on _WantCreate but using the full rect allows us to clear the texture.
+        const int upload_x = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.x;
+        const int upload_y = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.y;
+        const int upload_w = (tex->Status == ImTextureStatus_WantCreate) ? tex->Width : tex->UpdateRect.w;
+        const int upload_h = (tex->Status == ImTextureStatus_WantCreate) ? tex->Height : tex->UpdateRect.h;
+        const int staging_pitch = tex->Width * tex->BytesPerPixel;
+        const int staging_size = upload_h * staging_pitch;
+
+        // staging happens for entire font texture rows
+        // one line extra 'wiggle room' in the staging buffer
+        const int staging_buf_size = staging_size + staging_pitch;
+        if (_simgui.staging_buf_size < staging_buf_size) {
+            sg_destroy_buffer(_simgui.staging_buf);
+            sg_buffer_desc buf_desc;
+            _simgui_clear(&buf_desc, sizeof(buf_desc));
+            buf_desc.usage.write_transient = true;
+            buf_desc.usage.copy_src = true;
+            buf_desc.size = (size_t)staging_buf_size;
+            buf_desc.label = "sokol-imgui-staging-buffer";
+            _simgui.staging_buf = sg_make_buffer(&buf_desc);
+            _simgui.staging_buf_size = staging_buf_size;
+        }
+
+        // write to staging buffer (entire font texture rows)
+        sg_write_buffer_desc write_desc;
+        _simgui_clear(&write_desc, sizeof(write_desc));
+        write_desc.src.data.ptr = _simgui_imtexturedata_getpixels(tex);
+        write_desc.src.data.size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
+        write_desc.src.offset = (size_t)(upload_y * staging_pitch);
+        write_desc.dst.buffer = _simgui.staging_buf;
+        write_desc.size = staging_size;
+        sg_write_buffer_transient(&write_desc);
+
+        // copy actual update area into font texture
+        sg_copy_buffer_to_image_desc copy_desc;
+        _simgui_clear(&copy_desc, sizeof(copy_desc));
+        copy_desc.src.buffer = _simgui.staging_buf;
+        copy_desc.src.bytes_per_row = staging_pitch;
+        copy_desc.src.bytes_per_slice = staging_size;
+        copy_desc.src.offset = (size_t)(upload_x * tex->BytesPerPixel);
+        copy_desc.dst.image = img;
+        copy_desc.dst.x = upload_x;
+        copy_desc.dst.y = upload_y;
+        copy_desc.size.width = upload_w;
+        copy_desc.size.height = upload_h;
+        sg_copy_buffer_to_image(&copy_desc);
+
         _simgui_imtexturedata_setstatus(tex, ImTextureStatus_OK);
     }
     if ((tex->Status == ImTextureStatus_WantDestroy) && (tex->UnusedFrames > 0)) {
@@ -2593,6 +2660,7 @@ SOKOL_API_IMPL void simgui_shutdown(void) {
     sg_destroy_pipeline(_simgui.def_pip);
     sg_destroy_shader(_simgui.def_shd);
     sg_destroy_sampler(_simgui.def_smp);
+    sg_destroy_buffer(_simgui.staging_buf);
     sg_destroy_buffer(_simgui.ibuf);
     sg_destroy_buffer(_simgui.vbuf);
     sg_pop_debug_group();
@@ -2619,11 +2687,14 @@ SOKOL_API_IMPL sg_sampler simgui_sampler_from_imtextureid(uint64_t imtex_id) {
     return smp;
 }
 
-SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
+SOKOL_API_IMPL void simgui_begin_frame(const simgui_frame_desc_t* desc) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width > 0);
     SOKOL_ASSERT(desc->height > 0);
+    _simgui.begin_frame_called = true;
+    _simgui.end_frame_called = false;
+    _simgui.draw_frame_called = false;
     _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, 1.0f);
     ImGuiIO* io = _simgui_imgui_get_io();
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
@@ -2659,33 +2730,32 @@ SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     _simgui_imgui_newframe();
 }
 
-static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
-    const sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
-    SOKOL_ASSERT(tex_view.id != SG_INVALID_ID);
-    const sg_image img = sg_query_view_image(tex_view);
-    SOKOL_ASSERT(img.id != SG_INVALID_ID);
-    bindings->views[0] = tex_view;
-    bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
-    SOKOL_ASSERT(bindings->samplers[0].id != SG_INVALID_ID);
-    if (sg_query_pixelformat(sg_query_image_pixelformat(img)).filter) {
-        return _simgui.def_pip;
-    } else {
-        return _simgui.pip_unfilterable;
-    }
-}
-
 static size_t _simgui_roundup4(size_t val) {
     return (val+3) & ~(size_t)3;
 }
 
-SOKOL_API_IMPL void simgui_render(void) {
+SOKOL_API_IMPL void simgui_end_frame(void) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    ImGuiIO* io = _simgui_imgui_get_io();
+    SOKOL_ASSERT(!_simgui.end_frame_called);
+    SOKOL_ASSERT(!_simgui.draw_frame_called);
+    if (!_simgui.begin_frame_called) {
+        _SIMGUI_ERROR(BEGIN_FRAME_NOT_CALLED_BEFORE_END_FRAME);
+        return;
+    }
+    _simgui.begin_frame_called = false;
+    _simgui.end_frame_called = true;
+    _simgui.cmd_list_count = 0;
+    if (sg_query_pass_type() != SG_PASSTYPE_NONE) {
+        _SIMGUI_ERROR(END_FRAME_CALLED_IN_SOKOLGFX_PASS);
+        return;
+    }
     _simgui_imgui_render();
     ImDrawData* draw_data = _simgui_imgui_get_draw_data();
     if (0 == draw_data) {
         return;
     }
+
+    sg_push_debug_group("sokol-imgui-update");
 
     // catch up with texture updates (important: this needs to happen before
     // checking the CmdLists.Size, otherwise textures might get stuck in
@@ -2698,20 +2768,11 @@ SOKOL_API_IMPL void simgui_render(void) {
             }
         }
     }
-
-    // early-out if nothing needs to be rendered
-    if (draw_data->CmdLists.Size == 0) {
-        return;
-    }
-
-    // update vertex and index buffer
-    sg_push_debug_group("sokol-imgui-write");
     size_t vb_offset = 0;
     size_t ib_offset = 0;
-    int cmd_list_count = 0;
     sg_write_buffer_desc write_desc;
     _simgui_clear(&write_desc, sizeof(write_desc));
-    for (int cl_index = 0; cl_index < draw_data->CmdLists.Size; cl_index++, cmd_list_count++) {
+    for (int cl_index = 0; cl_index < draw_data->CmdLists.Size; cl_index++, _simgui.cmd_list_count++) {
         ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
         const size_t vtx_size = (size_t)cl->VtxBuffer.Size * sizeof(ImDrawVert);
         const size_t idx_size = (size_t)cl->IdxBuffer.Size * sizeof(ImDrawIdx);
@@ -2743,11 +2804,45 @@ SOKOL_API_IMPL void simgui_render(void) {
         ib_offset = _simgui_roundup4(ib_offset + idx_size);
     }
     sg_pop_debug_group();
-    if (0 == cmd_list_count) {
+}
+
+static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTextureID imtex_id) {
+    const sg_view tex_view = simgui_texture_view_from_imtextureid(imtex_id);
+    SOKOL_ASSERT(tex_view.id != SG_INVALID_ID);
+    const sg_image img = sg_query_view_image(tex_view);
+    SOKOL_ASSERT(img.id != SG_INVALID_ID);
+    bindings->views[0] = tex_view;
+    bindings->samplers[0] = simgui_sampler_from_imtextureid(imtex_id);
+    SOKOL_ASSERT(bindings->samplers[0].id != SG_INVALID_ID);
+    if (sg_query_pixelformat(sg_query_image_pixelformat(img)).filter) {
+        return _simgui.def_pip;
+    } else {
+        return _simgui.pip_unfilterable;
+    }
+}
+
+SOKOL_API_IMPL void simgui_draw_frame(void) {
+    SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
+    SOKOL_ASSERT(!_simgui.draw_frame_called);
+    _simgui.draw_frame_called = true;
+    if (!_simgui.end_frame_called) {
+        _SIMGUI_ERROR(END_FRAME_NOT_CALLED_BEFORE_DRAW_FRAME);
+        return;
+    }
+    if (sg_query_pass_type() != SG_PASSTYPE_RENDER) {
+        _SIMGUI_ERROR(DRAW_FRAME_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS);
+        return;
+    }
+    if (0 == _simgui.cmd_list_count) {
+        return;
+    }
+    ImDrawData* draw_data = _simgui_imgui_get_draw_data();
+    if (0 == draw_data) {
         return;
     }
 
     // render the ImGui command list
+    ImGuiIO* io = _simgui_imgui_get_io();
     sg_push_debug_group("sokol-imgui-draw");
     const int fb_width = (int) (io->DisplaySize.x * draw_data->FramebufferScale.x);
     const int fb_height = (int) (io->DisplaySize.y * draw_data->FramebufferScale.y);
@@ -2766,9 +2861,9 @@ SOKOL_API_IMPL void simgui_render(void) {
     bind.vertex_buffers[0] = _simgui.vbuf;
     bind.index_buffer = _simgui.ibuf;
     ImTextureID tex_id = 0;
-    vb_offset = 0;
-    ib_offset = 0;
-    for (int cl_index = 0; cl_index < cmd_list_count; cl_index++) {
+    size_t vb_offset = 0;
+    size_t ib_offset = 0;
+    for (int cl_index = 0; cl_index < _simgui.cmd_list_count; cl_index++) {
         ImDrawList* cl = _simgui_imdrawlist_at(draw_data, cl_index);
 
         bind.vertex_buffer_offsets[0] = (int)vb_offset;
