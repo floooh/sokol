@@ -171,7 +171,7 @@
 
     --- At the start of a frame, call:
 
-        simgui_begin_frame(&(simgui_frame_desc_t){
+        simgui_new_frame(&(simgui_frame_desc_t){
             .width = ...,
             .height = ...,
             .delta_time = ...,
@@ -188,23 +188,24 @@
 
         For example, if you're using sokol_app.h and render to the default framebuffer:
 
-        simgui_begin_frame(&(simgui_frame_desc_t){
+        simgui_new_frame(&(simgui_frame_desc_t){
             .width = sapp_width(),
             .height = sapp_height(),
             .delta_time = sapp_frame_duration(),
             .dpi_scale = sapp_dpi_scale()
         });
 
-    --- after issuing Dear ImGui UI calls and outside a sokol-gfx pass, call:
+    --- after issuing Dear ImGui UI calls and outside the sokol-gfx
+        pass which renders the UI (the later in the frame the better):
 
-        simgui_end_frame();
+        simgui_flush();
 
         this may create and update font textures and 'renders'
         the Dear ImGui UI into command lists.
 
     --- ...and finally inside a sokol-gfx render pass, call:
 
-        simgui_draw_frame();
+        simgui_draw();
 
         To actually render the UI.
 
@@ -427,10 +428,10 @@ extern "C" {
 #define _SIMGUI_LOG_ITEMS \
     _SIMGUI_LOGITEM_XMACRO(OK, "Ok") \
     _SIMGUI_LOGITEM_XMACRO(BUFFER_OVERFLOW, "internal vertex/index buffer overflow (increase simgui_desc_t.max_vertices)") \
-    _SIMGUI_LOGITEM_XMACRO(BEGIN_FRAME_NOT_CALLED_BEFORE_END_FRAME, "simgui_begin_frame() must be called before simgui_end_frame()") \
-    _SIMGUI_LOGITEM_XMACRO(END_FRAME_CALLED_IN_SOKOLGFX_PASS, "simgui_end_frame() must be called outside a sokol-gfx pass") \
-    _SIMGUI_LOGITEM_XMACRO(END_FRAME_NOT_CALLED_BEFORE_DRAW_FRAME, "simgui_end_frame() must have been called before simgui_draw_frame()") \
-    _SIMGUI_LOGITEM_XMACRO(DRAW_FRAME_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS, "simgui_draw_frame() must be called inside a sokol-gfx render pass")
+    _SIMGUI_LOGITEM_XMACRO(NEW_FRAME_NOT_CALLED_BEFORE_FLUSH, "simgui_new_frame() must be called before simgui_flush()") \
+    _SIMGUI_LOGITEM_XMACRO(FLUSH_CALLED_IN_SOKOLGFX_PASS, "simgui_flush() must be called outside a sokol-gfx pass") \
+    _SIMGUI_LOGITEM_XMACRO(FLUSH_NOT_CALLED_BEFORE_DRAW, "simgui_flush() must have been called before simgui_draw()") \
+    _SIMGUI_LOGITEM_XMACRO(DRAW_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS, "simgui_draw() must be called inside a sokol-gfx render pass")
 
 #define _SIMGUI_LOGITEM_XMACRO(item,msg) SIMGUI_LOGITEM_##item,
 typedef enum simgui_log_item_t {
@@ -487,9 +488,9 @@ typedef struct simgui_font_tex_desc_t {
 } simgui_font_tex_desc_t;
 
 SOKOL_IMGUI_API_DECL void simgui_setup(const simgui_desc_t* desc);
-SOKOL_IMGUI_API_DECL void simgui_begin_frame(const simgui_frame_desc_t* desc);
-SOKOL_IMGUI_API_DECL void simgui_end_frame(void);
-SOKOL_IMGUI_API_DECL void simgui_draw_frame(void);
+SOKOL_IMGUI_API_DECL void simgui_new_frame(const simgui_frame_desc_t* desc);
+SOKOL_IMGUI_API_DECL void simgui_flush(void);
+SOKOL_IMGUI_API_DECL void simgui_draw(void);
 
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid(sg_view tex_view);
 SOKOL_IMGUI_API_DECL uint64_t simgui_imtextureid_with_sampler(sg_view tex_view, sg_sampler smp);
@@ -517,7 +518,7 @@ SOKOL_IMGUI_API_DECL void simgui_shutdown(void);
 
 // reference-based equivalents for C++
 inline void simgui_setup(const simgui_desc_t& desc) { return simgui_setup(&desc); }
-inline void simgui_begin_frame(const simgui_frame_desc_t& desc) { return simgui_begin_frame(&desc); }
+inline void simgui_new_frame(const simgui_frame_desc_t& desc) { return simgui_new_frame(&desc); }
 
 #endif
 #endif /* SOKOL_IMGUI_INCLUDED */
@@ -604,9 +605,9 @@ typedef struct {
     sg_shader shd_unfilterable;
     sg_pipeline pip_unfilterable;
     bool is_osx;
-    bool begin_frame_called;
-    bool end_frame_called;
-    bool draw_frame_called;
+    bool new_frame_called;
+    bool flush_called;
+    bool draw_called;
     int cmd_list_count;
 } _simgui_state_t;
 static _simgui_state_t _simgui;
@@ -2687,14 +2688,14 @@ SOKOL_API_IMPL sg_sampler simgui_sampler_from_imtextureid(uint64_t imtex_id) {
     return smp;
 }
 
-SOKOL_API_IMPL void simgui_begin_frame(const simgui_frame_desc_t* desc) {
+SOKOL_API_IMPL void simgui_new_frame(const simgui_frame_desc_t* desc) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT(desc->width > 0);
     SOKOL_ASSERT(desc->height > 0);
-    _simgui.begin_frame_called = true;
-    _simgui.end_frame_called = false;
-    _simgui.draw_frame_called = false;
+    _simgui.new_frame_called = true;
+    _simgui.flush_called = false;
+    _simgui.draw_called = false;
     _simgui.cur_dpi_scale = _simgui_def(desc->dpi_scale, 1.0f);
     ImGuiIO* io = _simgui_imgui_get_io();
     io->DisplaySize.x = ((float)desc->width) / _simgui.cur_dpi_scale;
@@ -2734,19 +2735,19 @@ static size_t _simgui_roundup4(size_t val) {
     return (val+3) & ~(size_t)3;
 }
 
-SOKOL_API_IMPL void simgui_end_frame(void) {
+SOKOL_API_IMPL void simgui_flush(void) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    SOKOL_ASSERT(!_simgui.end_frame_called);
-    SOKOL_ASSERT(!_simgui.draw_frame_called);
-    if (!_simgui.begin_frame_called) {
-        _SIMGUI_ERROR(BEGIN_FRAME_NOT_CALLED_BEFORE_END_FRAME);
+    SOKOL_ASSERT(!_simgui.flush_called);
+    SOKOL_ASSERT(!_simgui.draw_called);
+    if (!_simgui.new_frame_called) {
+        _SIMGUI_ERROR(NEW_FRAME_NOT_CALLED_BEFORE_FLUSH);
         return;
     }
-    _simgui.begin_frame_called = false;
-    _simgui.end_frame_called = true;
+    _simgui.new_frame_called = false;
+    _simgui.flush_called = true;
     _simgui.cmd_list_count = 0;
     if (sg_query_pass_state() != SG_PASSSTATE_NONE) {
-        _SIMGUI_ERROR(END_FRAME_CALLED_IN_SOKOLGFX_PASS);
+        _SIMGUI_ERROR(FLUSH_CALLED_IN_SOKOLGFX_PASS);
         return;
     }
     _simgui_imgui_render();
@@ -2821,16 +2822,16 @@ static sg_pipeline _simgui_bind_texture_sampler(sg_bindings* bindings, ImTexture
     }
 }
 
-SOKOL_API_IMPL void simgui_draw_frame(void) {
+SOKOL_API_IMPL void simgui_draw(void) {
     SOKOL_ASSERT(_SIMGUI_INIT_COOKIE == _simgui.init_cookie);
-    SOKOL_ASSERT(!_simgui.draw_frame_called);
-    _simgui.draw_frame_called = true;
-    if (!_simgui.end_frame_called) {
-        _SIMGUI_ERROR(END_FRAME_NOT_CALLED_BEFORE_DRAW_FRAME);
+    SOKOL_ASSERT(!_simgui.draw_called);
+    _simgui.draw_called = true;
+    if (!_simgui.flush_called) {
+        _SIMGUI_ERROR(FLUSH_NOT_CALLED_BEFORE_DRAW);
         return;
     }
     if (sg_query_pass_state() != SG_PASSSTATE_RENDER) {
-        _SIMGUI_ERROR(DRAW_FRAME_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS);
+        _SIMGUI_ERROR(DRAW_CALLED_OUTSIDE_SOKOLGFX_RENDER_PASS);
         return;
     }
     if (0 == _simgui.cmd_list_count) {
@@ -2871,7 +2872,6 @@ SOKOL_API_IMPL void simgui_draw_frame(void) {
         if (tex_id != 0) {
             sg_apply_bindings(&bind);
         }
-
         uint32_t vtx_offset = 0;
         for (int cmd_index = 0; cmd_index < cl->CmdBuffer.Size; cmd_index++) {
             ImDrawCmd* pcmd = &cl->CmdBuffer.Data[cmd_index];
