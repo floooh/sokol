@@ -424,7 +424,6 @@ typedef enum {
     _SGIMGUI_CMD_DESTROY_SHADER,
     _SGIMGUI_CMD_DESTROY_PIPELINE,
     _SGIMGUI_CMD_DESTROY_VIEW,
-    _SGIMGUI_CMD_UPDATE_IMAGE,
     _SGIMGUI_CMD_WRITE_BUFFER_TRANSIENT,
     _SGIMGUI_CMD_WRITE_IMAGE_TRANSIENT,
     _SGIMGUI_CMD_WRITE_BUFFER_UNSEALED,
@@ -525,10 +524,6 @@ typedef struct {
 typedef struct {
     sg_view view;
 } _sgimgui_args_destroy_view_t;
-
-typedef struct {
-    sg_image image;
-} _sgimgui_args_update_image_t;
 
 typedef struct {
     size_t src_data_size;
@@ -768,7 +763,6 @@ typedef union {
     _sgimgui_args_destroy_shader_t destroy_shader;
     _sgimgui_args_destroy_pipeline_t destroy_pipeline;
     _sgimgui_args_destroy_view_t destroy_view;
-    _sgimgui_args_update_image_t update_image;
     _sgimgui_args_write_buffer_transient_t write_buffer_transient;
     _sgimgui_args_write_image_transient_t write_image_transient;
     _sgimgui_args_write_buffer_unsealed_t write_buffer_unsealed;
@@ -2055,13 +2049,6 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
             }
             break;
 
-        case _SGIMGUI_CMD_UPDATE_IMAGE:
-            {
-                _sgimgui_str_t res_id = _sgimgui_image_id_string(ctx, item->args.update_image.image);
-                _sgimgui_snprintf(&str, "%d: sg_update_image(img=%s, data=..)", index, res_id.buf);
-            }
-            break;
-
         case _SGIMGUI_CMD_WRITE_BUFFER_TRANSIENT:
             _sgimgui_snprintf(&str, "%d: sg_write_buffer_transient(desc=...)", index);
             break;
@@ -2619,20 +2606,6 @@ _SOKOL_PRIVATE void _sgimgui_destroy_view(sg_view view, void* user_data) {
     }
     if (view.id != SG_INVALID_ID) {
         _sgimgui_view_destroyed(ctx, view);
-    }
-}
-
-_SOKOL_PRIVATE void _sgimgui_update_image(sg_image img, const sg_image_data* data, void* user_data) {
-    _sgimgui_t* ctx = (_sgimgui_t*) user_data;
-    SOKOL_ASSERT(ctx);
-    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
-    if (item) {
-        item->cmd = _SGIMGUI_CMD_UPDATE_IMAGE;
-        item->color = _SGIMGUI_COLOR_RSRC;
-        item->args.update_image.image = img;
-    }
-    if (ctx->hooks.update_image) {
-        ctx->hooks.update_image(img, data, ctx->hooks.user_data);
     }
 }
 
@@ -4594,9 +4567,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
         case _SGIMGUI_CMD_DESTROY_VIEW:
             _sgimgui_draw_view_panel(ctx, item->args.destroy_view.view);
             break;
-        case _SGIMGUI_CMD_UPDATE_IMAGE:
-            _sgimgui_draw_image_panel(ctx, item->args.update_image.image);
-            break;
         case _SGIMGUI_CMD_WRITE_BUFFER_TRANSIENT:
             _sgimgui_draw_buffer_panel(ctx, item->args.write_buffer_transient.dst.buffer);
             break;
@@ -5061,7 +5031,6 @@ SOKOL_API_IMPL void sgimgui_setup(const sgimgui_desc_t* desc) {
     hooks.destroy_shader = _sgimgui_destroy_shader;
     hooks.destroy_pipeline = _sgimgui_destroy_pipeline;
     hooks.destroy_view = _sgimgui_destroy_view;
-    hooks.update_image = _sgimgui_update_image;
     hooks.write_buffer_transient = _sgimgui_write_buffer_transient;
     hooks.write_image_transient = _sgimgui_write_image_transient;
     hooks.write_buffer_unsealed = _sgimgui_write_buffer_unsealed;
