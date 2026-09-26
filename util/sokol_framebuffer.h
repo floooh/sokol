@@ -186,12 +186,11 @@
             .pixels = SG_RANGE(pixels),
         });
 
-    The sfb_update() function will do up to two calls to the sokol-gfx
-    function sg_update_image() - once for the pixel data and once for the
-    palette data (this is why the function must only be called at most
-    once per frame), and then do an render pass into an internal color attachment
-    texture (this is why the function must be called outside any sokol-gfx
-    pass).
+    The sfb_update() function will do up to two image updates via a
+    write-transient staging buffer (e.g. sg_write_buffer_transient plus
+    sg_copy_buffer_to_image), once for the pixel data and once for the palette
+    data, and then do a render pass in into an internal color attachment texture
+    (this is why the function must be called outside any sokol-gfx pass).
 
     Finally, to render your framebuffer to the display, call sfb_render()
     *inside* a sokol-gfx render pass:
