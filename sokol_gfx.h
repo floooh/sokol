@@ -5276,6 +5276,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT, "sg_copy_buffer_to_buffer: desc.dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_buffer: on webgl2, if dst buffer has usage.index_buffer, src buffer must also have usage.index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS, "sg_copy_buffer_to_image: must not be called inside a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID, "sg_copy_buffer_to_image: source buffer resource state must be SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_VALID, "sg_copy_buffer_to_image: destination image resource state must be SG_RESOURCESTATE_VALID") \
@@ -9832,10 +9833,10 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_usage(const sg_buffer_usage* usg) {
     if (usg->immutable) {
         return GL_STATIC_DRAW;
-    } else if (usg->dynamic_update) {
-        return GL_DYNAMIC_DRAW;
     } else if (usg->write_transient) {
         return GL_STREAM_DRAW;
+    } else if (usg->copy_dst) {
+        return GL_DYNAMIC_COPY;
     } else {
         SOKOL_UNREACHABLE; return 0;
     }
@@ -12901,6 +12902,29 @@ _SOKOL_PRIVATE void _sg_gl_write_image_unsealed(_sg_image_t* img, const sg_write
     SOKOL_ASSERT(img->cmn.usage.write_unsealed);
     SOKOL_ASSERT(0 == img->cmn.active_slot);
     _sg_gl_write_image_common(img, desc);
+}
+
+_SOKOL_PRIVATE void _sg_gl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
+
+    _SG_GL_CHECK_ERROR();
+    glBindBuffer(GL_COPY_READ_BUFFER, src_buf->gl.buf[src_buf->cmn.active_slot]);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, dst_buf->gl.buf[dst_buf->cmn.active_slot]);
+    const GLintptr gl_read_offset = (GLintptr)desc->src.offset;
+    const GLintptr gl_write_offset = (GLintptr)desc->dst.offset;
+    const GLintptr gl_size = (GLsizeiptr)desc->size;
+    glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, gl_read_offset, gl_write_offset, gl_size);
+    _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_img && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME: _sg_gl_copy_buffer_to_image()");
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -25483,6 +25507,9 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT);
         _SG_VALIDATE((desc->src.offset + desc->size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
         _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)dst_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW);
+        if (_sg.features.separate_buffer_types && dst_buf->cmn.usage.index_buffer) {
+            _SG_VALIDATE(src_buf->cmn.usage.index_buffer, VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
+        }
         return _sg_validate_end();
     #endif
 }
