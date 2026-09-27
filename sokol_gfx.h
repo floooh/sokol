@@ -11297,7 +11297,6 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     int num_slices)
 {
     SOKOL_ASSERT(img);
-    SOKOL_ASSERT(src_ptr);
     SOKOL_ASSERT(src_size > 0);
     SOKOL_ASSERT(src_bytes_per_row > 0);
     SOKOL_ASSERT(src_bytes_per_slice > 0);
@@ -11308,9 +11307,9 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((width > 0) && (x + width <= _sg_miplevel_dim(img->cmn.width, mip_level)));
     SOKOL_ASSERT((height > 0) && (y + height <= _sg_miplevel_dim(img->cmn.height, mip_level)));
     SOKOL_ASSERT((num_slices > 0) && (slice + num_slices <= img->cmn.num_slices));
-    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
+    SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
     const sg_pixel_format fmt = img->cmn.pixel_format;
@@ -12911,14 +12910,29 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
     SOKOL_ASSERT(src_buf && dst_buf && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
-
     _SG_GL_CHECK_ERROR();
-    glBindBuffer(GL_COPY_READ_BUFFER, src_buf->gl.buf[src_buf->cmn.active_slot]);
-    glBindBuffer(GL_COPY_WRITE_BUFFER, dst_buf->gl.buf[dst_buf->cmn.active_slot]);
+
+    // NOTE: the general barrier is not great, but OTH resource copies should be rare
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer)) {
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
+    }
+    #endif
+    const GLuint gl_src_buf = src_buf->gl.buf[src_buf->cmn.active_slot];
+    const GLuint gl_dst_buf = dst_buf->gl.buf[dst_buf->cmn.active_slot];
+    glBindBuffer(GL_COPY_READ_BUFFER, gl_src_buf);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, gl_dst_buf);
     const GLintptr gl_read_offset = (GLintptr)desc->src.offset;
     const GLintptr gl_write_offset = (GLintptr)desc->dst.offset;
     const GLintptr gl_size = (GLsizeiptr)desc->size;
     glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, gl_read_offset, gl_write_offset, gl_size);
+    glBindBuffer(GL_COPY_READ_BUFFER, 0);
+    glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer)) {
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+    #endif
     _SG_GL_CHECK_ERROR();
 }
 
@@ -12927,7 +12941,43 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
 
-    SOKOL_ASSERT(false && "FIXME: _sg_gl_copy_buffer_to_image()");
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image)) {
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT|GL_TEXTURE_UPDATE_BARRIER_BIT);
+    }
+    #endif
+
+    // source buffer is bound to the PIXEL_UNPACK_BUFFER bind point
+    // which then becomes the source for the glTexImage2D operation
+    const GLuint gl_src_buf = src_buf->gl.buf[src_buf->cmn.active_slot];
+    const GLuint gl_dst_img = dst_img->gl.tex[dst_img->cmn.active_slot];
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, gl_src_buf);
+    _sg_gl_cache_store_texture_sampler_binding(0);
+    _sg_gl_cache_bind_texture_sampler(0, dst_img->gl.target, gl_dst_img, 0);
+
+    // call the common _sg_gl_write_miplevel_data with a nullptr (the glTexImage data
+    // arg will be interpreted as offset if a buffer is bound to the GL_PIXEL_UNPACK_BUFFER bindpoint
+    _sg_gl_write_miplevel_data(dst_img,
+        0,  // source data as nullptr
+        src_buf->cmn.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
+    _sg_gl_cache_restore_texture_sampler_binding(0);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image)) {
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+    }
+    #endif
+    _SG_GL_CHECK_ERROR();
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
