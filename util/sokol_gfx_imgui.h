@@ -5037,6 +5037,8 @@ SOKOL_API_IMPL void sgimgui_setup(const sgimgui_desc_t* desc) {
     hooks.write_image_unsealed = _sgimgui_write_image_unsealed;
     hooks.seal_buffer = _sgimgui_seal_buffer;
     hooks.seal_image = _sgimgui_seal_image;
+    hooks.copy_buffer_to_buffer = _sgimgui_copy_buffer_to_buffer;
+    hooks.copy_buffer_to_image = _sgimgui_copy_buffer_to_image;
     hooks.begin_pass = _sgimgui_begin_pass;
     hooks.apply_viewport = _sgimgui_apply_viewport;
     hooks.apply_scissor_rect = _sgimgui_apply_scissor_rect;

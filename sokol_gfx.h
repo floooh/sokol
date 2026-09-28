@@ -6438,6 +6438,8 @@ inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { 
         #define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
         #define GL_TEXTURE_FETCH_BARRIER_BIT 0x00000008
         #define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+        #define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
+        #define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
         #define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
         #define GL_MIN 0x8007
         #define GL_MAX 0x8008
@@ -6453,6 +6455,7 @@ inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { 
         #define GL_UNPACK_IMAGE_HEIGHT 0x806E
         #define GL_COPY_READ_BUFFER 0x8F36
         #define GL_COPY_WRITE_BUFFER 0x8F37
+        #define GL_PIXEL_UNPACK_BUFFER 0x88EC
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -12930,7 +12933,7 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
 
     // NOTE: the general barrier is not great, but OTH resource copies should be rare
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer)) {
+    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer) {
         glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
     }
     #endif
@@ -12945,7 +12948,7 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
     glBindBuffer(GL_COPY_READ_BUFFER, 0);
     glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer)) {
+    if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer) {
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     }
     #endif
@@ -12958,7 +12961,7 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
 
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image)) {
+    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image) {
         glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT|GL_TEXTURE_UPDATE_BARRIER_BIT);
     }
     #endif
@@ -12989,7 +12992,7 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     _sg_gl_cache_restore_texture_sampler_binding(0);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     #if defined(_SOKOL_GL_HAS_COMPUTE)
-    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image)) {
+    if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image) {
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
     }
     #endif
