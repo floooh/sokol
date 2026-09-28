@@ -2373,9 +2373,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
         // Update full texture or selected blocks. We only ever write to textures regions which have never been used before!
         // This backend choose to use tex->UpdateRect but you can use tex->Updates[] to upload individual regions.
         // We could use the smaller rect on _WantCreate but using the full rect allows us to clear the texture.
-        const int upload_x = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.x;
         const int upload_y = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.y;
-        const int upload_w = (tex->Status == ImTextureStatus_WantCreate) ? tex->Width : tex->UpdateRect.w;
         const int upload_h = (tex->Status == ImTextureStatus_WantCreate) ? tex->Height : tex->UpdateRect.h;
         const int staging_pitch = tex->Width * tex->BytesPerPixel;
         const int staging_size = upload_h * staging_pitch;
@@ -2406,16 +2404,17 @@ static void _simgui_update_texture(ImTextureData* tex) {
         sg_write_buffer_transient(&write_desc);
 
         // copy actual update area into font texture
+        // (also as entire font texture rows to workaround a GL driver bug on macOS)
         sg_copy_buffer_to_image_desc copy_desc;
         _simgui_clear(&copy_desc, sizeof(copy_desc));
         copy_desc.src.buffer = _simgui.staging_buf;
         copy_desc.src.bytes_per_row = staging_pitch;
         copy_desc.src.bytes_per_slice = staging_size;
-        copy_desc.src.offset = (size_t)(upload_x * tex->BytesPerPixel);
+        copy_desc.src.offset = 0;
         copy_desc.dst.image = img;
-        copy_desc.dst.x = upload_x;
+        copy_desc.dst.x = 0;
         copy_desc.dst.y = upload_y;
-        copy_desc.size.width = upload_w;
+        copy_desc.size.width = tex->Width;
         copy_desc.size.height = upload_h;
         sg_copy_buffer_to_image(&copy_desc);
 

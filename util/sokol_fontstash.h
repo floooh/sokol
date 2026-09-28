@@ -2022,12 +2022,9 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
     SOKOL_ASSERT(ctx && ctx->params.userPtr);
     _sfons_t* sfons = (_sfons_t*) ctx->params.userPtr;
     if (sfons->img_dirty) {
-        const int upload_x = sfons->img_dirty_rect.x0;
         const int upload_y = sfons->img_dirty_rect.y0;
-        const int upload_w = sfons->img_dirty_rect.x1 - upload_x;
         const int upload_h = sfons->img_dirty_rect.y1 - upload_y;
-        SOKOL_ASSERT((upload_x >= 0) && (upload_y >= 0));
-        SOKOL_ASSERT((upload_w > 0) && (upload_h > 0));
+        SOKOL_ASSERT((upload_y >= 0) && (upload_h > 0));
         const int bytes_per_pixel = 1;
         const int staging_pitch = sfons->cur_width * bytes_per_pixel;
         const int staging_size = upload_h * staging_pitch;
@@ -2065,17 +2062,18 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
         write_desc.size = (size_t)staging_size;
         sg_write_buffer_transient(&write_desc);
 
-        // copy actual update area into font texture
+        // copy actual update area into font texture, also as entire rows to
+        // workaround macOS GL driver issue of ignoring the source data offset
         sg_copy_buffer_to_image_desc copy_desc;
         _sfons_clear(&copy_desc, sizeof(copy_desc));
         copy_desc.src.buffer = sfons->staging_buf;
         copy_desc.src.bytes_per_row = staging_pitch;
         copy_desc.src.bytes_per_slice = staging_size;
-        copy_desc.src.offset = (size_t)(upload_x * bytes_per_pixel);
+        copy_desc.src.offset = 0;
         copy_desc.dst.image = sfons->img;
-        copy_desc.dst.x = upload_x;
+        copy_desc.dst.x = 0;
         copy_desc.dst.y = upload_y;
-        copy_desc.size.width = upload_w;
+        copy_desc.size.width = sfons->cur_width;
         copy_desc.size.height = upload_h;
         sg_copy_buffer_to_image(&copy_desc);
     }
