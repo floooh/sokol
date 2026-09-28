@@ -4760,6 +4760,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNSUPPORTED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNSUPPORTED (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNKNOWN, "framebuffer completeness check failed (unknown reason) (gl)") \
+    _SG_LOGITEM_XMACRO(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG, "NOTE: Apple's GL driver ignores source data offset when copying from buffer into texture! (in sg_copy_buffer_to_image())") \
     _SG_LOGITEM_XMACRO(D3D11_FEATURE_LEVEL_0_DETECTED, "D3D11 Feature Level 0 device detected, this restricts the number of UAV slots to 8! (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_SRV_FAILED, "CreateShaderResourceView() failed for storage buffer (d3d11)") \
@@ -6131,6 +6132,7 @@ inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { 
             #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
         #endif
     #elif defined(__APPLE__)
+        #define _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (1)
         #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
             #if defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST
                 #define _SOKOL_GL_HAS_COLORMASKI (1)
@@ -11310,6 +11312,20 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_row, _sg_block_bytesize(img->cmn.pixel_format)));
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
     SOKOL_ASSERT((src_offset + (size_t)src_bytes_per_slice * (size_t)num_slices) <= src_size);
+
+    /*
+        NOTE: macOS (and presumably iOS) GL drivers ignore a source data offset when
+        reading from the GL_PIXEL_UNPACK_BUFFER bindpoint, no matter if the
+        offset is provided via the glTexImage* data parameter or via
+        the GL_UNPACK_SKIP_PIXELS state.
+    */
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    static bool warn_once = false;
+    if ((src_ptr == 0) && (src_offset != 0) && !warn_once) {
+        _SG_WARN(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG);
+        warn_once = true;
+    }
+    #endif
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
     const sg_pixel_format fmt = img->cmn.pixel_format;
