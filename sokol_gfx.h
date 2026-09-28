@@ -13486,26 +13486,13 @@ static inline D3D_FEATURE_LEVEL _sg_d3d11_GetFeatureLevel(ID3D11Device* self) {
 
 //-- enum translation functions ------------------------------------------------
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_image_usage(const sg_image_usage* usg) {
-    const bool any_attachment = usg->color_attachment || usg->resolve_attachment || usg->depth_stencil_attachment;
-    const bool any_write_access = usg->write_unsealed || usg->write_transient;
-    if (any_attachment || any_write_access || usg->storage_image) {
-        return D3D11_USAGE_DEFAULT;
-    } else if (usg->dynamic_update) {
-        // FIXME: deprecated
-        return D3D11_USAGE_DYNAMIC;
-    } else {
-        SOKOL_ASSERT(usg->immutable);
-        return D3D11_USAGE_IMMUTABLE;
-    }
+    _SOKOL_UNUSED(usg);
+    return D3D11_USAGE_DEFAULT;
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_image_cpu_access_flags(const sg_image_usage* usg) {
-    if (usg->dynamic_update) {
-        // FIXME: deprecated
-        return D3D11_CPU_ACCESS_WRITE;
-    } else {
-        return 0;
-    }
+    _SOKOL_UNUSED(usg);
+    return 0;
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg) {
@@ -13523,27 +13510,15 @@ _SOKOL_PRIVATE UINT _sg_d3d11_image_bind_flags(const sg_image_usage* usg) {
 }
 
 _SOKOL_PRIVATE D3D11_USAGE _sg_d3d11_buffer_usage(const sg_buffer_usage* usg) {
-    if (usg->dynamic_update) {
-        // FIXME: deprecated
+    if (usg->write_transient) {
         return D3D11_USAGE_DYNAMIC;
-    } else if (usg->write_transient) {
-        return D3D11_USAGE_DYNAMIC;
-    } else if (usg->write_unsealed) {
-        return D3D11_USAGE_DEFAULT;
-    } else if (usg->storage_buffer) {
-        return D3D11_USAGE_DEFAULT;
-    } else if (usg->immutable) {
-        return D3D11_USAGE_IMMUTABLE;
     } else {
         return D3D11_USAGE_DEFAULT;
     }
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_cpu_access_flags(const sg_buffer_usage* usg) {
-    if (usg->dynamic_update) {
-        // FIXME: deprecated
-        return D3D11_CPU_ACCESS_WRITE;
-    } else if (usg->write_transient) {
+    if (usg->write_transient) {
         return D3D11_CPU_ACCESS_WRITE;
     } else {
         return 0;
@@ -15427,6 +15402,23 @@ _SOKOL_PRIVATE void _sg_d3d11_write_image_unsealed(_sg_image_t* img, const sg_wr
         desc->size.height,
         desc->size.num_slices);
 }
+
+_SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_img && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 
 // ███    ███ ███████ ████████  █████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
 // ████  ████ ██         ██    ██   ██ ██          ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
