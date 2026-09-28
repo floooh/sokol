@@ -13412,6 +13412,14 @@ static inline void _sg_d3d11_UpdateSubresource(ID3D11DeviceContext* self, ID3D11
     #endif
 }
 
+static inline void _sg_d3d11_CopySubresourceRegion(ID3D11DeviceContext* self, ID3D11Resource *pDstResource, UINT DstSubresource, UINT DstX, UINT DstY, UINT DstZ, ID3D11Resource *pSrcResource, UINT SrcSubresource, const D3D11_BOX *pSrcBox) {
+    #if defined(__cplusplus)
+        self->CopySubresourceRegion(pDstResource, DstSubresource, DstX, DstY, DstZ, pSrcResource, SrcSubresource, pSrcBox);
+    #else
+        self->lpVtbl->CopySubresourceRegion(self, pDstResource, DstSubresource, DstX, DstY, DstZ, pSrcResource, SrcSubresource, pSrcBox);
+    #endif
+}
+
 static inline void _sg_d3d11_DrawIndexed(ID3D11DeviceContext* self, UINT IndexCount, UINT StartIndexLocation, INT  BaseVertexLocation) {
     #if defined(__cplusplus)
         self->DrawIndexed(IndexCount, StartIndexLocation, BaseVertexLocation);
@@ -15408,7 +15416,23 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_b
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
 
-    SOKOL_ASSERT(false && "FIXME");
+    ID3D11Resource* d3d11_src_buf = (ID3D11Resource*)src_buf->d3d11.buf;
+    ID3D11Resource* d3d11_dst_buf = (ID3D11Resource*)dst_buf->d3d11.buf;
+    SOKOL_ASSERT(d3d11_src_buf && d3d11_dst_buf);
+    _SG_STRUCT(D3D11_BOX, d3d11_src_box);
+    d3d11_src_box.left = (UINT)desc->src.offset;
+    d3d11_src_box.right = d3d11_src_box.left + (UINT)desc->size;
+    d3d11_src_box.back = 1;
+    d3d11_src_box.bottom = 1;
+    _sg_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
+        d3d11_dst_buf,  // pDstResource
+        0,              // DstSubresource
+        (UINT)desc->dst.offset, // DstX
+        0,              // DstY
+        0,              // DstZ
+        d3d11_src_buf,  // pSrcResource
+        0,              // SrcSubresource
+        &d3d11_src_box);    // pSrcBox
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
