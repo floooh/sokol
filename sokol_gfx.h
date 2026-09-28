@@ -5191,6 +5191,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VIEW_ALIVE, "sg_apply_bindings: view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_TEXVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a texture view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SBVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage buffer view)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffers bound as read/write cannot have usage.write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SIMGVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage image view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
@@ -13549,7 +13550,10 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
         res |= D3D11_BIND_INDEX_BUFFER;
     }
     if (usg->storage_buffer) {
-        res |= D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+        res |= D3D11_BIND_SHADER_RESOURCE;
+        if (!usg->write_transient) {
+            res |= D3D11_BIND_UNORDERED_ACCESS;
+        }
     }
     return res;
 }
@@ -14657,19 +14661,21 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_view(_sg_view_t* view, const s
             return SG_RESOURCESTATE_FAILED;
         }
         _sg_d3d11_setlabel(view->d3d11.srv, desc->label);
-        _SG_STRUCT(D3D11_UNORDERED_ACCESS_VIEW_DESC, d3d11_uav_desc);
-        d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
-        d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-        d3d11_uav_desc.Buffer.FirstElement = first_element;
-        d3d11_uav_desc.Buffer.NumElements = num_elements;
-        d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
-        SOKOL_ASSERT(!view->d3d11.uav);
-        hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &view->d3d11.uav);
-        if (!(SUCCEEDED(hr) && view->d3d11.uav)) {
-            _SG_ERROR(D3D11_CREATE_BUFFER_UAV_FAILED);
-            return SG_RESOURCESTATE_FAILED;
+        if (!buf->cmn.usage.write_transient) {
+            _SG_STRUCT(D3D11_UNORDERED_ACCESS_VIEW_DESC, d3d11_uav_desc);
+            d3d11_uav_desc.Format = DXGI_FORMAT_R32_TYPELESS;
+            d3d11_uav_desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+            d3d11_uav_desc.Buffer.FirstElement = first_element;
+            d3d11_uav_desc.Buffer.NumElements = num_elements;
+            d3d11_uav_desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+            SOKOL_ASSERT(!view->d3d11.uav);
+            hr = _sg_d3d11_CreateUnorderedAccessView(_sg.d3d11.dev, (ID3D11Resource*)buf->d3d11.buf, &d3d11_uav_desc, &view->d3d11.uav);
+            if (!(SUCCEEDED(hr) && view->d3d11.uav)) {
+                _SG_ERROR(D3D11_CREATE_BUFFER_UAV_FAILED);
+                return SG_RESOURCESTATE_FAILED;
+            }
+            _sg_d3d11_setlabel(view->d3d11.uav, desc->label);
         }
-        _sg_d3d11_setlabel(view->d3d11.uav, desc->label);
     } else {
         // it's an image view
         const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -25232,6 +25238,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 // NOTE: an invalid buffer ref is allowed and skips rendering
                                 if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
                                     const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                                    if (!shd->cmn.views[i].sbuf_readonly) {
+                                        _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
+                                    }
                                     if (buf->cmn.usage.write_transient) {
                                         _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                                     }
