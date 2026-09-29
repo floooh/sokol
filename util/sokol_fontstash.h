@@ -2044,6 +2044,7 @@ SOKOL_API_IMPL void sfons_flush(FONScontext* ctx) {
             }
             sg_buffer_desc buf_desc;
             _sfons_clear(&buf_desc, sizeof(buf_desc));
+            buf_desc.usage.staging_buffer = true;
             buf_desc.usage.write_transient = true;
             buf_desc.usage.copy_src = true;
             buf_desc.size = (size_t)staging_buf_size;

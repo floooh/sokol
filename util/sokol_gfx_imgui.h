@@ -3706,17 +3706,16 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(_sgimgui_t* ctx, sg_buffer buf) {
             _sgimgui_igtext("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
             _sgimgui_igtext("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
             _sgimgui_igtext("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
-            _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(buf_ui->desc.usage.immutable));
+            _sgimgui_igtext("  staging_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.staging_buffer));
+            _sgimgui_igtext("  staging_index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.staging_index_buffer));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_unsealed));
             _sgimgui_igtext("  write_transient: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_transient));
             _sgimgui_igtext("  copy_src: %s", _sgimgui_bool_string(buf_ui->desc.usage.copy_src));
             _sgimgui_igtext("  copy_dst: %s", _sgimgui_bool_string(buf_ui->desc.usage.copy_dst));
             _sgimgui_igtext("Size:  %d", (int)buf_ui->desc.size);
-            if (!buf_ui->desc.usage.immutable) {
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Num Slots:     %d", info.num_slots);
-                _sgimgui_igtext("Active Slot:   %d", info.active_slot);
-            }
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Num Slots:     %d", info.num_slots);
+            _sgimgui_igtext("Active Slot:   %d", info.active_slot);
         } else {
             _sgimgui_igtext("Buffer 0x%08X not valid.", buf.id);
         }

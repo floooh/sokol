@@ -2385,6 +2385,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
             sg_destroy_buffer(_simgui.staging_buf);
             sg_buffer_desc buf_desc;
             _simgui_clear(&buf_desc, sizeof(buf_desc));
+            buf_desc.usage.staging_buffer = true;
             buf_desc.usage.write_transient = true;
             buf_desc.usage.copy_src = true;
             buf_desc.size = (size_t)staging_buf_size;

@@ -4975,6 +4975,7 @@ static bool _sfb_create_update_resources(_sfb_framebuffer_t* fb) {
     const size_t staging_size = (size_t)sg_query_surface_pitch(fmt, fb->width, fb->height, 1);
     fb->update.staging_buf = sg_make_buffer(&(sg_buffer_desc){
         .usage = {
+            .staging_buffer = true,
             .write_transient = true,
             .copy_src = true,
         },
@@ -5030,6 +5031,7 @@ static bool _sfb_create_palette_resources(_sfb_framebuffer_t* fb) {
         const size_t staging_size = (size_t)sg_query_surface_pitch(fmt, 256, 1, 1);
         fb->palette.staging_buf = sg_make_buffer(&(sg_buffer_desc){
             .usage = {
+                .staging_buffer = true,
                 .write_transient = true,
                 .copy_src = true,
             },
