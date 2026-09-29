@@ -24040,7 +24040,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             // staging *must* be combined with copy_src
             _SG_VALIDATE(desc->usage.copy_src, VALIDATE_BUFFERDESC_STAGING_COPYSRC);
         }
-        if (_sg.features.separate_buffer_types) {
+        if (_sg.features.separate_buffer_types && !(desc->usage.staging_buffer || desc->usage.staging_index_buffer)) {
             _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
         }
         if (desc->usage.write_unsealed) {
