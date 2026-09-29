@@ -3432,8 +3432,8 @@ typedef struct sg_buffer_desc {
     sg_range data;
     const char* label;
     // optionally inject backend-specific resources
-    uint32_t gl_buffers[SG_NUM_INFLIGHT_FRAMES];
-    const void* mtl_buffers[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t gl_buffer;
+    const void* mtl_buffer;
     const void* d3d11_buffer;
     const void* wgpu_buffer;
     uint32_t _end_canary;
@@ -4931,7 +4931,12 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURESAMPLERPAIRS, "sg_shader_desc: too many texture-sampler-pairs on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_CANARY, "sg_buffer_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE, "sg_buffer_desc.size must be greater zero") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_VERTEX_INDEX_STORAGE, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .vertex/index/storage_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .vertex_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .storage_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INJECTED, "sg_buffer_desc.usage: cannot inject backend-native buffers for .staging or .staging_index_buffer usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_COPYDST, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot be combined with .copy_dst") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_COPYSRC, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer must be combined with .copy_src") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_WRITETRANSIENT, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_COPYDST, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .copy_dst") \
@@ -4939,6 +4944,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_INITIALDATA, "sg_buffer_desc.usage: .write_unsealed buffers cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_COPYDST, "sg_buffer_desc.usage: .write_transient cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INITIALDATA, "sg_buffer_desc.usage: .write_transient buffers cannot have initial data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INJECTED, "sg_buffer_desc.usage: cannot inject backend-native buffers for .write_transient usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA, "sg_buffer_desc.usage: .copy_dst buffers cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE, "sg_buffer_desc.size and .data.size must be equal") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE, "sg_buffer_desc.data.size expected to be zero") \
@@ -7039,6 +7045,7 @@ typedef struct _sg_buffer_s {
     _sg_buffer_common_t cmn;
     struct {
         ID3D11Buffer* buf;
+        uint8_t* staging_ptr;
     } d3d11;
 } _sg_d3d11_buffer_t;
 typedef _sg_d3d11_buffer_t _sg_buffer_t;
@@ -13961,10 +13968,13 @@ _SOKOL_PRIVATE void _sg_d3d11_reset_state_cache(void) {
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(!buf->d3d11.buf);
+    SOKOL_ASSERT(!buf->d3d11.staging_ptr);
     const bool injected = (0 != desc->d3d11_buffer);
     if (injected) {
         buf->d3d11.buf = (ID3D11Buffer*) desc->d3d11_buffer;
         _sg_d3d11_AddRef(buf->d3d11.buf);
+    } else if (desc->usage.staging_buffer || desc->usage.staging_index_buffer) {
+        buf->d3d11.staging_ptr = (uint8_t*)_sg_malloc((size_t)buf->cmn.size);
     } else {
         _SG_STRUCT(D3D11_BUFFER_DESC, d3d11_buf_desc);
         d3d11_buf_desc.ByteWidth = (UINT)buf->cmn.size;
@@ -13992,6 +14002,9 @@ _SOKOL_PRIVATE void _sg_d3d11_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->d3d11.buf) {
         _sg_d3d11_Release(buf->d3d11.buf);
+    }
+    if (buf->d3d11.staging_ptr) {
+        _sg_free(buf->d3d11.staging_ptr);
     }
 }
 
@@ -15346,15 +15359,24 @@ _SOKOL_PRIVATE void _sg_d3d11_write_buffer_transient(_sg_buffer_t* buf, const sg
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
-    const D3D11_MAP d3d11_map_type = first_time_in_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
-    void* mapped_ptr = _sg_d3d11_map_buffer(buf, d3d11_map_type);
-    if (mapped_ptr) {
-        uint8_t* dst_ptr = (uint8_t*)mapped_ptr + desc->dst.offset;
-        const uint8_t* src_ptr = (uint8_t*)desc->src.data.ptr + desc->src.offset;
-        memcpy(dst_ptr, src_ptr, desc->size);
-        _sg_d3d11_unmap_buffer(buf);
+    const bool staging = buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer;
+    const uint8_t* src_ptr = (uint8_t*)desc->src.data.ptr + desc->src.offset;
+    uint8_t* dst_ptr = 0;
+    if (staging) {
+        SOKOL_ASSERT(buf->d3d11.staging_ptr);
+        dst_ptr = buf->d3d11.staging_ptr + desc->dst.offset;
     } else {
-        _SG_ERROR(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED);
+        const D3D11_MAP d3d11_map_type = first_time_in_frame ? D3D11_MAP_WRITE_DISCARD : D3D11_MAP_WRITE_NO_OVERWRITE;
+        void* mapped_ptr = _sg_d3d11_map_buffer(buf, d3d11_map_type);
+        if (!mapped_ptr) {
+            _SG_ERROR(D3D11_MAP_FOR_WRITE_BUFFER_TRANSIENT_FAILED);
+            return;
+        }
+        dst_ptr = (uint8_t*)mapped_ptr + desc->dst.offset;
+    }
+    memcpy(dst_ptr, src_ptr, desc->size);
+    if (!staging) {
+        _sg_d3d11_unmap_buffer(buf);
     }
 }
 
@@ -15366,15 +15388,22 @@ _SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
-    ID3D11Resource* d3d11_buf = (ID3D11Resource*)buf->d3d11.buf;
-    SOKOL_ASSERT(d3d11_buf);
-    _SG_STRUCT(D3D11_BOX, d3d11_dst_box);
-    d3d11_dst_box.left = (UINT)desc->dst.offset;
-    d3d11_dst_box.right = d3d11_dst_box.left + (UINT)desc->size;
-    d3d11_dst_box.back = 1;
-    d3d11_dst_box.bottom = 1;
-    const void* d3d11_src_ptr = (void*)(((uint8_t*)desc->src.data.ptr) + desc->src.offset);
-    _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_buf, 0, &d3d11_dst_box, d3d11_src_ptr, 0, 0);
+    const bool staging = buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer;
+    const uint8_t* src_ptr = (uint8_t*)desc->src.data.ptr + desc->src.offset;
+    if (staging) {
+        SOKOL_ASSERT(buf->d3d11.staging_ptr);
+        uint8_t* dst_ptr = buf->d3d11.staging_ptr + desc->dst.offset;
+        memcpy(dst_ptr, src_ptr, desc->size);
+    } else {
+        ID3D11Resource* d3d11_buf = (ID3D11Resource*)buf->d3d11.buf;
+        SOKOL_ASSERT(d3d11_buf);
+        _SG_STRUCT(D3D11_BOX, d3d11_dst_box);
+        d3d11_dst_box.left = (UINT)desc->dst.offset;
+        d3d11_dst_box.right = d3d11_dst_box.left + (UINT)desc->size;
+        d3d11_dst_box.back = 1;
+        d3d11_dst_box.bottom = 1;
+        _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_buf, 0, &d3d11_dst_box, src_ptr, 0, 0);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_write_image_transient(_sg_image_t* img, const sg_write_image_desc* desc, bool first_time_in_frame) {
@@ -15424,23 +15453,37 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_b
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
 
-    ID3D11Resource* d3d11_src_buf = (ID3D11Resource*)src_buf->d3d11.buf;
     ID3D11Resource* d3d11_dst_buf = (ID3D11Resource*)dst_buf->d3d11.buf;
-    SOKOL_ASSERT(d3d11_src_buf && d3d11_dst_buf);
-    _SG_STRUCT(D3D11_BOX, d3d11_src_box);
-    d3d11_src_box.left = (UINT)desc->src.offset;
-    d3d11_src_box.right = d3d11_src_box.left + (UINT)desc->size;
-    d3d11_src_box.back = 1;
-    d3d11_src_box.bottom = 1;
-    _sg_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
-        d3d11_dst_buf,  // pDstResource
-        0,              // DstSubresource
-        (UINT)desc->dst.offset, // DstX
-        0,              // DstY
-        0,              // DstZ
-        d3d11_src_buf,  // pSrcResource
-        0,              // SrcSubresource
-        &d3d11_src_box);    // pSrcBox
+    SOKOL_ASSERT(d3d11_dst_buf);
+    const bool staging = src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer;
+    if (staging) {
+        SOKOL_ASSERT(src_buf->d3d11.staging_ptr);
+        SOKOL_ASSERT((desc->src.offset + desc->size) <= (size_t)src_buf->cmn.size);
+        _SG_STRUCT(D3D11_BOX, d3d11_dst_box);
+        d3d11_dst_box.left = (UINT)desc->dst.offset;
+        d3d11_dst_box.right = d3d11_dst_box.left + (UINT)desc->size;
+        d3d11_dst_box.back = 1;
+        d3d11_dst_box.bottom = 1;
+        const void* d3d11_src_ptr = (void*)(src_buf->d3d11.staging_ptr + desc->src.offset);
+        _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_dst_buf, 0, &d3d11_dst_box, d3d11_src_ptr, 0, 0);
+    } else {
+        ID3D11Resource* d3d11_src_buf = (ID3D11Resource*)src_buf->d3d11.buf;
+        SOKOL_ASSERT(d3d11_src_buf);
+        _SG_STRUCT(D3D11_BOX, d3d11_src_box);
+        d3d11_src_box.left = (UINT)desc->src.offset;
+        d3d11_src_box.right = d3d11_src_box.left + (UINT)desc->size;
+        d3d11_src_box.back = 1;
+        d3d11_src_box.bottom = 1;
+        _sg_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
+            d3d11_dst_buf,  // pDstResource
+            0,              // DstSubresource
+            (UINT)desc->dst.offset, // DstX
+            0,              // DstY
+            0,              // DstZ
+            d3d11_src_buf,  // pSrcResource
+            0,              // SrcSubresource
+            &d3d11_src_box);    // pSrcBox
+    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
@@ -23974,13 +24017,22 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             return true;
         }
         SOKOL_ASSERT(desc);
+        const bool injected = desc->gl_buffer || desc->mtl_buffer || desc->d3d11_buffer || desc->wgpu_buffer;
         _sg_validate_begin();
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_BUFFERDESC_CANARY);
         _SG_VALIDATE(desc->size > 0, VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
-        // staging types cannot be combined with vertex/index/storage types
         if (desc->usage.staging_buffer || desc->usage.staging_index_buffer) {
-            _SG_VALIDATE(!(desc->usage.vertex_buffer || desc->usage.index_buffer || desc->usage.storage_buffer), VALIDATE_BUFFERDESC_STAGING_VS_VERTEX_INDEX_STORAGE);
+            // staging buffer type cannot be combined with vertex/index/storage types
+            _SG_VALIDATE(!desc->usage.vertex_buffer, VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER);
+            _SG_VALIDATE(!desc->usage.index_buffer, VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER);
+            _SG_VALIDATE(!desc->usage.storage_buffer, VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER);
+            // staging buffers cannot be injected
+            _SG_VALIDATE(!injected, VALIDATE_BUFFERDESC_STAGING_VS_INJECTED);
+            // staging cannot (yet?) be combined with copy_dst
+            _SG_VALIDATE(!desc->usage.copy_dst, VALIDATE_BUFFERDESC_STAGING_VS_COPYDST);
+            // staging *must* be combined with copy_src
+            _SG_VALIDATE(desc->usage.copy_src, VALIDATE_BUFFERDESC_STAGING_COPYSRC);
         }
         if (_sg.features.separate_buffer_types) {
             _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
@@ -24000,6 +24052,8 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(!desc->usage.copy_dst, VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_COPYDST);
             // write_transient buffers cannot have initial data
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INITIALDATA);
+            // write_transient buffers cannot be injected
+            _SG_VALIDATE(!injected, VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INJECTED);
         }
         if (desc->usage.copy_dst) {
             // copy_dst buffers cannot have initial data
