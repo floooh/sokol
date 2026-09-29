@@ -9807,9 +9807,9 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(const sg_buffer_usage* usg) {
     // need to match the later usage of the buffer (but because of the WebGL2
     // restriction we cannot simply select a random bind point, because in WebGL2
     // a buffer cannot 'switch' bind points later)
-    if (usg->vertex_buffer) {
+    if (usg->vertex_buffer || usg->staging_buffer) {
         return GL_ARRAY_BUFFER;
-    } else if (usg->index_buffer) {
+    } else if (usg->index_buffer || usg->staging_index_buffer) {
         return GL_ELEMENT_ARRAY_BUFFER;
     } else if (usg->storage_buffer) {
         return GL_SHADER_STORAGE_BUFFER;
@@ -9849,14 +9849,12 @@ _SOKOL_PRIVATE GLenum _sg_gl_texture_target(sg_image_type t, int sample_count) {
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_buffer_usage(const sg_buffer_usage* usg) {
-    if (usg->immutable) {
-        return GL_STATIC_DRAW;
-    } else if (usg->write_transient) {
+    if (usg->write_transient) {
         return GL_STREAM_DRAW;
     } else if (usg->copy_dst) {
         return GL_DYNAMIC_COPY;
     } else {
-        SOKOL_UNREACHABLE; return 0;
+        return GL_STATIC_DRAW;
     }
 }
 
@@ -11207,14 +11205,14 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     _SG_GL_CHECK_ERROR();
-    buf->gl.injected = (0 != desc->gl_buffers[0]);
+    buf->gl.injected = (0 != desc->gl_buffer);
     const GLenum gl_target = _sg_gl_buffer_target(&buf->cmn.usage);
     const GLenum gl_usage  = _sg_gl_buffer_usage(&buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         GLuint gl_buf = 0;
         if (buf->gl.injected) {
-            SOKOL_ASSERT(desc->gl_buffers[slot]);
-            gl_buf = desc->gl_buffers[slot];
+            SOKOL_ASSERT(slot == 0);
+            gl_buf = desc->gl_buffer;
         } else {
             glGenBuffers(1, &gl_buf);
             SOKOL_ASSERT(gl_buf);
