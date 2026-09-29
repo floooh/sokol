@@ -3380,7 +3380,7 @@ typedef struct sg_buffer_usage {
     The default configuration is:
 
     .size:      0       (*must* be >0 for buffers without data)
-    .usage      { .vertex_buffer = true, .immutable = true }
+    .usage      { .vertex_buffer = true }
     .data.ptr   0       (*must* be valid for immutable buffers without storage buffer usage)
     .data.size  0       (*must* be > 0 for immutable buffers without storage buffer usage)
     .label      0       (optional string label)
@@ -3406,20 +3406,15 @@ typedef struct sg_buffer_usage {
     The following struct members allow to inject your own GL, Metal
     or D3D11 buffers into sokol_gfx:
 
-    .gl_buffers[SG_NUM_INFLIGHT_FRAMES]
-    .mtl_buffers[SG_NUM_INFLIGHT_FRAMES]
+    .gl_buffer
+    .mtl_buffer
     .d3d11_buffer
     .wgpu_buffer
 
     You must still provide all other struct items except the .data item, and
     these must match the creation parameters of the native buffers you provide.
-    For sg_buffer_desc.usage.immutable buffers, only provide a single native
-    3D-API buffer, otherwise you need to provide SG_NUM_INFLIGHT_FRAMES buffers
-    (only for GL and Metal, not D3D11 or WebGPU). Providing multiple buffers for GL and
-    Metal is necessary because sokol_gfx will rotate through them when calling
-    sg_update_buffer() to prevent lock-stalls.
 
-    Note that it is expected that immutable injected buffer have already been
+    Note that it is expected that injected buffer have already been
     initialized with content, and the .content member must be 0!
 
     Also you need to call sg_reset_state_cache() after calling native 3D-API
@@ -15490,10 +15485,23 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_im
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_buf->cmn.usage.staging_buffer);
+    SOKOL_ASSERT(src_buf->d3d11.staging_ptr);
 
-    // ARGH D3D11 actually doesn't support a copy-buffer-to-texture operation...
-
-    SOKOL_ASSERT(false && "FIXME");
+    ID3D11Resource* d3d11_img = dst_img->d3d11.res;
+    _sg_d3d11_write_miplevel_data(dst_img, d3d11_img,
+        (const uint8_t*)src_buf->d3d11.staging_ptr,
+        (size_t)src_buf->cmn.size,
+        desc->src.offset,
+        desc->src.bytes_per_row,
+        desc->src.bytes_per_slice,
+        desc->dst.mip_level,
+        desc->dst.x,
+        desc->dst.y,
+        desc->dst.slice,
+        desc->size.width,
+        desc->size.height,
+        desc->size.num_slices);
 }
 
 
