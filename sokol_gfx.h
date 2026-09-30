@@ -3794,9 +3794,9 @@ typedef struct sg_image_desc {
     sg_image_data data;
     const char* label;
     // optionally inject backend-specific resources
-    uint32_t gl_textures[SG_NUM_INFLIGHT_FRAMES];
+    uint32_t gl_texture;
     uint32_t gl_texture_target;
-    const void* mtl_textures[SG_NUM_INFLIGHT_FRAMES];
+    const void* mtl_texture;
     const void* d3d11_texture;
     const void* wgpu_texture;
     uint32_t _end_canary;
@@ -4949,9 +4949,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMMUTABLE_VS_WRITABLE, "sg_image_desc.usage: only one of .immutable, .write_transient, .copy_dst can be true") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT, "sg_image_desc.usage: .write_transient not allowed for images with attachment usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_IMMUTABLE, "sg_image_desc.usage: .write_unsealed only allowed for .immutable images") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_ATTACHMENT, "sg_image_desc.usage: .write_unsealed not allowed for images with attachment usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_ATTACHMENT, "sg_image_desc.usage: .write_transient not allowed for images with attachment usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_INJECTED, "sg_image_desc.usage: cannot inject backend-native textures for .write_transient usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT, "sg_image_desc.usage: .copy_dst not allowed for images with attachment usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_COLOR_DEPTH_STENCIL, "sg_image_desc.usage: only one of .color_attachment and .depth_stencil_attachment can be true") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_2D_NUMSLICES, "sg_image_desc.num_slices must be exactly 1 for SG_IMAGETYPE_2D") \
@@ -16497,7 +16498,7 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
 
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
-    const bool injected = (0 != desc->mtl_textures[0]);
+    const bool injected = 0 != desc->mtl_texture;
 
     // first initialize all Metal resource pool slots to 'empty'
     for (int i = 0; i < SG_NUM_INFLIGHT_FRAMES; i++) {
@@ -16513,8 +16514,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
     for (int slot = 0; slot < img->cmn.num_slots; slot++) {
         id<MTLTexture> mtl_tex;
         if (injected) {
-            SOKOL_ASSERT(desc->mtl_textures[slot]);
-            mtl_tex = (__bridge id<MTLTexture>) desc->mtl_textures[slot];
+            SOKOL_ASSERT(0 == slot);
+            SOKOL_ASSERT(desc->mtl_texture);
+            mtl_tex = (__bridge id<MTLTexture>) desc->mtl_texture;
             _SG_OBJC_RETAIN(mtl_tex);
         } else {
             mtl_tex = [_sg.mtl.device newTextureWithDescriptor:mtl_desc];
@@ -24137,8 +24139,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
         const sg_pixel_format fmt = desc->pixel_format;
-        const bool injected = (0 != desc->gl_textures[0]) ||
-                              (0 != desc->mtl_textures[0]) ||
+        const bool injected = (0 != desc->gl_texture) ||
+                              (0 != desc->mtl_texture) ||
                               (0 != desc->d3d11_texture) ||
                               (0 != desc->wgpu_texture);
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
@@ -24168,11 +24170,12 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
         }
         if (usg->write_unsealed) {
-            _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_IMMUTABLE);
-            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITE_UNSEALED_VS_ATTACHMENT);
+            _SG_VALIDATE(usg->immutable, VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_IMMUTABLE);
+            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_ATTACHMENT);
         }
         if (usg->write_transient) {
-            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITE_TRANSIENT_VS_ATTACHMENT);
+            _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_ATTACHMENT);
+            _SG_VALIDATE(!injected, VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_INJECTED);
         }
         if (usg->copy_dst) {
             _SG_VALIDATE(!any_attachment, VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT);
