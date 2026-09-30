@@ -16303,13 +16303,14 @@ _SOKOL_PRIVATE void _sg_mtl_reset_state_cache(void) {
 _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->cmn.size > 0);
-    const bool injected = (0 != desc->mtl_buffers[0]);
+    const bool injected = 0 != desc->mtl_buffer;
     MTLResourceOptions mtl_options = _sg_mtl_buffer_resource_options(&buf->cmn.usage);
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         id<MTLBuffer> mtl_buf;
         if (injected) {
-            SOKOL_ASSERT(desc->mtl_buffers[slot]);
-            mtl_buf = (__bridge id<MTLBuffer>) desc->mtl_buffers[slot];
+            SOKOL_ASSERT(desc->mtl_buffer);
+            SOKOL_ASSERT(slot == 0);
+            mtl_buf = (__bridge id<MTLBuffer>) desc->mtl_buffer;
             _SG_OBJC_RETAIN(mtl_buf);
         } else {
             if (desc->data.ptr) {
