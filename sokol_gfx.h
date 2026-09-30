@@ -11469,7 +11469,7 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_image_desc* desc) {
     SOKOL_ASSERT(img && desc);
     _SG_GL_CHECK_ERROR();
-    img->gl.injected = (0 != desc->gl_textures[0]);
+    img->gl.injected = 0 != desc->gl_texture;
 
     // check if texture format is support
     if (!_sg_gl_supported_texture_format(img->cmn.pixel_format)) {
@@ -11478,12 +11478,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
     }
 
     if (img->gl.injected) {
+        SOKOL_ASSERT(1 == img->cmn.num_slots);
         img->gl.target = _sg_gl_texture_target(img->cmn.type, img->cmn.sample_count);
-        // inject externally GL textures
-        for (int slot = 0; slot < img->cmn.num_slots; slot++) {
-            SOKOL_ASSERT(desc->gl_textures[slot]);
-            img->gl.tex[slot] = desc->gl_textures[slot];
-        }
+        SOKOL_ASSERT(desc->gl_texture);
+        img->gl.tex[0] = desc->gl_texture;
         if (desc->gl_texture_target) {
             img->gl.target = (GLenum)desc->gl_texture_target;
         }
