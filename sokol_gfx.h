@@ -17945,7 +17945,10 @@ _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg)
     if (usg->storage_buffer) {
         res |= (int)WGPUBufferUsage_Storage;
     }
-    if (!usg->immutable) {
+    if (usg->copy_src) {
+        res |= (int)WGPUBufferUsage_CopySrc;
+    }
+    if (usg->copy_dst || usg->write_transient) {
         res |= (int)WGPUBufferUsage_CopyDst;
     }
     return (WGPUBufferUsage)res;
@@ -19113,7 +19116,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
         // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
         // with index buffers containing odd number of indices)
         const uint64_t wgpu_buf_size = _sg_roundup_pow2_u64((uint64_t)buf->cmn.size, 4);
-        const bool map_at_creation = buf->cmn.usage.immutable && (desc->data.ptr || buf->cmn.usage.write_unsealed);
+        const bool map_at_creation = desc->data.ptr || buf->cmn.usage.write_unsealed;
 
         _SG_STRUCT(WGPUBufferDescriptor, wgpu_buf_desc);
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(&buf->cmn.usage);
@@ -19877,19 +19880,21 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
     _sg_stats_inc(wgpu.bindings.num_set_bindgroup);
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_acquire_command_encoder(void) {
+    if (0 == _sg.wgpu.cmd_enc) {
+        _SG_STRUCT(WGPUCommandEncoderDescriptor, cmd_enc_desc);
+        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
+        SOKOL_ASSERT(_sg.wgpu.cmd_enc);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_begin_pass(const sg_pass* pass, const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(pass && atts);
     SOKOL_ASSERT(_sg.wgpu.dev);
     SOKOL_ASSERT(0 == _sg.wgpu.rpass_enc);
     SOKOL_ASSERT(0 == _sg.wgpu.cpass_enc);
 
-    // first pass in the frame? create command encoder
-    if (0 == _sg.wgpu.cmd_enc) {
-        _SG_STRUCT(WGPUCommandEncoderDescriptor, cmd_enc_desc);
-        _sg.wgpu.cmd_enc = wgpuDeviceCreateCommandEncoder(_sg.wgpu.dev, &cmd_enc_desc);
-        SOKOL_ASSERT(_sg.wgpu.cmd_enc);
-    }
-
+    _sg_wgpu_acquire_command_encoder();
     _sg_wgpu_bindings_cache_clear();
     if (pass->compute) {
         _sg_wgpu_begin_compute_pass(pass);
@@ -20081,6 +20086,28 @@ _SOKOL_PRIVATE void _sg_wgpu_write_image_unsealed(_sg_image_t* img, const sg_wri
         desc->size.width,
         desc->size.height,
         desc->size.num_slices);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_buf->wgpu.buf);
+    SOKOL_ASSERT(dst_buf->wgpu.buf);
+
+    _sg_wgpu_acquire_command_encoder();
+    const size_t wgpu_size = _sg_roundup_pow2_u64(desc->size, 4);
+    SOKOL_ASSERT((desc->src.offset + wgpu_size) <= (size_t)src_buf->cmn.size);
+    SOKOL_ASSERT((desc->dst.offset + wgpu_size) <= (size_t)dst_buf->cmn.size);
+    wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, src_buf->wgpu.buf, desc->src.offset, dst_buf->wgpu.buf, desc->dst.offset, wgpu_size);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_img && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME!");
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
