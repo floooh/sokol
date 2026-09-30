@@ -20106,8 +20106,29 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_ima
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_buf->wgpu.buf);
+    SOKOL_ASSERT(dst_img->wgpu.tex);
 
-    SOKOL_ASSERT(false && "FIXME!");
+    _sg_wgpu_acquire_command_encoder();
+
+    const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
+    _SG_STRUCT(WGPUTexelCopyBufferInfo, wgpu_src_info);
+    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_dst_info);
+    _SG_STRUCT(WGPUExtent3D, wgpu_copy_size);
+    wgpu_src_info.buffer = src_buf->wgpu.buf;
+    wgpu_src_info.layout.offset = desc->src.offset;
+    wgpu_src_info.layout.bytesPerRow = (uint32_t)desc->src.bytes_per_row;
+    wgpu_src_info.layout.rowsPerImage = (uint32_t)(desc->src.bytes_per_slice / desc->src.bytes_per_row);
+    wgpu_dst_info.texture = dst_img->wgpu.tex;
+    wgpu_dst_info.mipLevel = (uint32_t)desc->dst.mip_level;
+    wgpu_dst_info.origin.x = (uint32_t)desc->dst.x;
+    wgpu_dst_info.origin.y = (uint32_t)desc->dst.y;
+    wgpu_dst_info.origin.z = (uint32_t)desc->dst.slice;
+    wgpu_dst_info.aspect = WGPUTextureAspect_All;
+    wgpu_copy_size.width = (uint32_t)_sg_roundup_pow2(desc->size.width, block_dim);
+    wgpu_copy_size.height = (uint32_t)_sg_roundup_pow2(desc->size.height, block_dim);
+    wgpu_copy_size.depthOrArrayLayers = (uint32_t)desc->size.num_slices;
+    wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.cmd_enc, &wgpu_src_info, &wgpu_dst_info, &wgpu_copy_size);
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
