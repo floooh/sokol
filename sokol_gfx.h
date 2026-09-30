@@ -7352,6 +7352,7 @@ typedef struct _sg_buffer_s {
     struct {
         WGPUBuffer buf;
         uint8_t* mapped_ptr;
+        uint8_t* staging_ptr;
     } wgpu;
 } _sg_wgpu_buffer_t;
 typedef _sg_wgpu_buffer_t _sg_buffer_t;
@@ -15489,7 +15490,7 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_im
 
     ID3D11Resource* d3d11_img = dst_img->d3d11.res;
     _sg_d3d11_write_miplevel_data(dst_img, d3d11_img,
-        (const uint8_t*)src_buf->d3d11.staging_ptr,
+        src_buf->d3d11.staging_ptr,
         (size_t)src_buf->cmn.size,
         desc->src.offset,
         desc->src.bytes_per_row,
@@ -19117,15 +19118,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(buf->cmn.size > 0);
     const bool injected = (0 != desc->wgpu_buffer);
+    // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
+    // with index buffers containing odd number of indices)
+    const uint64_t wgpu_buf_size = _sg_roundup_pow2_u64((uint64_t)buf->cmn.size, 4);
     if (injected) {
         buf->wgpu.buf = (WGPUBuffer) desc->wgpu_buffer;
         wgpuBufferAddRef(buf->wgpu.buf);
+    } else if (desc->usage.staging_buffer || desc->usage.staging_index_buffer) {
+        buf->wgpu.staging_ptr = (uint8_t*)_sg_malloc(wgpu_buf_size);
     } else {
-        // buffer mapping size must be multiple of 4, so round up buffer size (only a problem
-        // with index buffers containing odd number of indices)
-        const uint64_t wgpu_buf_size = _sg_roundup_pow2_u64((uint64_t)buf->cmn.size, 4);
         const bool map_at_creation = desc->data.ptr || buf->cmn.usage.write_unsealed;
-
         _SG_STRUCT(WGPUBufferDescriptor, wgpu_buf_desc);
         wgpu_buf_desc.usage = _sg_wgpu_buffer_usage(&buf->cmn.usage);
         wgpu_buf_desc.size = wgpu_buf_size;
@@ -19154,12 +19156,15 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_buffer(_sg_buffer_t* buf, const
 
 _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
-    SOKOL_ASSERT(buf->wgpu.buf);
     if (buf->wgpu.mapped_ptr) {
         wgpuBufferUnmap(buf->wgpu.buf);
-        buf->wgpu.mapped_ptr = 0;
     }
-    wgpuBufferRelease(buf->wgpu.buf);
+    if (buf->wgpu.staging_ptr) {
+        _sg_free(buf->wgpu.staging_ptr);
+    }
+    if (buf->wgpu.buf) {
+        wgpuBufferRelease(buf->wgpu.buf);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_seal_buffer(_sg_buffer_t* buf) {
@@ -19170,25 +19175,33 @@ _SOKOL_PRIVATE void _sg_wgpu_seal_buffer(_sg_buffer_t* buf) {
     buf->wgpu.mapped_ptr = 0;
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t dst_offset, const sg_range* src_data, uint64_t src_offset, uint64_t size) {
-    SOKOL_ASSERT((dst_offset + size) <= (uint64_t)buf->cmn.size);
-    SOKOL_ASSERT((src_offset + size) <= src_data->size);
-    const uint8_t* src_ptr = (uint8_t*)src_data->ptr + src_offset;
-    // WebGPU's write-buffer requires the size to be a multiple of four, so we may need to split the copy
-    // operation into two writeBuffer calls
-    uint64_t clamped_size = size & ~3UL;
-    uint64_t extra_size = size & 3UL;
-    SOKOL_ASSERT(extra_size < 4);
-    wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, dst_offset, src_ptr, clamped_size);
-    if (extra_size > 0) {
-        const uint64_t extra_src_offset = clamped_size;
-        const uint64_t extra_dst_offset = dst_offset + clamped_size;
-        uint8_t extra_data[4] = { 0 };
-        const uint8_t* extra_src_ptr = src_ptr + extra_src_offset;
-        for (size_t i = 0; i < extra_size; i++) {
-            extra_data[i] = extra_src_ptr[i];
+_SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t dst_offset, const void* src_data_ptr, size_t src_data_size, uint64_t src_offset, uint64_t copy_size) {
+    SOKOL_ASSERT((dst_offset + copy_size) <= (uint64_t)buf->cmn.size);
+    SOKOL_ASSERT((src_offset + copy_size) <= src_data_size);
+    const bool staging = buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer;
+    const uint8_t* src_ptr = (uint8_t*)src_data_ptr + src_offset;
+    if (staging) {
+        SOKOL_ASSERT(buf->wgpu.staging_ptr);
+        uint8_t* dst_ptr = buf->wgpu.staging_ptr + dst_offset;
+        memcpy(dst_ptr, src_ptr, copy_size);
+    } else {
+        SOKOL_ASSERT(buf->wgpu.buf);
+        // WebGPU's write-buffer requires the size to be a multiple of four, so we may need to split the copy
+        // operation into two writeBuffer calls
+        uint64_t clamped_size = copy_size & ~3UL;
+        uint64_t extra_size = copy_size & 3UL;
+        SOKOL_ASSERT(extra_size < 4);
+        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, dst_offset, src_ptr, clamped_size);
+        if (extra_size > 0) {
+            const uint64_t extra_src_offset = clamped_size;
+            const uint64_t extra_dst_offset = dst_offset + clamped_size;
+            uint8_t extra_data[4] = { 0 };
+            const uint8_t* extra_src_ptr = src_ptr + extra_src_offset;
+            for (size_t i = 0; i < extra_size; i++) {
+                extra_data[i] = extra_src_ptr[i];
+            }
+            wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_data, 4);
         }
-        wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, extra_dst_offset, extra_data, 4);
     }
 }
 
@@ -20041,7 +20054,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_buffer_transient(_sg_buffer_t* buf, const sg_
     SOKOL_ASSERT(buf->cmn.usage.write_transient);
     SOKOL_ASSERT(desc->src.data.ptr && (desc->src.data.size > 0));
     _SOKOL_UNUSED(first_time_in_frame);
-    _sg_wgpu_copy_buffer_data(buf, desc->dst.offset, &desc->src.data, desc->src.offset, desc->size);
+    _sg_wgpu_copy_buffer_data(buf, desc->dst.offset, desc->src.data.ptr, desc->src.data.size, desc->src.offset, desc->size);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_buffer_unsealed(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
@@ -20100,43 +20113,69 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_bu
     SOKOL_ASSERT(src_buf && dst_buf && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
-    SOKOL_ASSERT(src_buf->wgpu.buf);
     SOKOL_ASSERT(dst_buf->wgpu.buf);
-
-    _sg_wgpu_acquire_command_encoder();
-    const size_t wgpu_size = _sg_roundup_pow2_u64(desc->size, 4);
-    SOKOL_ASSERT((desc->src.offset + wgpu_size) <= (size_t)_sg_roundup_pow2(src_buf->cmn.size, 4));
-    SOKOL_ASSERT((desc->dst.offset + wgpu_size) <= (size_t)_sg_roundup_pow2(dst_buf->cmn.size, 4));
-    wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, src_buf->wgpu.buf, desc->src.offset, dst_buf->wgpu.buf, desc->dst.offset, wgpu_size);
+    const bool staging = src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer;
+    if (staging) {
+        SOKOL_ASSERT(src_buf->wgpu.staging_ptr);
+        _sg_wgpu_copy_buffer_data(dst_buf,
+            desc->dst.offset,
+            src_buf->wgpu.staging_ptr,
+            (size_t)src_buf->cmn.size,
+            desc->src.offset,
+            desc->size);
+    } else {
+        SOKOL_ASSERT(src_buf->wgpu.buf);
+        _sg_wgpu_acquire_command_encoder();
+        const size_t wgpu_size = _sg_roundup_pow2_u64(desc->size, 4);
+        SOKOL_ASSERT((desc->src.offset + wgpu_size) <= (size_t)_sg_roundup_pow2(src_buf->cmn.size, 4));
+        SOKOL_ASSERT((desc->dst.offset + wgpu_size) <= (size_t)_sg_roundup_pow2(dst_buf->cmn.size, 4));
+        wgpuCommandEncoderCopyBufferToBuffer(_sg.wgpu.cmd_enc, src_buf->wgpu.buf, desc->src.offset, dst_buf->wgpu.buf, desc->dst.offset, wgpu_size);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
-    SOKOL_ASSERT(src_buf->wgpu.buf);
     SOKOL_ASSERT(dst_img->wgpu.tex);
-
-    _sg_wgpu_acquire_command_encoder();
-
-    const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
-    _SG_STRUCT(WGPUTexelCopyBufferInfo, wgpu_src_info);
-    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_dst_info);
-    _SG_STRUCT(WGPUExtent3D, wgpu_copy_size);
-    wgpu_src_info.buffer = src_buf->wgpu.buf;
-    wgpu_src_info.layout.offset = desc->src.offset;
-    wgpu_src_info.layout.bytesPerRow = (uint32_t)desc->src.bytes_per_row;
-    wgpu_src_info.layout.rowsPerImage = (uint32_t)(desc->src.bytes_per_slice / desc->src.bytes_per_row);
-    wgpu_dst_info.texture = dst_img->wgpu.tex;
-    wgpu_dst_info.mipLevel = (uint32_t)desc->dst.mip_level;
-    wgpu_dst_info.origin.x = (uint32_t)desc->dst.x;
-    wgpu_dst_info.origin.y = (uint32_t)desc->dst.y;
-    wgpu_dst_info.origin.z = (uint32_t)desc->dst.slice;
-    wgpu_dst_info.aspect = WGPUTextureAspect_All;
-    wgpu_copy_size.width = (uint32_t)_sg_roundup_pow2(desc->size.width, block_dim);
-    wgpu_copy_size.height = (uint32_t)_sg_roundup_pow2(desc->size.height, block_dim);
-    wgpu_copy_size.depthOrArrayLayers = (uint32_t)desc->size.num_slices;
-    wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.cmd_enc, &wgpu_src_info, &wgpu_dst_info, &wgpu_copy_size);
+    const bool staging = src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer;
+    if (staging) {
+        SOKOL_ASSERT(src_buf->wgpu.staging_ptr);
+        _sg_wgpu_write_miplevel_data(dst_img,
+            src_buf->wgpu.staging_ptr,
+            (size_t)src_buf->cmn.size,
+            desc->src.offset,
+            desc->src.bytes_per_row,
+            desc->src.bytes_per_slice,
+            desc->dst.mip_level,
+            desc->dst.x,
+            desc->dst.y,
+            desc->dst.slice,
+            desc->size.width,
+            desc->size.height,
+            desc->size.num_slices);
+    } else {
+        SOKOL_ASSERT(src_buf->wgpu.buf);
+        _sg_wgpu_acquire_command_encoder();
+        const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
+        _SG_STRUCT(WGPUTexelCopyBufferInfo, wgpu_src_info);
+        _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_dst_info);
+        _SG_STRUCT(WGPUExtent3D, wgpu_copy_size);
+        wgpu_src_info.buffer = src_buf->wgpu.buf;
+        wgpu_src_info.layout.offset = desc->src.offset;
+        wgpu_src_info.layout.bytesPerRow = (uint32_t)desc->src.bytes_per_row;
+        wgpu_src_info.layout.rowsPerImage = (uint32_t)(desc->src.bytes_per_slice / desc->src.bytes_per_row);
+        wgpu_dst_info.texture = dst_img->wgpu.tex;
+        wgpu_dst_info.mipLevel = (uint32_t)desc->dst.mip_level;
+        wgpu_dst_info.origin.x = (uint32_t)desc->dst.x;
+        wgpu_dst_info.origin.y = (uint32_t)desc->dst.y;
+        wgpu_dst_info.origin.z = (uint32_t)desc->dst.slice;
+        wgpu_dst_info.aspect = WGPUTextureAspect_All;
+        wgpu_copy_size.width = (uint32_t)_sg_roundup_pow2(desc->size.width, block_dim);
+        wgpu_copy_size.height = (uint32_t)_sg_roundup_pow2(desc->size.height, block_dim);
+        wgpu_copy_size.depthOrArrayLayers = (uint32_t)desc->size.num_slices;
+        wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.cmd_enc, &wgpu_src_info, &wgpu_dst_info, &wgpu_copy_size);
+    }
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
