@@ -4933,6 +4933,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .storage_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INJECTED, "sg_buffer_desc.usage: cannot inject backend-native buffers for .staging or .staging_index_buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_COPYDST, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot be combined with .copy_dst") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_COPYSRC, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer must be combined with .copy_src") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_WRITETRANSIENT, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .write_transient") \
@@ -5279,6 +5280,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS, "sg_copy_buffer_to_buffer: must not be called inside a pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER, "sg_copy_buffer_to_buffer: src and dst buffer cannot be the same") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_VALID, "sg_copy_buffer_to_buffer: source buffer resource state must be SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_VALID, "sg_copy_buffer_to_buffer: destination buffer resource state must be SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC, "sg_copy_buffer_to_buffer: source buffer must have .copy_src usage") \
@@ -5302,6 +5304,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be >= 0 and <= destination image width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be >= 0 and <= destination image height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE, "sg_copy_buffer_to_image: desc.size.width must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE, "sg_copy_buffer_to_image: desc.size.height must be a multiple of 4 for compressed pixel formats") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES, "sg_copy_buffer_to_image: desc.size.num_slices must be >= 0 and <= destination image num slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE, "sg_copy_buffer_to_image: desc.dst.x must be >= 0 and < miplevel width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE, "sg_copy_buffer_to_image: desc.dst.y must be >= 0 and < miplevel height") \
@@ -24091,6 +24095,8 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(!desc->usage.copy_dst, VALIDATE_BUFFERDESC_STAGING_VS_COPYDST);
             // staging *must* be combined with copy_src
             _SG_VALIDATE(desc->usage.copy_src, VALIDATE_BUFFERDESC_STAGING_COPYSRC);
+            // staging buffers cannot have initial data
+            _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA);
         }
         if (_sg.features.separate_buffer_types && !(desc->usage.staging_buffer || desc->usage.staging_index_buffer)) {
             _SG_VALIDATE(_sg_one(desc->usage.vertex_buffer, desc->usage.index_buffer, desc->usage.storage_buffer), VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES);
@@ -25719,6 +25725,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         SOKOL_ASSERT(src_buf && dst_buf && desc);
         _sg_validate_begin();
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS);
+        _SG_VALIDATE(desc->src.buffer.id != desc->dst.buffer.id, VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER);
         _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOBUFFER_SRC_VALID);
         _SG_VALIDATE(dst_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOBUFFER_DST_VALID);
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
@@ -25748,7 +25755,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
-        const int bsize = _sg_block_bytesize(dst_img->cmn.pixel_format);
+        const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
         const size_t copy_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
         // NOTE: staging buffer source is a D3D11 restriction, might decide later to
         // scope the validation only to D3D11?
@@ -25759,7 +25766,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
         _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
-        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, bsize), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
+        // WebGPU restriction: wgpuCommandEncoderCopyBufferToTexture requires bytes-per-row to be multiple of 256
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
         _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
         // NOTE: the size validation here is convervative and includes a potential 'tail'
         // on the last row after the actually copied data when source offset > 0,
@@ -25768,6 +25776,8 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL);
         _SG_VALIDATE((desc->size.width >= 0) && (desc->size.width <= mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
         _SG_VALIDATE((desc->size.height >= 0) && (desc->size.height <= mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
+        _SG_VALIDATE(_sg_multiple(desc->size.width, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+        _SG_VALIDATE(_sg_multiple(desc->size.height, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
         _SG_VALIDATE((desc->size.num_slices >= 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES);
         _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE);
         _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE);
