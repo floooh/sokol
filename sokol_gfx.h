@@ -5298,7 +5298,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC, "sg_copy_buffer_to_image: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_dst usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of 4") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of 256 when copying from a non-staging buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: copy operation may read past end of source buffer (consider adding one row of 'slack')") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
@@ -25756,6 +25757,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
         const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
+        const int block_size = _sg_block_bytesize(dst_img->cmn.pixel_format);
         const size_t copy_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
         // NOTE: staging buffer source is a D3D11 restriction, might decide later to
         // scope the validation only to D3D11?
@@ -25766,8 +25768,15 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
         _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
+        if (src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer) {
+            // when copying from staging buffer, source bytes-per-row must be multiple of texture block size
+            _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, block_size), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
+        } else {
+            // WebGPU restriction: when copying from a GPU buffer, bytes-per-row must be a multiple of 256
+            _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+        }
         // WebGPU restriction: wgpuCommandEncoderCopyBufferToTexture requires bytes-per-row to be multiple of 256
-        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
+        //_SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
         _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
         // NOTE: the size validation here is convervative and includes a potential 'tail'
         // on the last row after the actually copied data when source offset > 0,
