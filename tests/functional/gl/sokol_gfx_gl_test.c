@@ -1656,6 +1656,26 @@ UTEST(sokol_gfx_gl, buffer_write_transient_rotates_slots) {
     teardown();
 }
 
+// default write size is the src data size minus the src offset
+UTEST(sokol_gfx_gl, buffer_write_default_size_with_src_offset) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_transient = true });
+    uint8_t bytes[32] = { 0 };
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src = { .data = SG_RANGE(bytes), .offset = 8 },
+        .dst.buffer = buf,
+    });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+    TA(sub != 0);
+    T(sub->args[1].i == 0);
+    T(sub->args[2].i == 24);
+    T(sub->args[3].p == &bytes[8]);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
 UTEST(sokol_gfx_gl, index_buffer_write_transient_uses_element_array_target) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage = { .index_buffer = true, .write_transient = true } });
@@ -1911,6 +1931,71 @@ UTEST(sokol_gfx_gl, image_write_unsealed_then_seal) {
     T(no_errors());
     teardown();
 }
+
+#if !TEST_HAS_TEXSTORAGE
+// without texstorage, compressed images without data are allocated with
+// glCompressedTexImage2D/3D, imageSize must match the format and size
+UTEST(sokol_gfx_gl, image_compressed_alloc_size_without_data) {
+    setup();
+    // BC1: 8 bytes per 4x4 block, mip sizes for 8x8: 32, 8, 8, 8
+    const int mip_sizes[4] = { 32, 8, 8, 8 };
+    gl_mock_clear_calls();
+    sg_image img2d = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8, .num_mipmaps = 4,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img2d) == SG_RESOURCESTATE_UNSEALED);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) == 4);
+    int idx = -1;
+    for (int mip = 0; mip < 4; mip++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glCompressedTexImage2D, idx + 1);
+        TA(idx >= 0);
+        const gl_mock_call_t* c = gl_mock_call(idx);
+        T(c->args[1].i == mip);
+        T(c->args[6].i == mip_sizes[mip]);
+        T(c->args[7].p == 0);
+    }
+
+    // cube: one call per face with the face size
+    gl_mock_clear_calls();
+    sg_image img_cube = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img_cube) == SG_RESOURCESTATE_UNSEALED);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) == 6);
+    idx = -1;
+    for (int face = 0; face < 6; face++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glCompressedTexImage2D, idx + 1);
+        TA(idx >= 0);
+        T(gl_mock_call(idx)->args[6].i == 32);
+    }
+
+    // array: size covers all slices
+    gl_mock_clear_calls();
+    sg_image img_arr = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 8, .height = 8, .num_slices = 3,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img_arr) == SG_RESOURCESTATE_UNSEALED);
+    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCompressedTexImage3D);
+    TA(c != 0);
+    T(c->args[5].i == 3);
+    T(c->args[7].i == 3 * 32);
+    T(c->args[8].p == 0);
+
+    sg_destroy_image(img2d);
+    sg_destroy_image(img_cube);
+    sg_destroy_image(img_arr);
+    T(no_errors());
+    teardown();
+}
+#endif
 
 UTEST(sokol_gfx_gl, image_write_unsealed_compressed) {
     setup();
