@@ -7538,19 +7538,20 @@ typedef struct {
 
 typedef enum {
     _SG_VK_ACCESS_NONE = (0), // initial state for new resources
-    _SG_VK_ACCESS_STAGING = (1<<0),
-    _SG_VK_ACCESS_VERTEXBUFFER = (1<<1),
-    _SG_VK_ACCESS_INDEXBUFFER = (1<<2),
-    _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<3),
-    _SG_VK_ACCESS_STORAGEBUFFER_RW = (1<<4),
-    _SG_VK_ACCESS_TEXTURE = (1<<5),
-    _SG_VK_ACCESS_STORAGEIMAGE = (1<<6),
-    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<7),
-    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<8),
-    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<9),
-    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_DISCARD = (1<<11),    // in combination with attachments
-    _SG_VK_ACCESS_PRESENT = (1<<12),
+    _SG_VK_ACCESS_STAGING_WRITE = (1<<0),
+    _SG_VK_ACCESS_STAGING_READ = (1<<1),
+    _SG_VK_ACCESS_VERTEXBUFFER = (1<<2),
+    _SG_VK_ACCESS_INDEXBUFFER = (1<<3),
+    _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW = (1<<5),
+    _SG_VK_ACCESS_TEXTURE = (1<<6),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<7),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<8),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<9),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<11),
+    _SG_VK_ACCESS_DISCARD = (1<<12),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<13),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -20199,6 +20200,9 @@ _SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_buffer_access_mask(const _sg_buffe
     if (buf->cmn.usage.storage_buffer) {
         res |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
     }
+    if (buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer) {
+        res |= _SG_VK_ACCESS_STAGING_READ;
+    }
     return res;
 }
 
@@ -20233,6 +20237,7 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
         _SG_VK_ACCESS_STORAGEBUFFER_RO |
+        _SG_VK_ACCESS_STAGING_READ |
         _SG_VK_ACCESS_TEXTURE |
         _SG_VK_ACCESS_PRESENT;
     return 0 == (access & ~read_bits);
@@ -20250,7 +20255,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
     if (access & _SG_VK_ACCESS_PRESENT) {
         return VK_PIPELINE_STAGE_2_NONE;
     }
-    if (access & _SG_VK_ACCESS_STAGING) {
+    if (access & (_SG_VK_ACCESS_STAGING_WRITE|_SG_VK_ACCESS_STAGING_READ)) {
         f |= VK_PIPELINE_STAGE_2_COPY_BIT;
     }
     if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
@@ -20317,8 +20322,11 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
             f |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
     }
-    if (access & _SG_VK_ACCESS_STAGING) {
+    if (access & _SG_VK_ACCESS_STAGING_WRITE) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STAGING_READ) {
+        f |= VK_ACCESS_2_TRANSFER_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
         f |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
@@ -20361,7 +20369,9 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     switch (access) {
         case _SG_VK_ACCESS_NONE:
             return VK_IMAGE_LAYOUT_UNDEFINED;
-        case _SG_VK_ACCESS_STAGING:
+        case _SG_VK_ACCESS_STAGING_READ:
+            return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        case _SG_VK_ACCESS_STAGING_WRITE:
             return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         case _SG_VK_ACCESS_TEXTURE:
             return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -21284,7 +21294,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
             _sg_vk_staging_map_memcpy_unmap(mem, cur_ptr, (uint32_t)bytes_to_copy);
             cur_ptr += bytes_to_copy;
             VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
-            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
+            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING_WRITE);
             region.imageOffset.y = y + cur_row * block_dim;
             region.imageExtent.height = (uint32_t)_sg_min(height, rows_to_copy * block_dim);
             vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
@@ -21364,12 +21374,12 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
     VkBuffer vk_stage_buf = _sg.vk.stage.stream.cur_buf;
     VkBuffer vk_dst_buf = buf->vk.buf;
-    _SG_STRUCT(VkBufferCopy, region);
-    region.srcOffset = vk_stage_offset;
-    region.dstOffset = dst_offset;
-    region.size = copy_size;
-    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING);
-    vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &region);
+    _SG_STRUCT(VkBufferCopy, copy_info);
+    copy_info.srcOffset = vk_stage_offset;
+    copy_info.dstOffset = dst_offset;
+    copy_info.size = copy_size;
+    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING_WRITE);
+    vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &copy_info);
     _sg_stats_inc(vk.num_cmd_copy_buffer);
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
@@ -21681,6 +21691,12 @@ _SOKOL_PRIVATE VkBufferUsageFlags _sg_vk_buffer_usage(const sg_buffer_usage* usg
     }
     if (usg->storage_buffer) {
         res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    }
+    if (usg->copy_src) {
+        res |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    }
+    if (usg->copy_dst) {
+        res |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     }
     return res;
 }
@@ -22200,8 +22216,8 @@ _SOKOL_PRIVATE void _sg_vk_destroy_frame_command_pool(void) {
 
 _SOKOL_PRIVATE void _sg_vk_acquire_frame_command_buffers(void) {
     SOKOL_ASSERT(_sg.vk.dev);
-    VkResult res;
     if (0 == _sg.vk.frame.cmd_buf) {
+        VkResult res;
         SOKOL_ASSERT(0 == _sg.vk.frame.stream_cmd_buf);
         _sg.vk.frame_slot = (_sg.vk.frame_slot + 1) % SG_NUM_INFLIGHT_FRAMES;
         // block until oldest inflight-frame has finished
@@ -22382,7 +22398,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
         buf->vk.dev_addr = vkGetBufferDeviceAddress(_sg.vk.dev, &addr_info);
         SOKOL_ASSERT(buf->vk.dev_addr);
     }
-    if (buf->cmn.usage.immutable && desc->data.ptr) {
+    if (desc->data.ptr) {
         _sg_vk_staging_copy_buffer_data(buf, &desc->data, 0, 0, desc->data.size, false);
     }
     return SG_RESOURCESTATE_VALID;
@@ -23402,9 +23418,8 @@ _SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_wr
     SOKOL_ASSERT(buf && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == buf->slot.state);
     SOKOL_ASSERT(buf->cmn.usage.write_transient);
-    if (first_time_in_frame) {
-        _sg_vk_acquire_frame_command_buffers();
-    }
+    _SOKOL_UNUSED(first_time_in_frame);
+    _sg_vk_acquire_frame_command_buffers();
     _sg_vk_staging_stream_buffer_data(buf, &desc->src.data, desc->src.offset, desc->dst.offset, desc->size);
 }
 
@@ -23412,11 +23427,10 @@ _SOKOL_PRIVATE void _sg_vk_write_image_transient(_sg_image_t* img, const sg_writ
     SOKOL_ASSERT(img && desc);
     SOKOL_ASSERT(SG_RESOURCESTATE_VALID == img->slot.state);
     SOKOL_ASSERT(img->cmn.usage.write_transient);
-    if (first_time_in_frame) {
-        _sg_vk_acquire_frame_command_buffers();
-    }
+    _SOKOL_UNUSED(first_time_in_frame);
+    _sg_vk_acquire_frame_command_buffers();
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
-    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING);
+    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING_WRITE);
     _sg_vk_staging_stream_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
@@ -23461,6 +23475,40 @@ _SOKOL_PRIVATE void _sg_vk_write_image_unsealed(_sg_image_t* img, const sg_write
         desc->size.height,
         desc->size.num_slices,
         false); // initial_wait
+}
+
+_SOKOL_PRIVATE void _sg_vk_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_buf && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_buf->vk.buf && dst_buf->vk.buf);
+
+    _sg_vk_acquire_frame_command_buffers();
+
+    // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
+    // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf
+    VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
+    VkBuffer vk_src_buf = src_buf->vk.buf;
+    VkBuffer vk_dst_buf = dst_buf->vk.buf;
+    _SG_STRUCT(VkBufferCopy, copy_info);
+    copy_info.srcOffset = desc->src.offset;
+    copy_info.dstOffset = desc->dst.offset;
+    copy_info.size = desc->size;
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_STAGING_READ);
+    _sg_vk_buffer_barrier(cmd_buf, dst_buf, _SG_VK_ACCESS_STAGING_WRITE);
+    vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &copy_info);
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
+    _sg_vk_buffer_barrier(cmd_buf, dst_buf, _sg_vk_default_buffer_access_mask(dst_buf));
+}
+
+_SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+    SOKOL_ASSERT(src_buf && dst_img && desc);
+    SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 #endif
