@@ -17149,7 +17149,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
                     pass_desc.depthAttachment.slice = (NSUInteger)ds_view->cmn.img.slice;
                     break;
                 case SG_IMAGETYPE_3D:
-                    pass_desc.depthAttachment.resolveDepthPlane = (NSUInteger)ds_view->cmn.img.slice;
+                    pass_desc.depthAttachment.depthPlane = (NSUInteger)ds_view->cmn.img.slice;
                     break;
                 default: break;
             }
@@ -17164,7 +17164,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
                         pass_desc.stencilAttachment.slice = (NSUInteger)ds_view->cmn.img.slice;
                         break;
                     case SG_IMAGETYPE_3D:
-                        pass_desc.stencilAttachment.resolveDepthPlane = (NSUInteger)ds_view->cmn.img.slice;
+                        pass_desc.stencilAttachment.depthPlane = (NSUInteger)ds_view->cmn.img.slice;
                         break;
                     default: break;
                 }
