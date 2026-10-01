@@ -5297,7 +5297,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER, "sg_copy_buffer_to_image: source buffer must have .staging_buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC, "sg_copy_buffer_to_image: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_dst usage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of the dst image pixel format block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of 256 when copying from a non-staging buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
@@ -7538,8 +7538,8 @@ typedef struct {
 
 typedef enum {
     _SG_VK_ACCESS_NONE = (0), // initial state for new resources
-    _SG_VK_ACCESS_STAGING_WRITE = (1<<0),
-    _SG_VK_ACCESS_STAGING_READ = (1<<1),
+    _SG_VK_ACCESS_COPY_SRC = (1<<0),
+    _SG_VK_ACCESS_COPY_DST = (1<<1),
     _SG_VK_ACCESS_VERTEXBUFFER = (1<<2),
     _SG_VK_ACCESS_INDEXBUFFER = (1<<3),
     _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
@@ -20200,8 +20200,8 @@ _SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_buffer_access_mask(const _sg_buffe
     if (buf->cmn.usage.storage_buffer) {
         res |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
     }
-    if (buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer) {
-        res |= _SG_VK_ACCESS_STAGING_READ;
+    if (buf->cmn.usage.copy_src) {
+        res |= _SG_VK_ACCESS_COPY_SRC;
     }
     return res;
 }
@@ -20237,7 +20237,7 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
         _SG_VK_ACCESS_STORAGEBUFFER_RO |
-        _SG_VK_ACCESS_STAGING_READ |
+        _SG_VK_ACCESS_COPY_SRC |
         _SG_VK_ACCESS_TEXTURE |
         _SG_VK_ACCESS_PRESENT;
     return 0 == (access & ~read_bits);
@@ -20255,7 +20255,7 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
     if (access & _SG_VK_ACCESS_PRESENT) {
         return VK_PIPELINE_STAGE_2_NONE;
     }
-    if (access & (_SG_VK_ACCESS_STAGING_WRITE|_SG_VK_ACCESS_STAGING_READ)) {
+    if (access & (_SG_VK_ACCESS_COPY_DST|_SG_VK_ACCESS_COPY_SRC)) {
         f |= VK_PIPELINE_STAGE_2_COPY_BIT;
     }
     if (access & _SG_VK_ACCESS_VERTEXBUFFER) {
@@ -20322,10 +20322,10 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
             f |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
         }
     }
-    if (access & _SG_VK_ACCESS_STAGING_WRITE) {
+    if (access & _SG_VK_ACCESS_COPY_DST) {
         f |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
     }
-    if (access & _SG_VK_ACCESS_STAGING_READ) {
+    if (access & _SG_VK_ACCESS_COPY_SRC) {
         f |= VK_ACCESS_2_TRANSFER_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
@@ -20369,9 +20369,9 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     switch (access) {
         case _SG_VK_ACCESS_NONE:
             return VK_IMAGE_LAYOUT_UNDEFINED;
-        case _SG_VK_ACCESS_STAGING_READ:
+        case _SG_VK_ACCESS_COPY_SRC:
             return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        case _SG_VK_ACCESS_STAGING_WRITE:
+        case _SG_VK_ACCESS_COPY_DST:
             return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         case _SG_VK_ACCESS_TEXTURE:
             return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -21250,8 +21250,6 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     _SG_STRUCT(VkBufferImageCopy2, region);
     _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
-    // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
-    // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf    const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const int block_bytesize = _sg_block_bytesize(img->cmn.pixel_format);
     region.bufferRowLength = (uint32_t)((src_bytes_per_row / block_bytesize) * block_dim);
@@ -21296,7 +21294,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
             _sg_vk_staging_map_memcpy_unmap(mem, cur_ptr, (uint32_t)bytes_to_copy);
             cur_ptr += bytes_to_copy;
             VkCommandBuffer cmd_buf = _sg_vk_staging_copy_begin();
-            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING_WRITE);
+            _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_COPY_DST);
             region.imageOffset.y = y + cur_row * block_dim;
             region.imageExtent.height = (uint32_t)_sg_min(height, rows_to_copy * block_dim);
             vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
@@ -21380,7 +21378,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     region.srcOffset = vk_stage_offset;
     region.dstOffset = dst_offset;
     region.size = copy_size;
-    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING_WRITE);
+    _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_COPY_DST);
     vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &region);
     _sg_stats_inc(vk.num_cmd_copy_buffer);
     // FIXME: not great to issue a barrier right here,
@@ -23432,7 +23430,7 @@ _SOKOL_PRIVATE void _sg_vk_write_image_transient(_sg_image_t* img, const sg_writ
     _SOKOL_UNUSED(first_time_in_frame);
     _sg_vk_acquire_frame_command_buffers();
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
-    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_STAGING_WRITE);
+    _sg_vk_image_barrier(cmd_buf, img, _SG_VK_ACCESS_COPY_DST);
     _sg_vk_staging_stream_miplevel_data(img,
         (const uint8_t*)desc->src.data.ptr,
         desc->src.data.size,
@@ -23496,9 +23494,10 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
     region.srcOffset = desc->src.offset;
     region.dstOffset = desc->dst.offset;
     region.size = desc->size;
-    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_STAGING_READ);
-    _sg_vk_buffer_barrier(cmd_buf, dst_buf, _SG_VK_ACCESS_STAGING_WRITE);
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_COPY_SRC);
+    _sg_vk_buffer_barrier(cmd_buf, dst_buf, _SG_VK_ACCESS_COPY_DST);
     vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
+    _sg_stats_inc(vk.num_cmd_copy_buffer);
     _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
     _sg_vk_buffer_barrier(cmd_buf, dst_buf, _sg_vk_default_buffer_access_mask(dst_buf));
 }
@@ -23527,8 +23526,8 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
     // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf
     VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
-    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_STAGING_READ);
-    _sg_vk_image_barrier(cmd_buf, dst_img, _SG_VK_ACCESS_STAGING_WRITE);
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_COPY_SRC);
+    _sg_vk_image_barrier(cmd_buf, dst_img, _SG_VK_ACCESS_COPY_DST);
 
     _SG_STRUCT(VkBufferImageCopy2, region);
     _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
@@ -23551,6 +23550,7 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
         region.imageSubresource.layerCount = (uint32_t)desc->size.num_slices;
     }
     vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+    _sg_stats_inc(vk.num_cmd_copy_buffer_to_image);
     _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
     _sg_vk_image_barrier(cmd_buf, dst_img, _sg_vk_default_image_access_mask(dst_img));
 }
@@ -25897,7 +25897,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE(dst_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_DST_VALID);
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
-        _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, 4), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
+        _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, (uint64_t)block_size), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
         if (src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer) {
             // when copying from staging buffer, source bytes-per-row must be multiple of texture block size
             _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, block_size), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
