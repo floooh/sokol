@@ -342,12 +342,12 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         T(bufptr->slot.id == buf[i].id);
         T(bufptr->slot.state == SG_RESOURCESTATE_VALID);
         T(bufptr->cmn.size == sizeof(data));
-        T(bufptr->cmn.append_pos == 0);
-        T(!bufptr->cmn.append_overflow);
         T(bufptr->cmn.usage.vertex_buffer);
-        T(bufptr->cmn.usage.immutable);
-        T(bufptr->cmn.update_frame_index == 0);
-        T(bufptr->cmn.append_frame_index == 0);
+        T(!bufptr->cmn.usage.write_transient);
+        T(!bufptr->cmn.usage.copy_dst);
+        T(bufptr->cmn.bind_frame_index == 0);
+        T(bufptr->cmn.copy_src_frame_index == 0);
+        T(bufptr->cmn.write_transient_frame_index == 0);
         T(bufptr->cmn.num_slots == 1);
         T(bufptr->cmn.active_slot == 0);
     }
@@ -588,10 +588,15 @@ UTEST(sokol_gfx, query_buffer_defaults) {
     sg_buffer_desc desc;
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){0});
     T(desc.usage.vertex_buffer);
-    T(desc.usage.immutable);
+    T(!desc.usage.write_transient);
+    T(!desc.usage.copy_dst);
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.index_buffer = true });
     T(desc.usage.index_buffer);
-    T(desc.usage.immutable);
+    T(!desc.usage.vertex_buffer);
+    desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true } });
+    T(desc.usage.staging_buffer);
+    T(desc.usage.copy_src);
+    T(!desc.usage.vertex_buffer);
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.write_transient = true });
     T(desc.usage.vertex_buffer);
     T(desc.usage.write_transient);
@@ -895,8 +900,8 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b0_desc.usage.write_transient);
     T(b0_desc.data.ptr == 0);
     T(b0_desc.data.size == 0);
-    T(b0_desc.gl_buffers[0] == 0);
-    T(b0_desc.mtl_buffers[0] == 0);
+    T(b0_desc.gl_buffer == 0);
+    T(b0_desc.mtl_buffer == 0);
     T(b0_desc.d3d11_buffer == 0);
     T(b0_desc.wgpu_buffer == 0);
     T(sg_query_buffer_size(b0) == 32);
@@ -909,12 +914,13 @@ UTEST(sokol_gfx, query_buffer_desc) {
     const sg_buffer_desc b1_desc = sg_query_buffer_desc(b1);
     T(b1_desc.size == sizeof(vtx_data));
     T(b1_desc.usage.vertex_buffer);
-    T(b1_desc.usage.immutable);
+    T(!b1_desc.usage.write_transient);
+    T(!b1_desc.usage.copy_dst);
     T(b1_desc.data.ptr == 0);
     T(b1_desc.data.size == 0);
     T(sg_query_buffer_size(b1) == sizeof(vtx_data));
     T(sg_query_buffer_usage(b1).vertex_buffer);
-    T(sg_query_buffer_usage(b1).immutable);
+    T(!sg_query_buffer_usage(b1).write_transient);
 
     uint16_t idx_data[8];
     sg_buffer b2 = sg_make_buffer(&(sg_buffer_desc){
@@ -924,12 +930,13 @@ UTEST(sokol_gfx, query_buffer_desc) {
     const sg_buffer_desc b2_desc = sg_query_buffer_desc(b2);
     T(b2_desc.size == sizeof(idx_data));
     T(b2_desc.usage.index_buffer);
-    T(b2_desc.usage.immutable);
+    T(!b2_desc.usage.write_transient);
+    T(!b2_desc.usage.copy_dst);
     T(b2_desc.data.ptr == 0);
     T(b2_desc.data.size == 0);
     T(sg_query_buffer_size(b2) == sizeof(idx_data));
     T(sg_query_buffer_usage(b2).index_buffer);
-    T(sg_query_buffer_usage(b2).immutable);
+    T(!sg_query_buffer_usage(b2).write_transient);
 
     // invalid buffer (returns zeroed desc)
     sg_buffer b3 = sg_make_buffer(&(sg_buffer_desc){
@@ -953,14 +960,15 @@ UTEST(sokol_gfx, query_image_desc) {
         .width = 256,
         .height = 512,
         .pixel_format = SG_PIXELFORMAT_R8,
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
     });
     const sg_image_desc i0_desc = sg_query_image_desc(i0);
     T(i0_desc.type == SG_IMAGETYPE_2D);
     T(!i0_desc.usage.color_attachment);
     T(!i0_desc.usage.resolve_attachment);
     T(!i0_desc.usage.depth_stencil_attachment);
-    T(i0_desc.usage.dynamic_update);
+    T(i0_desc.usage.copy_dst);
+    T(!i0_desc.usage.immutable);
     T(i0_desc.width == 256);
     T(i0_desc.height == 512);
     T(i0_desc.num_slices == 1);
@@ -969,9 +977,9 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.sample_count == 1);
     T(i0_desc.data.mip_levels[0].ptr == 0);
     T(i0_desc.data.mip_levels[0].size == 0);
-    T(i0_desc.gl_textures[0] == 0);
+    T(i0_desc.gl_texture == 0);
     T(i0_desc.gl_texture_target == 0);
-    T(i0_desc.mtl_textures[0] == 0);
+    T(i0_desc.mtl_texture == 0);
     T(i0_desc.d3d11_texture == 0);
     T(i0_desc.wgpu_texture == 0);
     T(sg_query_image_type(i0) == SG_IMAGETYPE_2D);
@@ -987,7 +995,7 @@ UTEST(sokol_gfx, query_image_desc) {
     T(!i0_desc_x.usage.color_attachment);
     T(!i0_desc_x.usage.resolve_attachment);
     T(!i0_desc_x.usage.depth_stencil_attachment);
-    T(!i0_desc_x.usage.dynamic_update);
+    T(!i0_desc_x.usage.copy_dst);
     T(i0_desc_x.width == 0);
     T(i0_desc_x.height == 0);
     T(i0_desc_x.num_slices == 0);
@@ -1398,19 +1406,107 @@ UTEST(sokol_gfx, view_uninit_count) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_buffer_will_overflow) {
+static sg_buffer create_staging_buffer(size_t size) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .size = size,
+        .usage = { .staging_buffer = true, .copy_src = true },
+    });
+}
+
+static sg_buffer create_copy_dst_buffer(size_t size) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .size = size,
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+    });
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 16 },
+        .dst = { .buffer = dst, .offset = 32 },
+        .size = 32,
+    });
+    T(num_log_called == 0);
+    T(_sg_lookup_buffer(src.id)->cmn.copy_src_frame_index == _sg.frame_index);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_usage) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_buffer();
+    sg_buffer dst = create_buffer();
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src,
+        .dst.buffer = dst,
+        .size = 16,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_COPY_DST);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_same_buffer) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 64,
-        .usage.write_transient = true,
+        .usage = { .vertex_buffer = true, .copy_src = true, .copy_dst = true },
     });
-    T(!sg_query_buffer_will_overflow(buf, 32));
-    T(!sg_query_buffer_will_overflow(buf, 64));
-    T(sg_query_buffer_will_overflow(buf, 65));
-    static const uint8_t data[32] = {0};
-    sg_append_buffer(buf, &SG_RANGE(data));
-    T(!sg_query_buffer_will_overflow(buf, 32));
-    T(sg_query_buffer_will_overflow(buf, 33));
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = buf, .offset = 0 },
+        .dst = { .buffer = buf, .offset = 32 },
+        .size = 16,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_size_and_offsets) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(32);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 2 },
+        .dst = { .buffer = dst, .offset = 1 },
+        .size = 0,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OFFSET_ALIGNMENT);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 4);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 32 },
+        .dst = { .buffer = dst, .offset = 16 },
+        .size = 32,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 48 },
+        .dst = { .buffer = dst, .offset = 0 },
+        .size = 32,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
     sg_shutdown();
 }
 
@@ -1866,8 +1962,7 @@ UTEST(sokol_gfx, make_buffer_validate_immutable_nodata) {
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ 0 });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
@@ -1917,37 +2012,64 @@ UTEST(sokol_gfx, make_buffer_validate_no_data_ptr_but_data_size) {
         .data.size = sizeof(data),
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_buffer_usage_dynamic_expect_no_data) {
+UTEST(sokol_gfx, make_buffer_usage_write_transient_expect_no_data) {
     setup(&(sg_desc){0});
     const uint32_t data[16] = {0};
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
         .data = SG_RANGE(data),
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_buffer_usage_stream_expect_no_data) {
+UTEST(sokol_gfx, make_buffer_usage_write_unsealed_expect_no_data) {
     setup(&(sg_desc){0});
     const uint32_t data[16] = {0};
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage.dynamic_update = true,
+        .usage.write_unsealed = true,
         .data = SG_RANGE(data),
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_copy_dst_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.copy_dst = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_staging_validation) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .vertex_buffer = true, .copy_dst = true },
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_COPYDST);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_COPYSRC);
+    T(log_items[3] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA);
+    T(log_items[4] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
+    T(log_items[5] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
@@ -2078,23 +2200,23 @@ UTEST(sokol_gfx, make_image_validate_rt_immutable) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .usage = {
             .color_attachment = true,
-            .dynamic_update = true,
+            .copy_dst = true,
         },
         .width = 8,
         .height = 8,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
+UTEST(sokol_gfx, make_image_validate_copy_dst_no_data) {
     setup(&(sg_desc){0});
     uint32_t pixels[8][8] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
         .data.mip_levels[0] = SG_RANGE(pixels),
@@ -2108,7 +2230,7 @@ UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
 UTEST(sokol_gfx, make_image_validate_compressed_immutable) {
     setup(&(sg_desc){0});
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
@@ -2430,7 +2552,7 @@ UTEST(sokol_gfx, make_view_validate_3dslice) {
 UTEST(sokol_gfx, make_view_validate_image_no_usage) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
     });
