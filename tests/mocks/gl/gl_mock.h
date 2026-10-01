@@ -83,6 +83,8 @@ typedef struct {
     GLenum usage;               // usage of the most recent glBufferData
     int num_data;               // number of glBufferData calls
     int num_subdata;            // number of glBufferSubData calls
+    int num_copy_read;          // number of glCopyBufferSubData calls reading from this buffer
+    int num_copy_write;         // number of glCopyBufferSubData calls writing into this buffer
 } gl_mock_buffer_info_t;
 
 typedef struct {
@@ -96,6 +98,8 @@ typedef struct {
     GLuint view_orig_texture;   // only valid if 'is_view' is true
     int num_image;              // number of glTexImage* / glCompressedTexImage* calls
     int num_subimage;           // number of glTexSubImage* / glCompressedTexSubImage* calls
+    int num_subimage_unpack_buffer; // ...of which sourced from a GL_PIXEL_UNPACK_BUFFER
+    GLuint last_unpack_buffer;  // GL_PIXEL_UNPACK_BUFFER bound at the most recent such call
 } gl_mock_texture_info_t;
 
 typedef struct {
@@ -151,6 +155,9 @@ typedef struct {
     GLuint array_buffer;
     GLuint element_array_buffer;
     GLuint shader_storage_buffer;
+    GLuint copy_read_buffer;
+    GLuint copy_write_buffer;
+    GLuint pixel_unpack_buffer;
     GLenum active_texture;      // GL_TEXTURE0 + unit
 } gl_mock_bindings_t;
 

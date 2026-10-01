@@ -153,6 +153,7 @@ typedef uint64_t        GLuint64;
 #define GL_ARRAY_BUFFER                                0x8892
 #define GL_BACK                                        0x0405
 #define GL_BLEND                                       0x0BE2
+#define GL_BUFFER_UPDATE_BARRIER_BIT                   0x00000200
 #define GL_BYTE                                        0x1400
 #define GL_CCW                                         0x0901
 #define GL_CLAMP_TO_BORDER                             0x812D
@@ -188,6 +189,8 @@ typedef uint64_t        GLuint64;
 #define GL_COMPUTE_SHADER                              0x91B9
 #define GL_CONSTANT_ALPHA                              0x8003
 #define GL_CONSTANT_COLOR                              0x8001
+#define GL_COPY_READ_BUFFER                            0x8F36
+#define GL_COPY_WRITE_BUFFER                           0x8F37
 #define GL_CULL_FACE                                   0x0B44
 #define GL_CURRENT_PROGRAM                             0x8B8D
 #define GL_CW                                          0x0900
@@ -207,6 +210,7 @@ typedef uint64_t        GLuint64;
 #define GL_DRAW_FRAMEBUFFER                            0x8CA9
 #define GL_DST_ALPHA                                   0x0304
 #define GL_DST_COLOR                                   0x0306
+#define GL_DYNAMIC_COPY                                0x88EA
 #define GL_DYNAMIC_DRAW                                0x88E8
 #define GL_ELEMENT_ARRAY_BARRIER_BIT                   0x00000002
 #define GL_ELEMENT_ARRAY_BUFFER                        0x8893
@@ -284,6 +288,7 @@ typedef uint64_t        GLuint64;
 #define GL_ONE_MINUS_SRC1_COLOR                        0x88FA
 #define GL_ONE_MINUS_SRC_ALPHA                         0x0303
 #define GL_ONE_MINUS_SRC_COLOR                         0x0301
+#define GL_PIXEL_UNPACK_BUFFER                         0x88EC
 #define GL_POINTS                                      0x0000
 #define GL_POLYGON_OFFSET_FILL                         0x8037
 #define GL_PROGRAM_POINT_SIZE                          0x8642
@@ -392,6 +397,7 @@ typedef uint64_t        GLuint64;
 #define GL_TEXTURE_MAX_LOD                             0x813B
 #define GL_TEXTURE_MIN_FILTER                          0x2801
 #define GL_TEXTURE_MIN_LOD                             0x813A
+#define GL_TEXTURE_UPDATE_BARRIER_BIT                  0x00000100
 #define GL_TEXTURE_WRAP_R                              0x8072
 #define GL_TEXTURE_WRAP_S                              0x2802
 #define GL_TEXTURE_WRAP_T                              0x2803
@@ -543,6 +549,7 @@ typedef uint64_t        GLuint64;
     _GLM_XMACRO(glDrawElementsInstancedBaseVertex, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex)) \
     _GLM_XMACRO(glDrawElementsInstancedBaseVertexBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance)) \
     _GLM_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
+    _GLM_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
     _GLM_XMACRO(glInvalidateFramebuffer,          void, (GLenum target, GLsizei numAttachments, const GLenum* attachments))
 
 // generate GL function prototypes

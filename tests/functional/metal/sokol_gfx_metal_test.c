@@ -10,8 +10,11 @@
 //    - backend setup, caps, storage mode   _sg_mtl_setup_backend / _sg_mtl_init_caps
 //    - resource pool and deferred release  _sg_mtl_add_resource / _sg_mtl_release_resource
 //    - buffer creation and updates         _sg_mtl_create_buffer / _sg_mtl_write_buffer_*
-//    - managed storage flush               _sg_mtl_commit_write_range
+//    - buffer usage combinations           _sg_mtl_buffer_resource_options
+//    - managed storage flush               _sg_mtl_commit_buffer_write_range
 //    - image creation and updates          _sg_mtl_create_image / _sg_mtl_write_miplevel_data
+//    - buffer and image copies             _sg_mtl_copy_buffer_to_buffer / _sg_mtl_copy_buffer_to_image
+//    - blit encoder lifetime               _sg_mtl_acquire_blit_cmd_encoder / _sg_mtl_finish_blit_cmd_encoder
 //    - pixel format mapping                _sg_mtl_pixel_format / _sg_mtl_texture_type
 //    - sampler creation                    _sg_mtl_create_sampler / _sg_mtl_address_mode / ...
 //    - shader creation                     _sg_mtl_create_shader / _sg_mtl_compile_library
@@ -44,6 +47,9 @@
 
 // Metal vertex buffer bind slots start after the uniform- and storage-buffer slots
 #define MTL_VB_SLOT(n) (23 + (n))
+
+// the storage mode bits of MTLResourceOptions (MTLResourceStorageModeShared is 0)
+#define MTL_STORAGE_MODE_MASK ((MTLResourceOptions)0xF0)
 
 //== test harness ==============================================================
 #define MAX_LOG_ITEMS (64)
@@ -200,7 +206,7 @@ static sg_pipeline make_pipeline(sg_shader shd) {
 
 static sg_buffer make_vbuf(void) {
     return sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .data = { .ptr = scratch, .size = 128 },
         .label = "vbuf",
     });
@@ -268,13 +274,13 @@ UTEST(sokol_gfx_metal, init_caps_no_border_color) {
 UTEST(sokol_gfx_metal, shared_storage_mode) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .data = { .ptr = scratch, .size = 64 },
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     metal_mock_buffer_info_t info = {0};
     T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[0], &info));
-    T((info.options & MTLResourceStorageModeShared) == MTLResourceStorageModeShared);
+    T((info.options & MTL_STORAGE_MODE_MASK) == MTLResourceStorageModeShared);
     teardown();
 }
 
@@ -282,16 +288,19 @@ UTEST(sokol_gfx_metal, managed_storage_mode) {
     setup_with((setup_desc_t){ .non_apple_gpu = true });
     T(metal_mock_count_calls(METAL_MOCK_FUNC_supportsFamily) > 0);
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .dynamic_update = true },
+        .usage = { .vertex_buffer = true, .write_unsealed = true },
         .size = 64,
     });
     metal_mock_buffer_info_t info = {0};
     T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[0], &info));
-    T((info.options & MTLResourceStorageModeManaged) == MTLResourceStorageModeManaged);
-    // updating a managed buffer must flush the modified range, the update goes
-    // into the next inflight slot
-    sg_update_buffer(buf, &(sg_range){ .ptr = scratch, .size = 32 });
-    T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[1], &info));
+    T((info.options & MTL_STORAGE_MODE_MASK) == MTLResourceStorageModeManaged);
+    // sealing a managed buffer must flush the modified range
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){
+        .src.data = { .ptr = scratch, .size = 32 },
+        .dst.buffer = buf,
+    });
+    sg_seal_buffer(buf);
+    T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[0], &info));
     T(info.num_did_modify_range == 1);
     T(info.last_modified_offset == 0);
     T(info.last_modified_length == 32);
@@ -301,12 +310,12 @@ UTEST(sokol_gfx_metal, managed_storage_mode) {
 UTEST(sokol_gfx_metal, force_managed_storage_mode) {
     setup_with((setup_desc_t){ .force_managed_storage_mode = true });
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .dynamic_update = true },
+        .usage = { .vertex_buffer = true, .write_transient = true },
         .size = 64,
     });
     metal_mock_buffer_info_t info = {0};
     T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[0], &info));
-    T((info.options & MTLResourceStorageModeManaged) == MTLResourceStorageModeManaged);
+    T((info.options & MTL_STORAGE_MODE_MASK) == MTLResourceStorageModeManaged);
     teardown();
 }
 
@@ -314,7 +323,7 @@ UTEST(sokol_gfx_metal, force_managed_storage_mode) {
 UTEST(sokol_gfx_metal, create_buffer_with_data) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .data = { .ptr = scratch, .size = 128 },
         .label = "immutable-buf",
     });
@@ -332,12 +341,12 @@ UTEST(sokol_gfx_metal, create_buffer_without_data) {
     setup();
     const int num_before = metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithLength);
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .dynamic_update = true },
+        .usage = { .vertex_buffer = true, .write_transient = true },
         .size = 256,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
-    // double-buffered: one MTLBuffer per inflight frame
-    T(metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithLength) > num_before);
+    // write-transient buffers have one MTLBuffer per inflight frame
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithLength) == (num_before + SG_NUM_INFLIGHT_FRAMES));
     metal_mock_buffer_info_t info = {0};
     T(metal_mock_buffer_info(sg_mtl_query_buffer_info(buf).buf[0], &info));
     T(!info.with_bytes);
@@ -349,16 +358,16 @@ UTEST(sokol_gfx_metal, create_buffer_without_data) {
 UTEST(sokol_gfx_metal, create_buffer_injected) {
     setup();
     sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .data = { .ptr = scratch, .size = 64 },
     });
     const void* mtl_buf = sg_mtl_query_buffer_info(src).buf[0];
     const int rc = metal_mock_retain_count(mtl_buf);
     metal_mock_clear_calls();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .size = 64,
-        .mtl_buffers[0] = mtl_buf,
+        .mtl_buffer = mtl_buf,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     T(sg_mtl_query_buffer_info(buf).buf[0] == mtl_buf);
@@ -380,7 +389,7 @@ UTEST(sokol_gfx_metal, create_image_injected) {
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage.immutable = true,
-        .mtl_textures[0] = mtl_tex,
+        .mtl_texture = mtl_tex,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     // sokol-gfx must retain the injected texture instead of taking the
@@ -414,32 +423,11 @@ UTEST(sokol_gfx_metal, create_buffer_failed) {
     setup();
     metal_mock_fail_next(METAL_MOCK_OBJ_BUFFER, 1);
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .immutable = true },
+        .usage.vertex_buffer = true,
         .data = { .ptr = scratch, .size = 64 },
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
     T(logged(SG_LOGITEM_METAL_CREATE_BUFFER_FAILED));
-    teardown();
-}
-
-UTEST(sokol_gfx_metal, update_and_append_buffer) {
-    setup();
-    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .dynamic_update = true },
-        .size = 256,
-    });
-    metal_mock_clear_calls();
-    sg_update_buffer(buf, &(sg_range){ .ptr = scratch, .size = 64 });
-    T(metal_mock_count_calls(METAL_MOCK_FUNC_contents) == 1);
-    // append into the *other* inflight slot after a frame boundary is not needed,
-    // appends within the same frame accumulate in the current slot
-    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .vertex_buffer = true, .dynamic_update = true },
-        .size = 256,
-    });
-    T(sg_append_buffer(abuf, &(sg_range){ .ptr = scratch, .size = 32 }) == 0);
-    T(sg_append_buffer(abuf, &(sg_range){ .ptr = scratch, .size = 32 }) == 32);
-    T(!sg_query_buffer_overflow(abuf));
     teardown();
 }
 
@@ -502,12 +490,354 @@ UTEST(sokol_gfx_metal, discard_buffer_deferred_release) {
 UTEST(sokol_gfx_metal, storage_buffer) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .storage_buffer = true, .immutable = true },
+        .usage.storage_buffer = true,
         .data = { .ptr = scratch, .size = 256 },
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
     T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    teardown();
+}
+
+//== buffer usage combinations =================================================
+typedef struct {
+    sg_buffer_usage usage;
+    bool with_data;
+    int num_slots;
+    bool write_combined;
+} buffer_usage_case_t;
+
+static const buffer_usage_case_t buffer_usage_cases[] = {
+    { .usage = { 0 }, .with_data = true, .num_slots = 1 },     // defaults to vertex_buffer
+    { .usage = { .vertex_buffer = true }, .with_data = true, .num_slots = 1 },
+    { .usage = { .index_buffer = true }, .with_data = true, .num_slots = 1 },
+    { .usage = { .storage_buffer = true }, .with_data = true, .num_slots = 1 },
+    { .usage = { .vertex_buffer = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .index_buffer = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .storage_buffer = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .vertex_buffer = true, .write_unsealed = true }, .num_slots = 1, .write_combined = true },
+    { .usage = { .storage_buffer = true, .write_unsealed = true, .copy_src = true }, .num_slots = 1, .write_combined = true },
+    { .usage = { .vertex_buffer = true, .copy_src = true }, .with_data = true, .num_slots = 1 },
+    { .usage = { .vertex_buffer = true, .copy_dst = true }, .num_slots = 1 },
+    { .usage = { .storage_buffer = true, .copy_src = true, .copy_dst = true }, .num_slots = 1 },
+    { .usage = { .staging_buffer = true, .copy_src = true }, .num_slots = 1 },
+    { .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .staging_index_buffer = true, .copy_src = true }, .num_slots = 1 },
+};
+
+static void check_buffer_usage_cases(int* utest_result, MTLResourceOptions expected_storage_mode) {
+    const int num_cases = (int)(sizeof(buffer_usage_cases) / sizeof(buffer_usage_cases[0]));
+    for (int i = 0; i < num_cases; i++) {
+        const buffer_usage_case_t* c = &buffer_usage_cases[i];
+        metal_mock_clear_calls();
+        sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = c->usage,
+            .size = 64,
+            .data = c->with_data ? (sg_range){ .ptr = scratch, .size = 64 } : (sg_range){ 0 },
+            .label = "buf",
+        });
+        // write-unsealed buffers start in UNSEALED state until sg_seal_buffer()
+        const sg_resource_state expected_state = c->usage.write_unsealed ? SG_RESOURCESTATE_UNSEALED : SG_RESOURCESTATE_VALID;
+        T(sg_query_buffer_state(buf) == expected_state);
+        // one MTLBuffer per slot, created with or without initial bytes
+        const int num_with_bytes = metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithBytes);
+        const int num_with_length = metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithLength);
+        T(num_with_bytes == (c->with_data ? c->num_slots : 0));
+        T(num_with_length == (c->with_data ? 0 : c->num_slots));
+        const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(buf);
+        T(mtl_info.active_slot == 0);
+        for (int slot = 0; slot < SG_NUM_INFLIGHT_FRAMES; slot++) {
+            if (slot >= c->num_slots) {
+                T(mtl_info.buf[slot] == 0);
+                continue;
+            }
+            metal_mock_buffer_info_t info = {0};
+            T(metal_mock_buffer_info(mtl_info.buf[slot], &info));
+            T(info.length == 64);
+            T(info.with_bytes == c->with_data);
+            T((info.options & MTL_STORAGE_MODE_MASK) == expected_storage_mode);
+            T(((info.options & MTLResourceCPUCacheModeWriteCombined) != 0) == c->write_combined);
+            T_LABEL(info.label, slot == 0 ? "buf.0" : "buf.1");
+        }
+        sg_destroy_buffer(buf);
+    }
+}
+
+UTEST(sokol_gfx_metal, buffer_usage_resource_options_shared) {
+    setup();
+    check_buffer_usage_cases(utest_result, MTLResourceStorageModeShared);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, buffer_usage_resource_options_managed) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    check_buffer_usage_cases(utest_result, MTLResourceStorageModeManaged);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, buffer_usage_resource_options_force_managed) {
+    setup_with((setup_desc_t){ .force_managed_storage_mode = true });
+    check_buffer_usage_cases(utest_result, MTLResourceStorageModeManaged);
+    teardown();
+}
+
+//== buffer writes =============================================================
+static uint8_t pattern[1024];
+
+static void fill_pattern(uint8_t seed) {
+    for (size_t i = 0; i < sizeof(pattern); i++) {
+        pattern[i] = (uint8_t)(seed + i);
+    }
+}
+
+UTEST(sokol_gfx_metal, write_buffer_transient_rotation) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true },
+        .size = 64,
+    });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(buf);
+    T(mtl_info.active_slot == 0);
+    // the first write in a frame rotates to the next slot
+    fill_pattern(1);
+    metal_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = 16 },
+        .dst.buffer = buf,
+    });
+    T(sg_mtl_query_buffer_info(buf).active_slot == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_contents);
+    T(call && (call->obj == mtl_info.buf[1]));
+    T(0 == memcmp(metal_mock_buffer_data(mtl_info.buf[1]), pattern, 16));
+    // a second write in the same frame goes into the same slot, with a source offset
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src = { .data = { .ptr = pattern, .size = 64 }, .offset = 8 },
+        .dst = { .buffer = buf, .offset = 32 },
+        .size = 16,
+    });
+    T(sg_mtl_query_buffer_info(buf).active_slot == 1);
+    T(0 == memcmp((const uint8_t*)metal_mock_buffer_data(mtl_info.buf[1]) + 32, pattern + 8, 16));
+    // the other slot stays untouched
+    const uint8_t* slot0 = (const uint8_t*)metal_mock_buffer_data(mtl_info.buf[0]);
+    T(slot0[0] == 0 && slot0[32] == 0);
+    // the next frame rotates back to slot 0
+    sg_commit();
+    fill_pattern(100);
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = 64 },
+        .dst.buffer = buf,
+    });
+    T(sg_mtl_query_buffer_info(buf).active_slot == 0);
+    T(0 == memcmp(metal_mock_buffer_data(mtl_info.buf[0]), pattern, 64));
+    // shared storage never needs a flush
+    metal_mock_buffer_info_t info = {0};
+    T(metal_mock_buffer_info(mtl_info.buf[0], &info));
+    T(info.num_did_modify_range == 0);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, write_buffer_unsealed_shared) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_unsealed = true },
+        .size = 128,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    const void* mtl_buf = sg_mtl_query_buffer_info(buf).buf[0];
+    fill_pattern(7);
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = 64 },
+        .dst = { .buffer = buf, .offset = 64 },
+    });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern + 64, .size = 64 },
+        .dst = { .buffer = buf, .offset = 0 },
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    // unsealed writes never rotate the slot
+    T(sg_mtl_query_buffer_info(buf).active_slot == 0);
+    const uint8_t* data = (const uint8_t*)metal_mock_buffer_data(mtl_buf);
+    T(0 == memcmp(data, pattern + 64, 64));
+    T(0 == memcmp(data + 64, pattern, 64));
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    // no didModifyRange in shared storage mode
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 0);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, seal_buffer_without_writes) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_unsealed = true },
+        .size = 64,
+    });
+    metal_mock_clear_calls();
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    // an empty dirty range is not flushed
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 0);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, managed_flush_at_bind_time) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs",
+        .fragment_func.source = "fs",
+        .views[0].storage_buffer = {
+            .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true, .msl_buffer_n = 8,
+        },
+    });
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true },
+        .size = 128,
+    });
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .index_buffer = true, .write_transient = true },
+        .size = 64,
+    });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_transient = true },
+        .size = 256,
+    });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    for (int frame = 0; frame < 2; frame++) {
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = { .ptr = scratch, .size = 48 },
+            .dst = { .buffer = vbuf, .offset = 16 },
+        });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = { .ptr = scratch, .size = 32 },
+            .dst.buffer = ibuf,
+        });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = { .ptr = scratch, .size = 64 },
+            .dst = { .buffer = sbuf, .offset = 128 },
+        });
+        sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+        sg_apply_pipeline(pip);
+        metal_mock_clear_calls();
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .views[0] = sview });
+        // each written buffer flushes exactly its dirty range on its active slot
+        T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 3);
+        const void* mtl_vbuf = sg_mtl_query_buffer_info(vbuf).buf[sg_mtl_query_buffer_info(vbuf).active_slot];
+        const void* mtl_ibuf = sg_mtl_query_buffer_info(ibuf).buf[sg_mtl_query_buffer_info(ibuf).active_slot];
+        const void* mtl_sbuf = sg_mtl_query_buffer_info(sbuf).buf[sg_mtl_query_buffer_info(sbuf).active_slot];
+        for (int i = 0; i < metal_mock_num_calls(); i++) {
+            const metal_mock_call_t* call = metal_mock_call(i);
+            if (call->func != METAL_MOCK_FUNC_didModifyRange) {
+                continue;
+            }
+            if (call->obj == mtl_vbuf) {
+                T(call->args[0].u == 16 && call->args[1].u == 48);
+            } else if (call->obj == mtl_ibuf) {
+                T(call->args[0].u == 0 && call->args[1].u == 32);
+            } else {
+                T(call->obj == mtl_sbuf);
+                T(call->args[0].u == 128 && call->args[1].u == 64);
+            }
+        }
+        // rebinding in the same frame doesn't flush again
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .views[0] = sview });
+        T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 3);
+        sg_end_pass();
+        sg_commit();
+    }
+    // a frame without writes doesn't flush at bind time
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .views[0] = sview });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 0);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, managed_flush_at_bind_time_compute) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .mtl_threads_per_threadgroup = { .x = 32, .y = 1, .z = 1 },
+        .views[0].storage_buffer = {
+            .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true, .msl_buffer_n = 8,
+        },
+    });
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .compute = true, .shader = shd });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_transient = true },
+        .size = 256,
+    });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = scratch, .size = 32 },
+        .dst = { .buffer = sbuf, .offset = 64 },
+    });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(sbuf);
+    T(num_log_items == 0);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_didModifyRange);
+    T(call && (call->obj == mtl_info.buf[mtl_info.active_slot]));
+    T(call && (call->args[0].u == 64) && (call->args[1].u == 32));
+    // the flush must happen before the buffer is bound
+    T(metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0) < metal_mock_find_call(METAL_MOCK_FUNC_setBuffer, 0));
+    T(metal_mock_compute_encoder_state()->buffers[8].buffer == mtl_info.buf[mtl_info.active_slot]);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, create_buffer_injected_copy_dst) {
+    setup();
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    const void* mtl_buf = sg_mtl_query_buffer_info(src).buf[0];
+    metal_mock_clear_calls();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 64,
+        .mtl_buffer = mtl_buf,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(buf);
+    T(mtl_info.buf[0] == mtl_buf);
+    T(mtl_info.buf[1] == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_newBufferWithLength) == 0);
+    // the injected buffer can be a copy destination
+    sg_buffer staging = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true },
+        .size = 64,
+    });
+    fill_pattern(33);
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = 64 },
+        .dst.buffer = staging,
+    });
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = staging,
+        .dst.buffer = buf,
+        .size = 64,
+    });
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToBuffer);
+    T(call && (call->args[2].p == mtl_buf));
+    T(0 == memcmp(metal_mock_buffer_data(mtl_buf), pattern, 64));
+    sg_commit();
+    sg_destroy_buffer(buf);
     teardown();
 }
 
@@ -641,7 +971,7 @@ UTEST(sokol_gfx_metal, create_image_failed) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(logged(SG_LOGITEM_METAL_CREATE_TEXTURE_FAILED));
@@ -668,7 +998,7 @@ UTEST(sokol_gfx_metal, pixelformat_sweep) {
             desc.usage.immutable = true;
             desc.data.mip_levels[0] = (sg_range){ .ptr = scratch, .size = (size_t)size };
         } else {
-            desc.usage.dynamic_update = true;
+            desc.usage.write_transient = true;
         }
         sg_image img = sg_make_image(&desc);
         T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -679,17 +1009,19 @@ UTEST(sokol_gfx_metal, pixelformat_sweep) {
     teardown();
 }
 
-UTEST(sokol_gfx_metal, update_image) {
+UTEST(sokol_gfx_metal, write_image_transient_defaults) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
     });
     metal_mock_clear_calls();
-    sg_update_image(img, &(sg_image_data){
-        .mip_levels[0] = { .ptr = scratch, .size = 16 * 16 * 4 },
+    // zero-initialized pitches and sizes default to the whole mip level
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 16 * 16 * 4 },
+        .dst.image = img,
     });
     T(metal_mock_count_calls(METAL_MOCK_FUNC_replaceRegion) == 1);
     const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_replaceRegion);
@@ -1764,7 +2096,7 @@ UTEST(sokol_gfx_metal, apply_bindings_vertex_and_index_buffers) {
     sg_buffer vbuf0 = make_vbuf();
     sg_buffer vbuf1 = make_vbuf();
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .index_buffer = true, .immutable = true },
+        .usage.index_buffer = true,
         .data = { .ptr = scratch, .size = 64 },
     });
     sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
@@ -1878,7 +2210,7 @@ UTEST(sokol_gfx_metal, apply_bindings_storage_buffer) {
     });
     sg_pipeline pip = make_pipeline(shd);
     sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .storage_buffer = true, .immutable = true },
+        .usage.storage_buffer = true,
         .data = { .ptr = scratch, .size = 256 },
     });
     sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
@@ -1982,7 +2314,7 @@ UTEST(sokol_gfx_metal, draw_indexed) {
         .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
     });
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){
-        .usage = { .index_buffer = true, .immutable = true },
+        .usage.index_buffer = true,
         .data = { .ptr = scratch, .size = 64 },
     });
     sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
@@ -2080,6 +2412,750 @@ UTEST(sokol_gfx_metal, debug_groups) {
     sg_commit();
     teardown();
     discard_swapchain(&sc);
+}
+
+//== copies and the blit encoder ===============================================
+// a staging buffer filled with the current 'pattern' via a transient write
+static sg_buffer make_staging_buffer(size_t size) {
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true },
+        .size = size,
+        .label = "staging",
+    });
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = size },
+        .dst.buffer = buf,
+    });
+    return buf;
+}
+
+static const void* active_mtl_buf(sg_buffer buf) {
+    const sg_mtl_buffer_info info = sg_mtl_query_buffer_info(buf);
+    return info.buf[info.active_slot];
+}
+
+static const void* active_mtl_tex(sg_image img) {
+    const sg_mtl_image_info info = sg_mtl_query_image_info(img);
+    return info.tex[info.active_slot];
+}
+
+static sg_image make_copy_dst_image(sg_image_type type, int width, int height, int num_slices, int num_mipmaps) {
+    return sg_make_image(&(sg_image_desc){
+        .type = type,
+        .width = width,
+        .height = height,
+        .num_slices = num_slices,
+        .num_mipmaps = num_mipmaps,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+        .label = "copy-dst",
+    });
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_buffer) {
+    setup();
+    fill_pattern(17);
+    sg_buffer src = make_staging_buffer(256);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .copy_dst = true },
+        .size = 256,
+    });
+    const void* mtl_src = active_mtl_buf(src);
+    const void* mtl_dst = active_mtl_buf(dst);
+    T(sg_mtl_query_buffer_info(src).active_slot == 1);
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 16 },
+        .dst = { .buffer = dst, .offset = 64 },
+        .size = 128,
+    });
+    // outside a pass: command buffer, then blit encoder, then the copy
+    const int i_cmdbuf = metal_mock_find_call(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences, 0);
+    const int i_enqueue = metal_mock_find_call(METAL_MOCK_FUNC_enqueue, 0);
+    const int i_handler = metal_mock_find_call(METAL_MOCK_FUNC_addCompletedHandler, 0);
+    const int i_blit = metal_mock_find_call(METAL_MOCK_FUNC_blitCommandEncoder, 0);
+    const int i_copy = metal_mock_find_call(METAL_MOCK_FUNC_copyFromBufferToBuffer, 0);
+    T(i_cmdbuf == 0);
+    T(i_cmdbuf < i_enqueue && i_enqueue < i_handler && i_handler < i_blit && i_blit < i_copy);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 0);
+    // shared storage: no flush of the source range
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 0);
+    const metal_mock_call_t* call = metal_mock_call(i_copy);
+    const void* blit_enc = call->obj;
+    T(metal_mock_is_object(METAL_MOCK_OBJ_BLIT_ENCODER, blit_enc));
+    T(metal_mock_call(i_blit)->obj == metal_mock_call(i_enqueue)->obj);
+    T(call->args[0].p == mtl_src);
+    T(call->args[1].u == 16);
+    T(call->args[2].p == mtl_dst);
+    T(call->args[3].u == 64);
+    T(call->args[4].u == 128);
+    T(0 == memcmp((const uint8_t*)metal_mock_buffer_data(mtl_dst) + 64, pattern + 16, 128));
+    T(metal_mock_blit_encoder_state()->num_buffer_copies == 1);
+    // a second copy in the same frame reuses the command buffer and blit encoder
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src,
+        .dst.buffer = dst,
+        .size = 4,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToBuffer)->obj == blit_enc);
+    T(metal_mock_blit_encoder_state()->num_buffer_copies == 2);
+    // commit ends the blit encoder before committing the command buffer
+    sg_commit();
+    const int i_end = metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0);
+    const int i_commit = metal_mock_find_call(METAL_MOCK_FUNC_commit, 0);
+    T(i_end >= 0 && i_end < i_commit);
+    T(metal_mock_call(i_end)->obj == blit_enc);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 1);
+    T(metal_mock_blit_encoder_state()->ended);
+    // the autoreleased blit encoder dies with the pool
+    metal_mock_complete_pending();
+    metal_mock_drain_pool();
+    T(metal_mock_live_objects(METAL_MOCK_OBJ_BLIT_ENCODER) == 0);
+    // a frame without copies doesn't create a blit encoder
+    metal_mock_clear_calls();
+    sg_commit();
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 0);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_buffer_retained_cmd_buffer) {
+    setup_with((setup_desc_t){ .retained_cmd_buffer = true });
+    fill_pattern(3);
+    sg_buffer src = make_staging_buffer(64);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 64,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBuffer) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 0);
+    T(0 == memcmp(metal_mock_buffer_data(active_mtl_buf(dst)), pattern, 64));
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_buffer_managed_flush) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    fill_pattern(9);
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true },
+        .size = 256,
+    });
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = { .ptr = pattern, .size = 64 },
+        .dst = { .buffer = src, .offset = 32 },
+    });
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 256,
+    });
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 32 },
+        .dst.buffer = dst,
+        .size = 64,
+    });
+    // the dirty range of the managed source buffer is flushed before the copy
+    const int i_flush = metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0);
+    const int i_copy = metal_mock_find_call(METAL_MOCK_FUNC_copyFromBufferToBuffer, 0);
+    T(i_flush >= 0 && i_flush < i_copy);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 1);
+    const metal_mock_call_t* call = metal_mock_call(i_flush);
+    T(call->obj == active_mtl_buf(src));
+    T(call->args[0].u == 32);
+    T(call->args[1].u == 64);
+    // the range is reset after the flush, a second copy doesn't flush again
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 32 },
+        .dst = { .buffer = dst, .offset = 128 },
+        .size = 64,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 1);
+    T(0 == memcmp((const uint8_t*)metal_mock_buffer_data(active_mtl_buf(dst)) + 128, pattern, 64));
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_buffer_from_vertex_buffer) {
+    setup();
+    fill_pattern(21);
+    // a non-staging immutable buffer with copy_src can be a copy source too
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_src = true },
+        .data = { .ptr = pattern, .size = 64 },
+    });
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 64,
+    });
+    T(0 == memcmp(metal_mock_buffer_data(active_mtl_buf(dst)), pattern, 64));
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_buffer_validation_skips_backend) {
+    setup();
+    sg_buffer src = make_staging_buffer(64);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    metal_mock_clear_calls();
+    // zero size fails validation, no Metal calls must happen
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 0,
+    });
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE));
+    T(metal_mock_num_calls() == 0);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, blit_encoder_ended_before_render_pass) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    fill_pattern(5);
+    sg_buffer src = make_staging_buffer(64);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 64,
+    });
+    const void* blit_enc = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToBuffer)->obj;
+    // debug groups are dropped while only the blit encoder is active
+    sg_push_debug_group("blit-group");
+    sg_pop_debug_group();
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_pushDebugGroup) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_popDebugGroup) == 0);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    // the blit encoder is ended before the render encoder is created, and the
+    // pass is recorded into the same command buffer
+    const int i_end = metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0);
+    const int i_render = metal_mock_find_call(METAL_MOCK_FUNC_renderCommandEncoderWithDescriptor, 0);
+    T(i_end >= 0 && i_end < i_render);
+    T(metal_mock_call(i_end)->obj == blit_enc);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 1);
+    T(metal_mock_blit_encoder_state()->ended);
+    sg_end_pass();
+    // a copy after the pass creates a new blit encoder in the same command buffer
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 32,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 2);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 1);
+    T(!metal_mock_blit_encoder_state()->ended);
+    const void* blit_enc2 = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToBuffer)->obj;
+    sg_commit();
+    // endEncoding: blit, render, blit
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 3);
+    const metal_mock_call_t* last_end = metal_mock_last_call(METAL_MOCK_FUNC_endEncoding);
+    T(last_end->obj == blit_enc2);
+    T(metal_mock_find_call(METAL_MOCK_FUNC_commit, 0) > metal_mock_find_call(METAL_MOCK_FUNC_presentDrawable, 0));
+    T(metal_mock_blit_encoder_state()->ended);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commit) == 1);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, blit_encoder_ended_before_compute_pass) {
+    setup();
+    fill_pattern(6);
+    sg_buffer src = make_staging_buffer(64);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 64,
+    });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    const int i_end = metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0);
+    const int i_compute = metal_mock_find_call(METAL_MOCK_FUNC_computeCommandEncoder, 0);
+    T(i_end >= 0 && i_end < i_compute);
+    T(metal_mock_is_object(METAL_MOCK_OBJ_BLIT_ENCODER, metal_mock_call(i_end)->obj));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 1);
+    sg_end_pass();
+    sg_commit();
+    // blit + compute encoders, no extra endEncoding at commit
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 2);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_2d) {
+    setup();
+    fill_pattern(40);
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .offset = 64, .bytes_per_row = 8 * 4, .bytes_per_slice = 8 * 8 * 4 },
+        .dst = { .image = img, .x = 4, .y = 2 },
+        .size = { .width = 8, .height = 8, .num_slices = 1 },
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_replaceRegion) == 0);
+    T(metal_mock_find_call(METAL_MOCK_FUNC_blitCommandEncoder, 0) < metal_mock_find_call(METAL_MOCK_FUNC_copyFromBufferToTexture, 0));
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    T(metal_mock_is_object(METAL_MOCK_OBJ_BLIT_ENCODER, call->obj));
+    T(call->args[0].p == active_mtl_buf(src));
+    T(call->args[1].u == 64);       // source offset
+    T(call->args[2].u == 8 * 4);    // bytes per row
+    T(call->args[3].u == 0);        // bytes per image, only for 3D
+    T(call->args[4].u == 8 && call->args[5].u == 8 && call->args[6].u == 1);
+    T(call->args[7].p == active_mtl_tex(img));
+    T(call->args[8].u == 0);        // slice
+    T(call->args[9].u == 0);        // mip level
+    T(call->args[10].u == 4 && call->args[11].u == 2 && call->args[12].u == 0);
+    metal_mock_texture_info_t info = {0};
+    T(metal_mock_texture_info(active_mtl_tex(img), &info));
+    T(info.num_copy_from_buffer == 1);
+    T(info.num_replace_region == 0);
+    T(metal_mock_blit_encoder_state()->num_texture_copies == 1);
+    sg_commit();
+    T(metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0) < metal_mock_find_call(METAL_MOCK_FUNC_commit, 0));
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_defaults) {
+    setup();
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    metal_mock_clear_calls();
+    // zero-initialized pitches and sizes default to the whole mip level
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src,
+        .dst.image = img,
+    });
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    T(call != 0);
+    T(call->args[1].u == 0);
+    T(call->args[2].u == 16 * 4);
+    T(call->args[4].u == 16 && call->args[5].u == 16 && call->args[6].u == 1);
+    T(call->args[10].u == 0 && call->args[11].u == 0);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_array) {
+    setup();
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_ARRAY, 8, 8, 4, 1);
+    metal_mock_clear_calls();
+    // array images get one copy per slice, with the source advancing by bytes_per_slice
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .offset = 16, .bytes_per_row = 4 * 4, .bytes_per_slice = 4 * 4 * 4 },
+        .dst = { .image = img, .x = 2, .y = 1, .slice = 1 },
+        .size = { .width = 4, .height = 4, .num_slices = 3 },
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 3);
+    int n = 0;
+    for (int i = 0; i < metal_mock_num_calls(); i++) {
+        const metal_mock_call_t* call = metal_mock_call(i);
+        if (call->func != METAL_MOCK_FUNC_copyFromBufferToTexture) {
+            continue;
+        }
+        T(call->args[1].u == (uint64_t)(16 + n * 64));
+        T(call->args[2].u == 16);
+        T(call->args[3].u == 0);
+        T(call->args[4].u == 4 && call->args[5].u == 4 && call->args[6].u == 1);
+        T(call->args[7].p == active_mtl_tex(img));
+        T(call->args[8].u == (uint64_t)(1 + n));
+        T(call->args[9].u == 0);
+        T(call->args[10].u == 2 && call->args[11].u == 1 && call->args[12].u == 0);
+        n++;
+    }
+    T(n == 3);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_3d) {
+    setup();
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_3D, 8, 8, 4, 1);
+    metal_mock_clear_calls();
+    // 3D images get a single copy with depth = num_slices and the slice as origin.z
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .offset = 4, .bytes_per_row = 4 * 4, .bytes_per_slice = 4 * 4 * 4 },
+        .dst = { .image = img, .x = 4, .y = 4, .slice = 1 },
+        .size = { .width = 4, .height = 4, .num_slices = 2 },
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    T(call->args[1].u == 4);
+    T(call->args[2].u == 16);
+    T(call->args[3].u == 64);       // bytes per image
+    T(call->args[4].u == 4 && call->args[5].u == 4 && call->args[6].u == 2);
+    T(call->args[8].u == 0);        // destination slice is always 0 for 3D
+    T(call->args[10].u == 4 && call->args[11].u == 4 && call->args[12].u == 1);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_mip_level) {
+    setup();
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 3);
+    metal_mock_clear_calls();
+    // defaults are taken from the 4x4 mip level 2
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src,
+        .dst = { .image = img, .mip_level = 2 },
+    });
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    T(call != 0);
+    T(call->args[2].u == 4 * 4);
+    T(call->args[4].u == 4 && call->args[5].u == 4 && call->args[6].u == 1);
+    T(call->args[9].u == 2);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_managed_flush) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    sg_buffer src = make_staging_buffer(1024);
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src,
+        .dst.image = img,
+    });
+    const int i_flush = metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0);
+    const int i_copy = metal_mock_find_call(METAL_MOCK_FUNC_copyFromBufferToTexture, 0);
+    T(i_flush >= 0 && i_flush < i_copy);
+    const metal_mock_call_t* call = metal_mock_call(i_flush);
+    T(call->obj == active_mtl_buf(src));
+    T(call->args[0].u == 0 && call->args[1].u == 1024);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_and_buffer_share_encoder) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_buffer src = make_staging_buffer(1024);
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+        .size = 256,
+    });
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src, .dst.buffer = dst, .size = 256,
+    });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src, .dst.image = img,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToBuffer)->obj == metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture)->obj);
+    T(metal_mock_blit_encoder_state()->num_buffer_copies == 1);
+    T(metal_mock_blit_encoder_state()->num_texture_copies == 1);
+    // the image can be sampled in the following pass of the same frame
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    T(metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0) < metal_mock_find_call(METAL_MOCK_FUNC_renderCommandEncoderWithDescriptor, 0));
+    sg_end_pass();
+    sg_commit();
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commit) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 2);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, create_image_copy_dst) {
+    setup_with((setup_desc_t){ .non_apple_gpu = true });
+    metal_mock_clear_calls();
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    // copy-dst images live in private storage, even in managed storage mode
+    metal_mock_texture_info_t info = {0};
+    T(metal_mock_texture_info(sg_mtl_query_image_info(img).tex[0], &info));
+    T((info.resource_options & MTL_STORAGE_MODE_MASK) == MTLResourceStorageModePrivate);
+    T(info.usage == MTLTextureUsageShaderRead);
+    T(sg_mtl_query_image_info(img).active_slot == 0);
+    T_LABEL(info.label, "copy-dst.0");
+    // NOTE: copy-dst images currently get SG_NUM_INFLIGHT_FRAMES textures
+    // because num_slots is derived from !usage.immutable, but only slot 0 is
+    // ever used (see the final report of the test update)
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_newTextureWithDescriptor) >= 1);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, write_image_transient_array_and_3d) {
+    setup();
+    sg_image arr = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 8, .height = 8, .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_transient = true,
+    });
+    sg_image vol = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_3D,
+        .width = 8, .height = 8, .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_transient = true,
+    });
+    metal_mock_clear_calls();
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 8 * 8 * 4 * 2 },
+        .dst = { .image = arr, .slice = 2 },
+        .size.num_slices = 2,
+    });
+    // array images: one replaceRegion per slice into the active slot
+    T(sg_mtl_query_image_info(arr).active_slot == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_replaceRegion) == 2);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_replaceRegion);
+    T(call->obj == active_mtl_tex(arr));
+    T(call->args[5].u == 3);        // slice
+    T(call->args[8].u == 0);        // origin.z
+    T(call->args[9].u == 1);        // depth
+    T(call->args[10].p == scratch + 8 * 8 * 4);
+    metal_mock_clear_calls();
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 8 * 8 * 4 * 3 },
+        .dst = { .image = vol, .slice = 1 },
+        .size.num_slices = 3,
+    });
+    // 3D images: a single replaceRegion with depth = num_slices
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_replaceRegion) == 1);
+    call = metal_mock_last_call(METAL_MOCK_FUNC_replaceRegion);
+    T(call->obj == active_mtl_tex(vol));
+    T(call->args[5].u == 0);
+    T(call->args[7].u == 8 * 8 * 4);  // bytes per image
+    T(call->args[8].u == 1);
+    T(call->args[9].u == 3);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, write_image_unsealed_3d) {
+    setup();
+    sg_image vol = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_3D,
+        .width = 8, .height = 8, .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(vol) == SG_RESOURCESTATE_UNSEALED);
+    metal_mock_clear_calls();
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 8 * 8 * 4 * 4 },
+        .dst.image = vol,
+    });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_replaceRegion) == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_replaceRegion);
+    T(call->obj == sg_mtl_query_image_info(vol).tex[0]);
+    T(call->args[8].u == 0);
+    T(call->args[9].u == 4);
+    sg_seal_image(vol);
+    T(sg_query_image_state(vol) == SG_RESOURCESTATE_VALID);
+    teardown();
+}
+
+//== remaining binding and pass paths ==========================================
+UTEST(sokol_gfx_metal, sampler_clamp_to_border_fallback) {
+    // without border color support, clamp-to-border falls back to clamp-to-edge
+    setup_with((setup_desc_t){ .no_border_color = true });
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+        .wrap_u = SG_WRAP_CLAMP_TO_BORDER,
+        .wrap_v = SG_WRAP_REPEAT,
+        .wrap_w = SG_WRAP_MIRRORED_REPEAT,
+    });
+    metal_mock_sampler_info_t info = {0};
+    T(metal_mock_sampler_info(sg_mtl_query_sampler_info(smp).smp, &info));
+    T(info.s_address_mode == MTLSamplerAddressModeClampToEdge);
+    T(info.t_address_mode == MTLSamplerAddressModeRepeat);
+    T(info.r_address_mode == MTLSamplerAddressModeMirrorRepeat);
+    smp = sg_make_sampler(&(sg_sampler_desc){ .wrap_u = SG_WRAP_CLAMP_TO_EDGE });
+    T(metal_mock_sampler_info(sg_mtl_query_sampler_info(smp).smp, &info));
+    T(info.s_address_mode == MTLSamplerAddressModeClampToEdge);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, render_pass_label_and_reset_state_cache) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc), .label = "render-pass" });
+    T_LABEL(metal_mock_render_encoder_state()->label, "render-pass");
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setVertexBuffer) == 0);
+    // after resetting the state cache, the same binding is applied again
+    sg_reset_state_cache();
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setVertexBuffer) == 1);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, storage_buffer_view_offsets) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs",
+        .fragment_func.source = "fs",
+        .views = {
+            [0].storage_buffer = { .stage = SG_SHADERSTAGE_VERTEX, .readonly = true, .msl_buffer_n = 8 },
+            [1].storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true, .msl_buffer_n = 9 },
+        },
+    });
+    sg_pipeline pip = make_pipeline(shd);
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.storage_buffer = true,
+        .data = { .ptr = scratch, .size = 512 },
+    });
+    sg_view view0 = sg_make_view(&(sg_view_desc){ .storage_buffer = { .buffer = sbuf, .offset = 0 } });
+    sg_view view1 = sg_make_view(&(sg_view_desc){ .storage_buffer = { .buffer = sbuf, .offset = 256 } });
+    sg_buffer vbuf = make_vbuf();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views = { view0, view0 } });
+    // same buffer, different view offset: only the offsets are updated
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views = { view1, view1 } });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setVertexBuffer) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setFragmentBuffer) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setVertexBufferOffset) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setFragmentBufferOffset) == 1);
+    const metal_mock_render_encoder_state_t* state = metal_mock_render_encoder_state();
+    T(state->vertex_buffers[8].offset == 256);
+    T(state->fragment_buffers[9].offset == 256);
+    // identical bindings are skipped
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views = { view1, view1 } });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setVertexBufferOffset) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setFragmentBufferOffset) == 0);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, compute_bindings_and_uniforms) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .mtl_threads_per_threadgroup = { .x = 8, .y = 8, .z = 1 },
+        .uniform_blocks[0] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 16, .msl_buffer_n = 0 },
+        .views = {
+            [0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true, .msl_buffer_n = 8 },
+            [1].texture = {
+                .stage = SG_SHADERSTAGE_COMPUTE,
+                .image_type = SG_IMAGETYPE_2D,
+                .sample_type = SG_IMAGESAMPLETYPE_FLOAT,
+                .msl_texture_n = 0,
+            },
+        },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_COMPUTE, .sampler_type = SG_SAMPLERTYPE_FILTERING, .msl_sampler_n = 0 },
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_COMPUTE, .view_slot = 1, .sampler_slot = 0 },
+    });
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .compute = true, .shader = shd });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.storage_buffer = true,
+        .data = { .ptr = scratch, .size = 512 },
+    });
+    sg_view sview0 = sg_make_view(&(sg_view_desc){ .storage_buffer = { .buffer = sbuf, .offset = 0 } });
+    sg_view sview1 = sg_make_view(&(sg_view_desc){ .storage_buffer = { .buffer = sbuf, .offset = 256 } });
+    sg_view tview = make_texture_view(make_2d_image());
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views = { sview0, tview }, .samplers[0] = smp });
+    const metal_mock_compute_encoder_state_t* state = metal_mock_compute_encoder_state();
+    T(state->buffers[8].buffer == sg_mtl_query_buffer_info(sbuf).buf[0]);
+    T(state->textures[0] != 0);
+    T(state->samplers[0] == sg_mtl_query_sampler_info(smp).smp);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setSamplerState) == 1);
+    // new storage buffer offset only, texture and sampler are skipped
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views = { sview1, tview }, .samplers[0] = smp });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setBuffer) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setBufferOffset) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setTexture) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setSamplerState) == 0);
+    T(state->buffers[8].offset == 256);
+    // fully redundant bindings
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views = { sview1, tview }, .samplers[0] = smp });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setBufferOffset) == 0);
+    // compute uniforms only update the uniform buffer offset
+    metal_mock_clear_calls();
+    sg_apply_uniforms(0, &(sg_range){ .ptr = scratch, .size = 16 });
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_setBufferOffset) == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_setBufferOffset);
+    T(call->args[1].u == 0);
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, offscreen_pass_array_slices) {
+    setup();
+    // MSAA resolve into an array slice
+    sg_image msaa_img = sg_make_image(&(sg_image_desc){
+        .width = 32, .height = 32, .sample_count = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .color_attachment = true, .immutable = true },
+    });
+    sg_image resolve_img = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 32, .height = 32, .num_slices = 3,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .resolve_attachment = true, .immutable = true },
+    });
+    sg_view msaa_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = msaa_img });
+    sg_view resolve_view = sg_make_view(&(sg_view_desc){ .resolve_attachment = { .image = resolve_img, .slice = 1 } });
+    sg_begin_pass(&(sg_pass){ .attachments = { .colors[0] = msaa_view, .resolves[0] = resolve_view } });
+    const metal_mock_render_pass_info_t* pass = metal_mock_last_render_pass();
+    T(pass->color_attachments[0].resolve_texture == sg_mtl_query_image_info(resolve_img).tex[0]);
+    T(pass->color_attachments[0].resolve_slice == 1);
+    sg_end_pass();
+    // depth-stencil attachment on an array slice
+    sg_image color_img = sg_make_image(&(sg_image_desc){
+        .width = 32, .height = 32,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .color_attachment = true, .immutable = true },
+    });
+    sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 32, .height = 32, .num_slices = 3,
+        .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .usage = { .depth_stencil_attachment = true, .immutable = true },
+    });
+    sg_view color_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = color_img });
+    sg_view depth_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment = { .image = depth_img, .slice = 2 } });
+    sg_begin_pass(&(sg_pass){ .attachments = { .colors[0] = color_view, .depth_stencil = depth_view } });
+    pass = metal_mock_last_render_pass();
+    T(pass->has_depth_attachment && (pass->depth_attachment.slice == 2));
+    T(pass->has_stencil_attachment && (pass->stencil_attachment.slice == 2));
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
 }
 
 //== leak check ================================================================
