@@ -19190,6 +19190,7 @@ _SOKOL_PRIVATE void _sg_wgpu_seal_buffer(_sg_buffer_t* buf) {
 _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t dst_offset, const void* src_data_ptr, size_t src_data_size, uint64_t src_offset, uint64_t copy_size) {
     SOKOL_ASSERT((dst_offset + copy_size) <= (uint64_t)buf->cmn.size);
     SOKOL_ASSERT((src_offset + copy_size) <= src_data_size);
+    _SOKOL_UNUSED(src_data_size);
     const bool staging = buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer;
     const uint8_t* src_ptr = (uint8_t*)src_data_ptr + src_offset;
     if (staging) {
