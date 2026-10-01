@@ -1912,11 +1912,6 @@ UTEST(sokol_gfx_gl, image_write_unsealed_then_seal) {
     teardown();
 }
 
-// FIXME: disabled because of a sokol_gfx.h bug: _sg_gl_write_miplevel_data()
-// unconditionally calls _sg_gl_teximage_type(), which has no compressed
-// pixel format cases and hits SOKOL_UNREACHABLE (so any debug-build write into
-// a compressed image asserts). Define TEST_GL_COMPRESSED_WRITES to enable.
-#if defined(TEST_GL_COMPRESSED_WRITES)
 UTEST(sokol_gfx_gl, image_write_unsealed_compressed) {
     setup();
     // BC1: 8 bytes per 4x4 block
@@ -1976,7 +1971,6 @@ UTEST(sokol_gfx_gl, image_write_unsealed_compressed) {
     T(no_errors());
     teardown();
 }
-#endif
 
 //------------------------------------------------------------------------------
 //  sg_copy_buffer_to_buffer
@@ -2100,11 +2094,12 @@ UTEST(sokol_gfx_gl, copy_dst_image_usage) {
         .usage.copy_dst = true,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
-    // the image is allocated without data, one texture per slot
-    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == sg_query_image_info(img).num_slots);
+    // the image is allocated without data, copy-dst images have a single slot
+    T(sg_query_image_info(img).num_slots == 1);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 1);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
     #if TEST_HAS_TEXSTORAGE
-        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage2D) == sg_query_image_info(img).num_slots);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage2D) == 1);
     #else
         const gl_mock_call_t* ti = gl_mock_last_call(GL_MOCK_FUNC_glTexImage2D);
         TA(ti != 0);

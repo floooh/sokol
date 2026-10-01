@@ -1877,6 +1877,38 @@ UTEST(sokol_gfx_metal, offscreen_pass_load_store_actions) {
     teardown();
 }
 
+// depth and stencil store actions must be independent
+UTEST(sokol_gfx_metal, offscreen_pass_depth_stencil_store_actions) {
+    setup();
+    sg_image depth_img = sg_make_image(&(sg_image_desc){
+        .width = 32, .height = 32,
+        .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .usage = { .depth_stencil_attachment = true, .immutable = true },
+    });
+    sg_view ds_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment.image = depth_img });
+    const sg_store_action stores[2] = { SG_STOREACTION_STORE, SG_STOREACTION_DONTCARE };
+    const MTLStoreAction expected_stores[2] = { MTLStoreActionStore, MTLStoreActionDontCare };
+    for (int d = 0; d < 2; d++) {
+        for (int s = 0; s < 2; s++) {
+            sg_begin_pass(&(sg_pass){
+                .action = {
+                    .depth = { .load_action = SG_LOADACTION_CLEAR, .store_action = stores[d] },
+                    .stencil = { .load_action = SG_LOADACTION_CLEAR, .store_action = stores[s] },
+                },
+                .attachments = { .depth_stencil = ds_view },
+            });
+            const metal_mock_render_pass_info_t* pass = metal_mock_last_render_pass();
+            T(pass->has_depth_attachment);
+            T(pass->has_stencil_attachment);
+            T(pass->depth_attachment.store_action == expected_stores[d]);
+            T(pass->stencil_attachment.store_action == expected_stores[s]);
+            sg_end_pass();
+        }
+    }
+    sg_commit();
+    teardown();
+}
+
 UTEST(sokol_gfx_metal, offscreen_pass_msaa_resolve) {
     setup();
     sg_image msaa_img = sg_make_image(&(sg_image_desc){
@@ -2890,10 +2922,28 @@ UTEST(sokol_gfx_metal, create_image_copy_dst) {
     T(info.usage == MTLTextureUsageShaderRead);
     T(sg_mtl_query_image_info(img).active_slot == 0);
     T_LABEL(info.label, "copy-dst.0");
-    // NOTE: copy-dst images currently get SG_NUM_INFLIGHT_FRAMES textures
-    // because num_slots is derived from !usage.immutable, but only slot 0 is
-    // ever used (see the final report of the test update)
-    T(metal_mock_count_calls(METAL_MOCK_FUNC_newTextureWithDescriptor) >= 1);
+    // copy-dst images have a single slot
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_newTextureWithDescriptor) == 1);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, create_image_injected_copy_dst) {
+    setup();
+    const void* mtl_tex = metal_mock_create_texture(16, 16, MTLPixelFormatRGBA8Unorm, 1);
+    metal_mock_clear_calls();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+        .mtl_texture = mtl_tex,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_info(img).num_slots == 1);
+    T(sg_mtl_query_image_info(img).tex[0] == mtl_tex);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_newTextureWithDescriptor) == 0);
+    sg_destroy_image(img);
+    metal_mock_release(mtl_tex);
     teardown();
 }
 
