@@ -17145,7 +17145,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_render_pass(const sg_pass* pass, const _sg_att
             if (_sg_is_depth_stencil_format(ds_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_img->mtl.tex[0]);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.load_action);
-                pass_desc.stencilAttachment.storeAction = _sg_mtl_store_action(action->depth.store_action, false);
+                pass_desc.stencilAttachment.storeAction = _sg_mtl_store_action(action->stencil.store_action, false);
                 pass_desc.stencilAttachment.clearStencil = action->stencil.clear_value;
                 switch (ds_img->cmn.type) {
                     case SG_IMAGETYPE_CUBE:
