@@ -2401,7 +2401,7 @@ static void _simgui_update_texture(ImTextureData* tex) {
         write_desc.src.data.size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
         write_desc.src.offset = (size_t)(upload_y * staging_pitch);
         write_desc.dst.buffer = _simgui.staging_buf;
-        write_desc.size = staging_size;
+        write_desc.size = (size_t)staging_size;
         sg_write_buffer_transient(&write_desc);
 
         // copy actual update area into font texture
