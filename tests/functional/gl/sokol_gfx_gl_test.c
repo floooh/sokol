@@ -1502,7 +1502,7 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
         gl_mock_clear_calls();
         sg_buffer_desc desc = { .usage = c->usage, .size = sizeof(data) };
         if (c->with_data) {
-            desc.data = (sg_range)SG_RANGE(data);
+            desc.data = SG_RANGE(data);
         }
         sg_buffer buf = sg_make_buffer(&desc);
         const sg_resource_state expected_state = c->usage.write_unsealed ? SG_RESOURCESTATE_UNSEALED : SG_RESOURCESTATE_VALID;
