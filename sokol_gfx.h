@@ -21250,6 +21250,8 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     _SG_STRUCT(VkBufferImageCopy2, region);
     _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
     _sg_vk_init_vk_image_staging_structs(img, _sg.vk.stage.copy.buf, &region, &copy_info);
+    // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
+    // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf    const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const int block_bytesize = _sg_block_bytesize(img->cmn.pixel_format);
     region.bufferRowLength = (uint32_t)((src_bytes_per_row / block_bytesize) * block_dim);
@@ -21374,12 +21376,12 @@ _SOKOL_PRIVATE void _sg_vk_staging_stream_buffer_data(_sg_buffer_t* buf, const s
     VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
     VkBuffer vk_stage_buf = _sg.vk.stage.stream.cur_buf;
     VkBuffer vk_dst_buf = buf->vk.buf;
-    _SG_STRUCT(VkBufferCopy, copy_info);
-    copy_info.srcOffset = vk_stage_offset;
-    copy_info.dstOffset = dst_offset;
-    copy_info.size = copy_size;
+    _SG_STRUCT(VkBufferCopy, region);
+    region.srcOffset = vk_stage_offset;
+    region.dstOffset = dst_offset;
+    region.size = copy_size;
     _sg_vk_buffer_barrier(cmd_buf, buf, _SG_VK_ACCESS_STAGING_WRITE);
-    vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &copy_info);
+    vkCmdCopyBuffer(cmd_buf, vk_stage_buf, vk_dst_buf, 1, &region);
     _sg_stats_inc(vk.num_cmd_copy_buffer);
     // FIXME: not great to issue a barrier right here,
     // rethink buffer barrier strategy? => a single memory barrier
@@ -23487,30 +23489,71 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
 
     // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
     // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf
-    VkCommandBuffer cmd_buf = _sg.vk.frame.stream_cmd_buf;
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
     VkBuffer vk_src_buf = src_buf->vk.buf;
     VkBuffer vk_dst_buf = dst_buf->vk.buf;
-    _SG_STRUCT(VkBufferCopy, copy_info);
-    copy_info.srcOffset = desc->src.offset;
-    copy_info.dstOffset = desc->dst.offset;
-    copy_info.size = desc->size;
+    _SG_STRUCT(VkBufferCopy, region);
+    region.srcOffset = desc->src.offset;
+    region.dstOffset = desc->dst.offset;
+    region.size = desc->size;
     _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_STAGING_READ);
     _sg_vk_buffer_barrier(cmd_buf, dst_buf, _SG_VK_ACCESS_STAGING_WRITE);
-    vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &copy_info);
+    vkCmdCopyBuffer(cmd_buf, vk_src_buf, vk_dst_buf, 1, &region);
     _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
     _sg_vk_buffer_barrier(cmd_buf, dst_buf, _sg_vk_default_buffer_access_mask(dst_buf));
 }
 
+// FIXME: most of this code is shared with _sg_vk_staging_stream_miplevel_data
 _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(desc->src.bytes_per_row > 0);
+    SOKOL_ASSERT(desc->src.bytes_per_slice > 0);
+    SOKOL_ASSERT((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps));
+    SOKOL_ASSERT((desc->dst.x >= 0) && (desc->dst.x < _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level)));
+    SOKOL_ASSERT((desc->dst.y >= 0) && (desc->dst.y < _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level)));
+    SOKOL_ASSERT((desc->dst.slice >= 0) && (desc->dst.slice < dst_img->cmn.num_slices));
+    SOKOL_ASSERT((desc->size.width > 0) && (desc->dst.x + desc->size.width <= _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level)));
+    SOKOL_ASSERT((desc->size.height > 0) && (desc->dst.y + desc->size.height <= _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level)));
+    SOKOL_ASSERT((desc->size.num_slices > 0) && (desc->dst.slice + desc->size.num_slices <= dst_img->cmn.num_slices));
+    SOKOL_ASSERT((desc->src.offset + (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices) <= (size_t)src_buf->cmn.size);
+    SOKOL_ASSERT(_sg_multiple(desc->src.bytes_per_row, _sg_block_bytesize(dst_img->cmn.pixel_format)));
+    SOKOL_ASSERT(_sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row));
 
+    _sg_vk_acquire_frame_command_buffers();
+    VkBuffer vk_src_buf = src_buf->vk.buf;
 
+    // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
+    // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _SG_VK_ACCESS_STAGING_READ);
+    _sg_vk_image_barrier(cmd_buf, dst_img, _SG_VK_ACCESS_STAGING_WRITE);
 
-    SOKOL_ASSERT(false && "FIXME");
+    _SG_STRUCT(VkBufferImageCopy2, region);
+    _SG_STRUCT(VkCopyBufferToImageInfo2, copy_info);
+    _sg_vk_init_vk_image_staging_structs(dst_img, vk_src_buf, &region, &copy_info);
+    const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
+    const int block_bytesize = _sg_block_bytesize(dst_img->cmn.pixel_format);
+    region.bufferRowLength = (uint32_t)((desc->src.bytes_per_row / block_bytesize) * block_dim);
+    region.bufferImageHeight = (uint32_t)((desc->src.bytes_per_slice / desc->src.bytes_per_row) * block_dim);
+    region.bufferOffset = desc->src.offset;
+    region.imageSubresource.mipLevel = (uint32_t)desc->dst.mip_level;
+    region.imageOffset.x = desc->dst.x;
+    region.imageOffset.y = desc->dst.y;
+    region.imageExtent.width = (uint32_t)desc->size.width;
+    region.imageExtent.height = (uint32_t)desc->size.height;
+    if (dst_img->cmn.type == SG_IMAGETYPE_3D) {
+        region.imageOffset.z = desc->dst.slice;
+        region.imageExtent.depth = (uint32_t)desc->size.num_slices;
+    } else {
+        region.imageSubresource.baseArrayLayer = (uint32_t)desc->dst.slice;
+        region.imageSubresource.layerCount = (uint32_t)desc->size.num_slices;
+    }
+    vkCmdCopyBufferToImage2(cmd_buf, &copy_info);
+    _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
+    _sg_vk_image_barrier(cmd_buf, dst_img, _sg_vk_default_image_access_mask(dst_img));
 }
-
 #endif
 
 //  ██████  ███████ ███    ██ ███████ ██████  ██  ██████     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
