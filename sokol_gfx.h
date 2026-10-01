@@ -16434,7 +16434,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     const int mtl_slice_index = (img->cmn.type == SG_IMAGETYPE_3D) ? 0 : slice;
     const int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
-        const size_t offset = src_offset + (size_t)(i * src_bytes_per_slice);
+        const size_t offset = src_offset + (size_t)i * (size_t)src_bytes_per_slice;
         SOKOL_ASSERT((offset + (size_t)src_bytes_per_slice) <= src_size);
         [mtl_tex replaceRegion:mtl_region
             mipmapLevel:(NSUInteger)mip_level
@@ -17895,7 +17895,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_imag
     const int mtl_slice_index = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 0 : desc->dst.slice;
     const int mtl_num_slices = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 1 : desc->size.num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
-        const size_t offset = desc->src.offset + (size_t)(i * desc->src.bytes_per_slice);
+        const size_t offset = desc->src.offset + (size_t)i * (size_t)desc->src.bytes_per_slice;
         [_sg.mtl.blit_cmd_encoder copyFromBuffer:mtl_src_buf
             sourceOffset:offset
             sourceBytesPerRow:(NSUInteger)desc->src.bytes_per_row
