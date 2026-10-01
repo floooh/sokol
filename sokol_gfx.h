@@ -11438,13 +11438,15 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
         }
         _sg_gl_texsubimage(img, tgt, mip_index, w, h, depth, data_ptr, data_size);
     #else
+        _SOKOL_UNUSED(data_size);
         const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
         const GLenum ifmt = _sg_gl_teximage_internal_format(img->cmn.pixel_format);
         const bool msaa = img->cmn.sample_count > 1;
         if ((SG_IMAGETYPE_2D == img->cmn.type) || (SG_IMAGETYPE_CUBE == img->cmn.type)) {
             if (compressed) {
                 SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
-                glCompressedTexImage2D(tgt, mip_index, ifmt, w, h, 0, data_size, data_ptr);
+                const GLsizei compr_size = (GLsizei)_sg_surface_pitch(img->cmn.pixel_format, w, h, 1);
+                glCompressedTexImage2D(tgt, mip_index, ifmt, w, h, 0, compr_size, data_ptr);
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
@@ -11462,7 +11464,8 @@ _SOKOL_PRIVATE void _sg_gl_teximage(const _sg_image_t* img, GLenum tgt, int mip_
         } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
             if (compressed) {
                 SOKOL_ASSERT(!msaa); _SOKOL_UNUSED(msaa);
-                glCompressedTexImage3D(tgt, mip_index, ifmt, w, h, depth, 0, data_size, data_ptr);
+                const GLsizei compr_size = (GLsizei)_sg_surface_pitch(img->cmn.pixel_format, w, h, 1) * depth;
+                glCompressedTexImage3D(tgt, mip_index, ifmt, w, h, depth, 0, compr_size, data_ptr);
             } else {
                 const GLenum type = _sg_gl_teximage_type(img->cmn.pixel_format);
                 const GLenum fmt = _sg_gl_teximage_format(img->cmn.pixel_format);
