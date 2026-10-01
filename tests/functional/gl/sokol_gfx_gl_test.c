@@ -1453,6 +1453,17 @@ static int find_call_arg0(gl_mock_func_t func, int start, int64_t arg0) {
     return -1;
 }
 
+// NOTE: MSVC warns (C4223) on indexing an array in a returned struct
+static GLuint query_gl_buf(sg_buffer buf, int slot) {
+    const sg_gl_buffer_info info = sg_gl_query_buffer_info(buf);
+    return info.buf[slot];
+}
+
+static GLuint query_gl_tex(sg_image img, int slot) {
+    const sg_gl_image_info info = sg_gl_query_image_info(img);
+    return info.tex[slot];
+}
+
 typedef struct {
     sg_buffer_usage usage;
     bool with_data;
@@ -1546,12 +1557,12 @@ UTEST(sokol_gfx_gl, buffer_create_restores_previous_binding) {
     setup();
     static const float data[4] = { 0 };
     sg_buffer a = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
-    const GLuint gl_a = sg_gl_query_buffer_info(a).buf[0];
+    const GLuint gl_a = query_gl_buf(a, 0);
     // after the first create, the new buffer stays bound in the cache
     T(gl_mock_bindings()->array_buffer == gl_a);
     gl_mock_clear_calls();
     sg_buffer b = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
-    const GLuint gl_b = sg_gl_query_buffer_info(b).buf[0];
+    const GLuint gl_b = query_gl_buf(b, 0);
     // the second create binds b, uploads, then restores a
     TA(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 2);
     T(gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glBindBuffer, 0))->args[1].i == gl_b);
@@ -1561,7 +1572,7 @@ UTEST(sokol_gfx_gl, buffer_create_restores_previous_binding) {
     static const uint16_t idata[4] = { 0 };
     sg_buffer c = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(idata) });
     sg_buffer d = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(idata) });
-    T(gl_mock_bindings()->element_array_buffer == sg_gl_query_buffer_info(c).buf[0]);
+    T(gl_mock_bindings()->element_array_buffer == query_gl_buf(c, 0));
     T(gl_mock_bindings()->array_buffer == gl_a);
     // destroying a bound buffer drops it from the cache, so the next create
     // has nothing to restore
@@ -1583,7 +1594,7 @@ UTEST(sokol_gfx_gl, storage_buffer_create_restores_previous_binding) {
     static const uint32_t data[4] = { 0 };
     sg_buffer a = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = SG_RANGE(data) });
     sg_buffer b = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = SG_RANGE(data) });
-    T(gl_mock_bindings()->shader_storage_buffer == sg_gl_query_buffer_info(a).buf[0]);
+    T(gl_mock_bindings()->shader_storage_buffer == query_gl_buf(a, 0));
     sg_destroy_buffer(a);
     sg_destroy_buffer(b);
     T(no_errors());
@@ -1687,9 +1698,9 @@ UTEST(sokol_gfx_gl, index_buffer_write_transient_uses_element_array_target) {
     T(sub->args[0].i == GL_ELEMENT_ARRAY_BUFFER);
     const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_ELEMENT_ARRAY_BUFFER);
     TA(bind_idx >= 0);
-    T(gl_mock_call(bind_idx)->args[1].i == sg_gl_query_buffer_info(buf).buf[1]);
+    T(gl_mock_call(bind_idx)->args[1].i == query_gl_buf(buf, 1));
     // the previous index buffer binding is restored
-    T(gl_mock_bindings()->element_array_buffer == sg_gl_query_buffer_info(buf).buf[0]);
+    T(gl_mock_bindings()->element_array_buffer == query_gl_buf(buf, 0));
     sg_destroy_buffer(buf);
     T(no_errors());
     teardown();
@@ -1699,7 +1710,7 @@ UTEST(sokol_gfx_gl, buffer_write_unsealed_then_seal) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_unsealed = true });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
-    const GLuint gl_buf = sg_gl_query_buffer_info(buf).buf[0];
+    const GLuint gl_buf = query_gl_buf(buf, 0);
     uint8_t part0[32] = { 0 };
     uint8_t part1[32] = { 0 };
     gl_mock_clear_calls();
@@ -1906,7 +1917,7 @@ UTEST(sokol_gfx_gl, image_write_unsealed_then_seal) {
         TA(ti != 0);
         T(ti->args[8].p == 0);
     #endif
-    const GLuint tex = sg_gl_query_image_info(img).tex[0];
+    const GLuint tex = query_gl_tex(img, 0);
     uint32_t top[8 * 4] = { 0 };
     uint32_t bottom[8 * 4] = { 0 };
     gl_mock_clear_calls();
@@ -2065,8 +2076,8 @@ UTEST(sokol_gfx_gl, copy_buffer_to_buffer) {
     static const uint32_t data[16] = { 0 };
     sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .data = SG_RANGE(data) });
     sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = sizeof(data) });
-    const GLuint gl_src = sg_gl_query_buffer_info(src).buf[0];
-    const GLuint gl_dst = sg_gl_query_buffer_info(dst).buf[0];
+    const GLuint gl_src = query_gl_buf(src, 0);
+    const GLuint gl_dst = query_gl_buf(dst, 0);
     gl_mock_clear_calls();
     sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
         .src = { .buffer = src, .offset = 8 },
@@ -2132,9 +2143,9 @@ UTEST(sokol_gfx_gl, copy_staging_buffers_into_vertex_and_index_buffers) {
     T(c->args[3].i == 0);
     T(c->args[4].i == 64);
     gl_mock_buffer_info_t mi;
-    TA(gl_mock_buffer_info(sg_gl_query_buffer_info(ibuf).buf[0], &mi));
+    TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
     T(mi.num_copy_write == 1);
-    TA(gl_mock_buffer_info(sg_gl_query_buffer_info(istage).buf[0], &mi));
+    TA(gl_mock_buffer_info(query_gl_buf(istage, 0), &mi));
     T(mi.num_copy_read == 1);
     sg_destroy_buffer(vstage);
     sg_destroy_buffer(istage);
@@ -2204,7 +2215,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage.copy_dst = true,
     });
-    const GLuint gl_stage = sg_gl_query_buffer_info(stage).buf[0];
+    const GLuint gl_stage = query_gl_buf(stage, 0);
     const sg_gl_image_info img_info = sg_gl_query_image_info(img);
     const GLuint gl_tex = img_info.tex[img_info.active_slot];
     gl_mock_clear_calls();
@@ -2313,7 +2324,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
 UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     setup();
     sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 6 * 4 * 4 * 4 });
-    const GLuint gl_stage = sg_gl_query_buffer_info(stage).buf[0];
+    const GLuint gl_stage = query_gl_buf(stage, 0);
 
     // cube: one glTexSubImage2D per face, each face at its own offset into the buffer
     sg_image cube = sg_make_image(&(sg_image_desc){
@@ -2332,7 +2343,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
         T(c->args[8].p == (const void*)(uintptr_t)(face * 64));
     }
     gl_mock_texture_info_t ti;
-    TA(gl_mock_texture_info(sg_gl_query_image_info(cube).tex[0], &ti));
+    TA(gl_mock_texture_info(query_gl_tex(cube, 0), &ti));
     T(ti.num_subimage_unpack_buffer == 6);
     T(ti.last_unpack_buffer == gl_stage);
 
@@ -2550,7 +2561,7 @@ UTEST(sokol_gfx_gl, image_inject_native_with_texture_target) {
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .gl_texture = 0xC0DE,
     });
-    T(sg_gl_query_image_info(img).tex[0] == 0xC0DE);
+    T(query_gl_tex(img, 0) == 0xC0DE);
     T(sg_gl_query_image_info(img).tex_target == GL_TEXTURE_2D);
     sg_image img2 = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_ARRAY,
@@ -2573,7 +2584,7 @@ UTEST(sokol_gfx_gl, buffer_inject_native_query) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.index_buffer = true, .gl_buffer = 0xBEEF });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
-    T(sg_gl_query_buffer_info(buf).buf[0] == 0xBEEF);
+    T(query_gl_buf(buf, 0) == 0xBEEF);
     T(sg_query_buffer_info(buf).num_slots == 1);
     sg_destroy_buffer(buf);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == 0);
@@ -3279,8 +3290,8 @@ UTEST(sokol_gfx_gl, cube_and_array_color_attachments) {
     });
     sg_view cube_att = sg_make_view(&(sg_view_desc){ .color_attachment = { .image = cube, .slice = 3 } });
     sg_view arr_att = sg_make_view(&(sg_view_desc){ .color_attachment = { .image = arr, .slice = 2 } });
-    const GLuint gl_cube = sg_gl_query_image_info(cube).tex[0];
-    const GLuint gl_arr = sg_gl_query_image_info(arr).tex[0];
+    const GLuint gl_cube = query_gl_tex(cube, 0);
+    const GLuint gl_arr = query_gl_tex(arr, 0);
     gl_mock_clear_calls();
     sg_begin_pass(&(sg_pass){ .attachments.colors[0] = cube_att });
     sg_end_pass();
@@ -3398,7 +3409,7 @@ UTEST(sokol_gfx_gl, image_all_pixel_formats) {
         });
         T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
         gl_mock_texture_info_t ti;
-        TA(gl_mock_texture_info(sg_gl_query_image_info(img).tex[0], &ti));
+        TA(gl_mock_texture_info(query_gl_tex(img, 0), &ti));
         T(ti.internal_format != 0);
         if (info.compressed) {
             T((gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) + gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexSubImage2D)) == 1);
@@ -3456,7 +3467,7 @@ UTEST(sokol_gfx_gl, destroy_bound_storage_buffer_unbinds_it) {
     TA(c != 0);
     T(c->args[0].i == GL_SHADER_STORAGE_BUFFER);
     T(c->args[1].i == 3);
-    T(c->args[2].i == sg_gl_query_buffer_info(buf).buf[0]);
+    T(c->args[2].i == query_gl_buf(buf, 0));
     sg_dispatch(1, 1, 1);
     sg_end_pass();
     // destroy before sg_commit(), which would soft-clear the binding cache

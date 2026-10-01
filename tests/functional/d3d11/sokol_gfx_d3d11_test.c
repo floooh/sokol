@@ -929,8 +929,9 @@ UTEST(sokol_gfx_d3d11, apply_uniforms_updates_constant_buffer) {
     T(c && (c->buffer_desc.Usage == D3D11_USAGE_DEFAULT) && (c->buffer_desc.CPUAccessFlags == 0));
     c = NTH(CREATE_BUFFER, 1);
     T(c && (c->buffer_desc.ByteWidth == 16));
-    const void* vs_cbuf = sg_d3d11_query_shader_info(shd).cbufs[0];
-    const void* fs_cbuf = sg_d3d11_query_shader_info(shd).cbufs[3];
+    const sg_d3d11_shader_info shd_info = sg_d3d11_query_shader_info(shd);
+    const void* vs_cbuf = shd_info.cbufs[0];
+    const void* fs_cbuf = shd_info.cbufs[3];
     T(vs_cbuf && fs_cbuf && (vs_cbuf != fs_cbuf));
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
