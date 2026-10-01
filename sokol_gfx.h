@@ -11363,8 +11363,10 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     const GLenum gl_tgt = img->gl.target;
     const GLsizei gl_compr_size = (GLsizei)_sg_surface_pitch(fmt, width, height, 1);
     SOKOL_ASSERT(gl_compr_size > 0);
+    // NOTE: src_ptr may be null, and adding to a nullptr is UB
+    const GLintptr gl_src = (GLintptr)src_ptr + (GLintptr)src_offset;
     if (SG_IMAGETYPE_2D == img->cmn.type) {
-        const void* gl_data = (const void*)(src_ptr + src_offset);
+        const GLvoid* gl_data = (const GLvoid*)gl_src;
         if (compressed) {
             const GLenum gl_ifmt = _sg_gl_teximage_internal_format(fmt);
             glCompressedTexSubImage2D(gl_tgt, mip_level, x, y, width, height, gl_ifmt, gl_compr_size, gl_data);
@@ -11375,7 +11377,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
         }
     } else if (SG_IMAGETYPE_CUBE == img->cmn.type) {
         for (int i = 0; i < num_slices; i++) {
-            const void* gl_data = (const void*)(src_ptr + src_offset + i * src_bytes_per_slice);
+            const GLvoid* gl_data = (const GLvoid*)(gl_src + (GLintptr)i * (GLintptr)src_bytes_per_slice);
             const int face_index = i + slice;
             SOKOL_ASSERT(face_index < 6);
             const GLenum gl_cubeface_tgt = _sg_gl_cubeface_target(face_index);
@@ -11389,7 +11391,7 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
             }
         }
     } else if ((SG_IMAGETYPE_3D == img->cmn.type) || (SG_IMAGETYPE_ARRAY == img->cmn.type)) {
-        const void* gl_data = (const void*)(src_ptr + src_offset);
+        const GLvoid* gl_data = (const GLvoid*)gl_src;
         if (compressed) {
             const GLenum gl_ifmt = _sg_gl_teximage_internal_format(fmt);
             glCompressedTexSubImage3D(gl_tgt, mip_level, x, y, slice, width, height, num_slices, gl_ifmt, gl_compr_size * num_slices, gl_data);
