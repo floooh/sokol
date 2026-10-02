@@ -3266,3 +3266,209 @@ UTEST(sokol_gfx, draw_write_image_transient_ok) {
     sg_commit();
     sg_shutdown();
 }
+
+// multiple sg_write_buffer_transient() calls are allowed until the buffer is used for the first time in a frame
+UTEST(sokol_gfx, write_buffer_transient_multiple_before_bind) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    const float data[8] = {0};
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 0 } });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 32 } });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 64 } });
+        T(num_log_called == 0);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+        sg_draw(0, 3, 1);
+        T(num_log_called == 0);
+        sg_end_pass();
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// sg_write_buffer_transient() after the buffer has been bound in the same frame is an error, but ok again in the next frame
+UTEST(sokol_gfx, write_buffer_transient_after_bind) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    const float data[8] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = buf };
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    sg_write_buffer_transient(&wr);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    reset_log_items();
+    sg_write_buffer_transient(&wr);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    reset_log_items();
+    sg_write_buffer_transient(&wr);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// multiple copies from a write-transient buffer are allowed, but not interleaved with sg_write_buffer_transient()
+UTEST(sokol_gfx, write_buffer_transient_vs_copy) {
+    setup(&(sg_desc){0});
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 1024,
+    });
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 1024 });
+    sg_image img = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    const uint8_t data[64] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = src };
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_write_buffer_transient(&wr);
+        sg_write_buffer_transient(&wr);
+        // any mix of copies to buffers and images
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 64 });
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 32 });
+        T(num_log_called == 0);
+        // a write after the first copy is an error
+        sg_write_buffer_transient(&wr);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+        // ...and more copies are still ok
+        reset_log_items();
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 16 });
+        T(num_log_called == 0);
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// the copy-before-write rule also applies when the first copy goes to an image
+UTEST(sokol_gfx, write_buffer_transient_after_copy_to_image) {
+    setup(&(sg_desc){0});
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 1024,
+    });
+    sg_image img = create_copy_dst_image(16, 16);
+    const uint8_t data[64] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = src };
+    sg_write_buffer_transient(&wr);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+    T(num_log_called == 0);
+    sg_write_buffer_transient(&wr);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+// same rules for write-transient images: multiple writes before first bind, none after
+UTEST(sokol_gfx, write_image_transient_multiple_before_bind) {
+    setup(&(sg_desc){0});
+    write_transient_image_setup_t s = create_write_transient_image_setup();
+    const uint32_t pixels[8*4] = {0};
+    // write the upper and lower half of the 8x8 image separately
+    const sg_write_image_desc wr_top = {
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 8 * 4, .bytes_per_slice = 8 * 4 * 4 },
+        .dst = { .image = s.img, .y = 0 },
+        .size = { .width = 8, .height = 4, .num_slices = 1 },
+    };
+    sg_write_image_desc wr_bottom = wr_top;
+    wr_bottom.dst.y = 4;
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+        sg_write_image_transient(&wr_top);
+        sg_write_image_transient(&wr_bottom);
+        sg_write_image_transient(&wr_top);
+        T(num_log_called == 0);
+        sg_apply_pipeline(s.pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .views[0] = s.view, .samplers[0] = s.smp });
+        sg_draw(0, 3, 1);
+        T(num_log_called == 0);
+        // write after bind is an error
+        sg_write_image_transient(&wr_bottom);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+        sg_end_pass();
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// multiple sg_write_buffer_unsealed() calls are allowed while the buffer is unsealed, but not after sg_seal_buffer()
+UTEST(sokol_gfx, write_buffer_unsealed_only_while_unsealed) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_unsealed = true }, .size = 128 });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t data[64] = {0};
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 0 } });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 64 } });
+    T(num_log_called == 0);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_buffer_unsealed_wrong_usage) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .size = 128 });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    const uint8_t data[64] = {0};
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_USAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+// same for images, writing is done per region
+UTEST(sokol_gfx, write_image_unsealed_only_while_unsealed) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[8*4] = {0};
+    const sg_write_image_desc wr_top = {
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 8 * 4, .bytes_per_slice = 8 * 4 * 4 },
+        .dst = { .image = img, .y = 0 },
+        .size = { .width = 8, .height = 4, .num_slices = 1 },
+    };
+    sg_write_image_desc wr_bottom = wr_top;
+    wr_bottom.dst.y = 4;
+    sg_write_image_unsealed(&wr_top);
+    sg_write_image_unsealed(&wr_bottom);
+    T(num_log_called == 0);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    sg_seal_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_write_image_unsealed(&wr_top);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
