@@ -288,6 +288,7 @@ typedef uint64_t        GLuint64;
 #define GL_ONE_MINUS_SRC1_COLOR                        0x88FA
 #define GL_ONE_MINUS_SRC_ALPHA                         0x0303
 #define GL_ONE_MINUS_SRC_COLOR                         0x0301
+#define GL_PIXEL_BUFFER_BARRIER_BIT                    0x00000080
 #define GL_PIXEL_UNPACK_BUFFER                         0x88EC
 #define GL_POINTS                                      0x0000
 #define GL_POLYGON_OFFSET_FILL                         0x8037

@@ -253,6 +253,9 @@ UTEST(sokol_gfx_metal, init_caps) {
     T(f.dual_source_blending);
     T(f.vertexformat_int10_n2);
     T(f.image_clamp_to_border);
+    T(f.copy_buffer_to_image_relaxed_buffer_type);
+    T(f.copy_buffer_to_image_relaxed_bytes_per_row);
+    T(!f.separate_buffer_types);
     const sg_limits l = sg_query_limits();
     T(l.max_image_size_2d == 16384);
     T(l.max_image_size_cube == 16384);
@@ -2761,6 +2764,39 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_2d) {
     T(metal_mock_blit_encoder_state()->num_texture_copies == 1);
     sg_commit();
     T(metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0) < metal_mock_find_call(METAL_MOCK_FUNC_commit, 0));
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_non_staging_source) {
+    setup();
+    // Metal doesn't restrict the source buffer type, nor the row pitch alignment
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);     // 64 byte row pitch
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    T(call->args[0].p == active_mtl_buf(src));
+    T(call->args[2].u == 16 * 4);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_buffer_to_image_rejects_staging_index_buffer) {
+    setup();
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER));
+    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 0);
     teardown();
 }
 

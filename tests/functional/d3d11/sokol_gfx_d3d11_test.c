@@ -130,6 +130,15 @@ UTEST(sokol_gfx_d3d11, backend_is_d3d11) {
     teardown();
 }
 
+UTEST(sokol_gfx_d3d11, copy_buffer_to_image_features) {
+    setup();
+    const sg_features f = sg_query_features();
+    T(!f.copy_buffer_to_image_relaxed_buffer_type);
+    T(f.copy_buffer_to_image_relaxed_bytes_per_row);   // irrelevant, rule only affects non-staging sources
+    T(!f.separate_buffer_types);
+    teardown();
+}
+
 UTEST(sokol_gfx_d3d11, format_caps_populated) {
     setup();
     // Colour formats should be sampleable and blendable.
@@ -1554,6 +1563,24 @@ UTEST(sokol_gfx_d3d11, copy_buffer_to_image_validation_rejects) {
     T(d3d11_mock_num_calls() == 0);
     sg_destroy_buffer(stg);
     sg_destroy_buffer(gpu);
+    sg_destroy_image(img);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_buffer_to_image_rejects_staging_index_buffer) {
+    setup();
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_image img = sg_make_image(&(sg_image_desc){ .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.copy_dst = true });
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    d3d11_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER));
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER));
+    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(d3d11_mock_num_calls() == 0);
+    sg_destroy_buffer(src);
     sg_destroy_image(img);
     teardown();
 }

@@ -229,6 +229,9 @@ UTEST(sokol_gfx_gl, features) {
     #endif
     T(!f.mrt_independent_blend_state);
     T(f.vertexformat_int10_n2);
+    T(f.copy_buffer_to_image_relaxed_buffer_type);
+    T(f.copy_buffer_to_image_relaxed_bytes_per_row);
+    T(!f.separate_buffer_types);    // only set on GLES3 under emscripten
     teardown();
 }
 
@@ -2377,6 +2380,83 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     T(no_errors());
     teardown();
 }
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
+    setup();
+    // GL doesn't restrict the source buffer type, nor the row pitch alignment
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(vbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vbuf, .dst.image = img });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[8].p == 0);
+    T(gl_mock_bindings()->pixel_unpack_buffer == 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_rejects_staging_index_buffer) {
+    setup();
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(ibuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = ibuf, .dst.image = img });
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER));
+    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
+    sg_destroy_buffer(ibuf);
+    sg_destroy_image(img);
+    teardown();
+}
+
+#if TEST_HAS_COMPUTE
+UTEST(sokol_gfx_gl, copy_buffer_to_image_storage_buffer_issues_barrier) {
+    setup();
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(sbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = sbuf, .dst.image = img });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    // shader-written buffer data must be visible to the GL_PIXEL_UNPACK_BUFFER read
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 1);
+    const GLbitfield bits = (GLbitfield)gl_mock_last_call(GL_MOCK_FUNC_glMemoryBarrier)->args[0].i;
+    T((bits & GL_PIXEL_BUFFER_BARRIER_BIT) != 0);
+    T((bits & GL_BUFFER_UPDATE_BARRIER_BIT) != 0);
+    T((bits & GL_TEXTURE_UPDATE_BARRIER_BIT) != 0);
+    // the barrier must be issued before the texture upload
+    T(gl_mock_find_call(GL_MOCK_FUNC_glMemoryBarrier, 0) < gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0));
+    sg_destroy_buffer(sbuf);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+#endif
 
 //------------------------------------------------------------------------------
 //  compute memory barriers (GL 4.3 / GLES 3.1+)

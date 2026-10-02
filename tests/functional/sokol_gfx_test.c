@@ -1510,6 +1510,167 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_validate_size_and_offsets) {
     sg_shutdown();
 }
 
+static sg_buffer create_copy_src_buffer(sg_buffer_usage usage, size_t size) {
+    usage.copy_src = true;
+    return sg_make_buffer(&(sg_buffer_desc){ .size = size, .usage = usage });
+}
+
+static sg_image create_copy_dst_image(int width, int height) {
+    return sg_make_image(&(sg_image_desc){
+        .width = width,
+        .height = height,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+}
+
+// override backend features after resource creation to test the validation rules in isolation
+static void set_copy_buffer_to_image_features(bool relaxed_buffer_type, bool relaxed_bytes_per_row, bool separate_buffer_types) {
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = relaxed_buffer_type;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = relaxed_bytes_per_row;
+    _sg.features.separate_buffer_types = separate_buffer_types;
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    // staging source must pass with all restrictive features, 16x16 RGBA8 has a 64 byte row pitch
+    set_copy_buffer_to_image_features(false, false, true);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_src_staging_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_copy_src_buffer((sg_buffer_usage){ .staging_index_buffer = true }, 1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    // rejected independent of any backend feature
+    for (int i = 0; i < 2; i++) {
+        const bool relaxed = (i == 1);
+        set_copy_buffer_to_image_features(relaxed, relaxed, false);
+        reset_log_items();
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dst });
+        T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER);
+        if (relaxed) {
+            T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+            T(num_log_called == 2);
+        } else {
+            // additionally fails the staging-buffer-only and 256-byte-row checks
+            T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+            T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+            T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+            T(num_log_called == 4);
+        }
+    }
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_relaxed_buffer_type) {
+    setup(&(sg_desc){0});
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 1024);
+    sg_buffer idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // relaxed: any buffer type is accepted as source
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(num_log_called == 0);
+
+    // not relaxed (D3D11): only .staging_buffer is accepted
+    set_copy_buffer_to_image_features(false, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_relaxed_bytes_per_row) {
+    setup(&(sg_desc){0});
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 8192);
+    sg_buffer stg = create_staging_buffer(4096);
+    sg_image small = create_copy_dst_image(16, 16);     // 64 byte row pitch
+    sg_image wide = create_copy_dst_image(64, 16);      // 256 byte row pitch
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(wide) == SG_RESOURCESTATE_VALID);
+
+    // relaxed: any row pitch is fine
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = small });
+    T(num_log_called == 0);
+
+    // not relaxed (WebGPU): non-staging source needs a 256 byte multiple row pitch
+    set_copy_buffer_to_image_features(true, false, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = small });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // explicit bytes_per_row which is a multiple of the pixel size but not of 256
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = vtx, .bytes_per_row = 320, .bytes_per_slice = 320 * 16 },
+        .dst.image = wide,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // 256 byte multiple row pitch passes
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = wide });
+    T(num_log_called == 0);
+    // staging source is exempt from the 256 byte rule
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stg, .dst.image = small });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_webgl2_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 1024);
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 1024);
+    sg_buffer stg = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // separate buffer types (WebGL2): index buffers can't be a source
+    set_copy_buffer_to_image_features(true, true, true);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but vertex and staging buffers are fine
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stg, .dst.image = dst });
+    T(num_log_called == 0);
+
+    // without separate buffer types an index buffer source is fine
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
 static struct {
     uintptr_t userdata;
     int num_called;
