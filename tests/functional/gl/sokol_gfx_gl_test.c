@@ -2381,6 +2381,35 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     teardown();
 }
 
+// the source buffer only needs to hold the bytes actually read by the copy,
+// e.g. no padding after the last row
+UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
+    setup();
+    // 4x2 region with an 8 pixel row pitch: 32 (first row incl. padding) + 16 (last row)
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 32 + 16 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = stage, .bytes_per_row = 32, .bytes_per_slice = 2 * 32 },
+        .dst = { .image = img, .x = 2, .y = 4 },
+        .size = { .width = 4, .height = 2 },
+    });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[2].i == 2);
+    T(sub->args[3].i == 4);
+    T(sub->args[4].i == 4);
+    T(sub->args[5].i == 2);
+    sg_destroy_buffer(stage);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
 UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     setup();
     // GL doesn't restrict the source buffer type, nor the row pitch alignment

@@ -1486,6 +1486,30 @@ UTEST(sokol_gfx_d3d11, copy_buffer_to_image_2d_subrect) {
     teardown();
 }
 
+// the source buffer only needs to hold the bytes actually read by the copy,
+// e.g. no padding after the last row
+UTEST(sokol_gfx_d3d11, copy_buffer_to_image_tightly_sized_source) {
+    setup();
+    fill_pattern();
+    // 8x4 region with a 128 byte row pitch: 3 * 128 (rows incl. padding) + 32 (last row)
+    sg_buffer stg = make_filled_staging_buffer(3 * 128 + 32);
+    sg_image img = sg_make_image(&(sg_image_desc){ .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.copy_dst = true });
+    d3d11_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = stg, .bytes_per_row = 128, .bytes_per_slice = 4 * 128 },
+        .dst = { .image = img, .x = 4, .y = 2 },
+        .size = { .width = 8, .height = 4 },
+    });
+    T(no_errors());
+    const d3d11_mock_call_t* c = LAST(UPDATE_SUBRESOURCE);
+    T(c && (c->dst == ntex(img)) && (c->dst_subres == 0));
+    T(c && (c->box.left == 4) && (c->box.right == 12) && (c->box.top == 2) && (c->box.bottom == 6));
+    T(c && (c->src_row_pitch == 128));
+    sg_destroy_buffer(stg);
+    sg_destroy_image(img);
+    teardown();
+}
+
 UTEST(sokol_gfx_d3d11, copy_buffer_to_image_array_mip_slices) {
     setup();
     fill_pattern();
