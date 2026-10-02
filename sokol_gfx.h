@@ -2367,11 +2367,13 @@ typedef struct sg_features {
     bool mrt_independent_write_mask;    // multiple-render-target rendering can use per-render-target color write masks
     bool compute;                       // storage buffers and compute shaders are supported
     bool msaa_texture_bindings;         // if true, multisampled images can be bound as textures
-    bool separate_buffer_types;         // cannot use the same buffer for vertex and indices (only WebGL2)
+    bool separate_buffer_types;         // cannot use the same buffer for vertex and indices, cannot copy from non-index into index buffer (webgl2 restriction)
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
     bool dual_source_blending;          // dual-source-blending supported
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
+    bool copy_buffer_to_image_relaxed_buffer_type;      // sg_copy_buffer_to_image is supported for any buffer type (if false: only .staging_buffer, d3d11 restriction)
+    bool copy_buffer_to_image_relaxed_bytes_per_row;    // sg_copy_buffer_to_image .src.bytes_per_row multiple can be less than 256 (webgpu restriction)
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -3343,7 +3345,7 @@ typedef struct sg_bindings {
         the buffer cannot be bound as rendering or compute resource and
         can only be used as copy source or destination
     .staging_index_buffer (default: false)
-        special staging buffer type for WebGL2 to copy into or out of index
+        special staging buffer type for WebGL2 for copying data into index
         buffers (in WebGL2 such copies are only allowed between index buffers)
     .write_unsealed (default: false)
         when true, creates an immutable buffer in 'unsealed' resource state,
@@ -5291,15 +5293,17 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_buffer: on webgl2, if dst buffer has usage.index_buffer, src buffer must have usage.index_buffer or usage.staging_index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_image: on webgl2, source buffer cannot have usage.index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER, "sg_copy_buffer_to_image: source buffer cannot have .staging_index_buffer usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER, "sg_copy_buffer_to_image: on d3d11, source buffer must have .staging_buffer usage (sg_features.copy_buffer_to_image_relaxed_buffer_type is false)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS, "sg_copy_buffer_to_image: must not be called inside a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID, "sg_copy_buffer_to_image: source buffer resource state must be SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_VALID, "sg_copy_buffer_to_image: destination image resource state must be SG_RESOURCESTATE_VALID") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER, "sg_copy_buffer_to_image: source buffer must have .staging_buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC, "sg_copy_buffer_to_image: source buffer must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_COPY_DST, "sg_copy_buffer_to_image: destination image must have .copy_dst usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT, "sg_copy_buffer_to_image: desc.src.offset must be a multiple of the dst image pixel format block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of 256 when copying from a non-staging buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256, "sg_copy_buffer_to_image: desc.src.bytes_per_row must be a multiple of 256 when copying from a non-staging buffer (sg_features.copy_buffer_to_image_relaxed_bytes_per_row is false)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: copy operation may read past end of source buffer (consider adding one row of 'slack')") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
@@ -6456,6 +6460,7 @@ inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { 
         #define GL_ELEMENT_ARRAY_BARRIER_BIT 0x00000002
         #define GL_TEXTURE_FETCH_BARRIER_BIT 0x00000008
         #define GL_SHADER_IMAGE_ACCESS_BARRIER_BIT 0x00000020
+        #define GL_PIXEL_BUFFER_BARRIER_BIT 0x00000080
         #define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
         #define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
         #define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
@@ -10576,6 +10581,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.draw_base_instance = version >= 420;
     _sg.features.dual_source_blending = version >= 330;
     _sg.features.vertexformat_int10_n2 = true;
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -10704,6 +10711,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.draw_base_instance = false;
     _sg.features.dual_source_blending = false;
     _sg.features.vertexformat_int10_n2 = true;
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -12983,13 +12992,11 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(!src_buf->cmn.usage.staging_index_buffer);
 
-    // NOTE: currently buffer to image copies must happen from a staging buffer (so currently
-    // this barrier is dead code) but since this restriction only affects the D3D11 backend
-    // this might be relaxed later
     #if defined(_SOKOL_GL_HAS_COMPUTE)
     if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image) {
-        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT|GL_TEXTURE_UPDATE_BARRIER_BIT);
+        glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT|GL_TEXTURE_UPDATE_BARRIER_BIT|GL_PIXEL_BUFFER_BARRIER_BIT);
     }
     #endif
 
@@ -13904,6 +13911,10 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = false;
+    // can only copy from staging buffer
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = false;
+    // technically irrelevant since the bytes-per-row alignment rule only affects non-staging buffers
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -16052,6 +16063,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -17872,6 +17885,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_imag
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(!src_buf->cmn.usage.staging_index_buffer);
 
     _sg_mtl_acquire_cmd_buffer();
     SOKOL_ASSERT(_sg.mtl.cmd_buffer);
@@ -18360,6 +18374,9 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
     _sg.features.vertexformat_int10_n2 = false;
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
+    // when copying from non-staging buffer, bytes-per-row must be multiple of 256
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = false;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -20150,8 +20167,9 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_ima
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(!src_buf->cmn.usage.staging_index_buffer);
     SOKOL_ASSERT(dst_img->wgpu.tex);
-    const bool staging = src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer;
+    const bool staging = src_buf->cmn.usage.staging_buffer;
     if (staging) {
         SOKOL_ASSERT(src_buf->wgpu.staging_ptr);
         _sg_wgpu_write_miplevel_data(dst_img,
@@ -22106,6 +22124,8 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.draw_base_instance = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -23519,6 +23539,7 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     SOKOL_ASSERT(src_buf && dst_img && desc);
     SOKOL_ASSERT(src_buf->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(!src_buf->cmn.usage.staging_index_buffer);
     SOKOL_ASSERT(desc->src.bytes_per_row > 0);
     SOKOL_ASSERT(desc->src.bytes_per_slice > 0);
     SOKOL_ASSERT((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps));
@@ -25901,24 +25922,27 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         const int block_dim = _sg_block_dim(dst_img->cmn.pixel_format);
         const int block_size = _sg_block_bytesize(dst_img->cmn.pixel_format);
         const size_t copy_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
-        // NOTE: staging buffer source is a D3D11 restriction, might decide later to
-        // scope the validation only to D3D11?
-        _SG_VALIDATE(src_buf->cmn.usage.staging_buffer, VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+        const bool is_staging_buffer = src_buf->cmn.usage.staging_buffer;
+        _SG_VALIDATE(!src_buf->cmn.usage.staging_index_buffer, VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER);
+        // D3D11 doesn't have a copy-buffer-to-texture feature, must use staging buffer as source
+        if (!_sg.features.copy_buffer_to_image_relaxed_buffer_type) {
+            _SG_VALIDATE(is_staging_buffer, VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+        }
+        // WebGL2 cannot copy from index buffers into other resource types
+        if (_sg.features.separate_buffer_types) {
+            _SG_VALIDATE(!src_buf->cmn.usage.index_buffer, VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER);
+        }
+        // when copying from GPU buffers, WebGPU requires bytes-per-row to be multiple of 256
+        if (!_sg.features.copy_buffer_to_image_relaxed_bytes_per_row && !is_staging_buffer) {
+            _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+        }
+        _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, block_size), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOIMAGE_INSIDE_PASS);
         _SG_VALIDATE(src_buf->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_SRC_VALID);
         _SG_VALIDATE(dst_img->slot.state == SG_RESOURCESTATE_VALID, VALIDATE_COPYBUFFERTOIMAGE_DST_VALID);
         _SG_VALIDATE(src_buf->cmn.usage.copy_src, VALIDATE_COPYBUFFERTOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYBUFFERTOIMAGE_COPY_DST);
         _SG_VALIDATE(_sg_multiple_u64(desc->src.offset, (uint64_t)block_size), VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
-        if (src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer) {
-            // when copying from staging buffer, source bytes-per-row must be multiple of texture block size
-            _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, block_size), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
-        } else {
-            // WebGPU restriction: when copying from a GPU buffer, bytes-per-row must be a multiple of 256
-            _SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
-        }
-        // WebGPU restriction: wgpuCommandEncoderCopyBufferToTexture requires bytes-per-row to be multiple of 256
-        //_SG_VALIDATE((desc->src.bytes_per_row > 0) && _sg_multiple(desc->src.bytes_per_row, 256), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW);
         _SG_VALIDATE((desc->src.bytes_per_slice > 0) && _sg_multiple(desc->src.bytes_per_slice, desc->src.bytes_per_row), VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
         // NOTE: the size validation here is convervative and includes a potential 'tail'
         // on the last row after the actually copied data when source offset > 0,

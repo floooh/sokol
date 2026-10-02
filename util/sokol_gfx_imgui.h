@@ -4721,6 +4721,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
     _sgimgui_igtext("    dual_source_blending: %s", _sgimgui_bool_string(f.dual_source_blending));
     _sgimgui_igtext("    vertexformat_int10_n2: %s", _sgimgui_bool_string(f.vertexformat_int10_n2));
+    _sgimgui_igtext("    copy_buffer_to_image_relaxed_buffer_type: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_buffer_type));
+    _sgimgui_igtext("    copy_buffer_to_image_relaxed_bytes_per_row: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_bytes_per_row));
     _sgimgui_igtext("    gl_texture_views: %s", _sgimgui_bool_string(f.gl_texture_views));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
