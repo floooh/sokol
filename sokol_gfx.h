@@ -445,10 +445,8 @@
         This is why calling sg_query_surface_pitch() for a compressed pixel format and height
         N, N+1, N+2, ... may return the same result.
 
-        The row_align_bytes parameter is for added flexibility. For image data that goes into
-        the sg_make_image() or sg_update_image() this should generally be 1, because these
-        functions take tightly packed image data as input no matter what alignment restrictions
-        exist in the backend 3D APIs.
+        The row_align_bytes parameter is for added flexibility. For tightly packed image
+        this should generally be 1, otherwise the row pitch in bytes.
 
     ON INITIALIZATION:
     ==================
@@ -464,8 +462,8 @@
                 - the max overall size of uniform data that can be
                   updated per frame, including a worst-case alignment
                   per uniform update (this worst-case alignment is 256 bytes)
-                - the max size of all dynamic resource updates (sg_update_buffer,
-                  sg_append_buffer and sg_update_image) per frame
+                - the max size of all transient resource updates
+                  (sg_write_buffer/image_transient per frame
                 - the max number of compute-dispatch calls in a compute pass
             Not all of those limit values are used by all backends, but it is
             good practice to provide them none-the-less.
@@ -809,7 +807,7 @@
     storage images by running compute shader code on
     the GPU. Updating storage resources with a compute shader will almost always
     be more efficient than computing the same data on the CPU and then uploading
-    it via `sg_update_buffer()` or `sg_update_image()`.
+    it via `sg_write_buffer/image_transient()`.
 
     NOTE: compute passes are only supported on the following platforms and
     backends:
@@ -4693,7 +4691,6 @@ typedef struct sg_trace_hooks {
     void (*destroy_shader)(sg_shader shd, void* user_data);
     void (*destroy_pipeline)(sg_pipeline pip, void* user_data);
     void (*destroy_view)(sg_view view, void* user_data);
-    void (*update_image)(sg_image img, const sg_image_data* data, void* user_data);
     void (*write_buffer_transient)(const sg_write_buffer_desc* desc, void* user_data);
     void (*write_image_transient)(const sg_write_image_desc* desc, void* user_data);
     void (*write_buffer_unsealed)(const sg_write_buffer_desc* desc, void* user_data);
@@ -4778,14 +4775,14 @@ typedef struct sg_slot_info {
 
 typedef struct sg_buffer_info {
     sg_slot_info slot;              // resource pool slot info
-    int num_slots;                  // number of renaming-slots for dynamically updated buffers
-    int active_slot;                // currently active write-slot for dynamically updated buffers
+    int num_slots;                  // number of renaming-slots (>1 for write-transient buffers)
+    int active_slot;                // currently active write-slot for write-transient buffers
 } sg_buffer_info;
 
 typedef struct sg_image_info {
     sg_slot_info slot;              // resource pool slot info
-    int num_slots;                  // number of renaming-slots for dynamically updated images
-    int active_slot;                // currently active write-slot for dynamically updated images
+    int num_slots;                  // number of renaming-slots (>1 for write-transient images)
+    int active_slot;                // currently active write-slot for write-transient images
 } sg_image_info;
 
 typedef struct sg_sampler_info {
@@ -5603,7 +5600,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT, "sg_copy_buffer_to_buffer: desc.dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_buffer: on webgl2, if dst buffer has usage.index_buffer, src buffer must have usage.index_buffer or usage.staging_index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_buffer: on webgl2, src and dst buffer must both be index buffers or both be non-index buffers (usage.staging_index_buffer counts as index buffer)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_image: on webgl2, source buffer cannot have usage.index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_TOO_SMALL, "sg_copy_buffer_to_image: desc.src.bytes_per_row is smaller than required by desc.size.width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE_TOO_SMALL, "sg_copy_buffer_to_image: desc.src.bytes_per_slice is smaller than required by desc.size.width and .height") \
@@ -5727,10 +5724,9 @@ typedef enum sg_log_item {
     Vulkan specific:
         .vulkan.copy_staging_buffer_size
             Size of the staging buffer in bytes for uploading the initial
-            content of buffers and images, and for updating
-            .usage.dynamic_update resources. The default is 4 MB,
-            bigger resource updates are split into multiple chunks
-            of the staging buffer size
+            content of buffers and images and for write-unsealed writes.
+            The default is 4 MB, bigger resource updates are split into
+            multiple chunks of the staging buffer size
         .vulkan.transient_staging_buffer_size
             Size of the staging buffer in bytes for updating .usage.write_transient
             resources. The default is 16 MB. The size must be big enough
@@ -26225,8 +26221,10 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT);
         _SG_VALIDATE((desc->src.offset + desc->size) <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
         _SG_VALIDATE((desc->dst.offset + desc->size) <= (size_t)dst_buf->cmn.size, VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW);
-        if (_sg.features.separate_buffer_types && dst_buf->cmn.usage.index_buffer) {
-            _SG_VALIDATE(src_buf->cmn.usage.index_buffer || src_buf->cmn.usage.staging_index_buffer, VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
+        if (_sg.features.separate_buffer_types) {
+            const bool src_is_index = src_buf->cmn.usage.index_buffer || src_buf->cmn.usage.staging_index_buffer;
+            const bool dst_is_index = dst_buf->cmn.usage.index_buffer;
+            _SG_VALIDATE(src_is_index == dst_is_index, VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
         }
         return _sg_validate_end();
     #endif
@@ -28293,6 +28291,7 @@ SOKOL_API_IMPL void sg_seal_buffer(sg_buffer buf_id) {
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
     if (!buf) {
         _SG_ERROR(SEAL_BUFFER_ALIVE);
+        return;
     }
     if (_sg_validate_seal_buffer(buf)) {
         _sg_seal_buffer(buf);
