@@ -1317,9 +1317,9 @@ UTEST(sokol_gfx_d3d11, write_buffer_unsealed_update_subresource_and_seal) {
     sg_seal_buffer(buf);
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     T(d3d11_mock_num_calls() == 0);
-    // writing after sealing is rejected by validation
+    // writing after sealing is rejected
     sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = { pattern, 16 }, .dst.buffer = buf });
-    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(logged(SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED));
     T(d3d11_mock_num_calls() == 0);
     sg_destroy_buffer(buf);
     teardown();
@@ -1818,7 +1818,7 @@ UTEST(sokol_gfx_d3d11, write_image_unsealed_cube_mips_and_seal) {
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(d3d11_mock_num_calls() == 0);
     sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = { pattern, 256 }, .dst.image = img });
-    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(logged(SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_UNSEALED));
     T(d3d11_mock_num_calls() == 0);
     sg_destroy_image(img);
     teardown();

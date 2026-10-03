@@ -1978,14 +1978,101 @@ UTEST(sokol_gfx, copy_buffer_to_image_stats) {
     T(stats.cur_frame.num_copy_buffer_to_image == 2);
     T(stats.cur_frame.size_copy_buffer_to_image == 1104);
 
-    // a copy rejected by validation isn't counted
+    // a copy rejected by validation is counted, but doesn't add to the copied size
     sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src_small, .dst.image = dst });
     T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     T(num_log_called == 2);
     stats = sg_query_stats();
-    T(stats.cur_frame.num_copy_buffer_to_image == 2);
+    T(stats.cur_frame.num_copy_buffer_to_image == 3);
     T(stats.cur_frame.size_copy_buffer_to_image == 1104);
+    sg_shutdown();
+}
+
+// copy resources must be in VALID state, this is checked outside the validation layer,
+// and before the copy desc defaults are resolved (which require a valid image pixel format)
+static void test_copy_buffer_to_image_resource_state(int* utest_result) {
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_image alloc_img = sg_alloc_image();
+    sg_image failed_img = sg_alloc_image();
+    sg_fail_image(failed_img);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_image_state(alloc_img) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_image_state(failed_img) == SG_RESOURCESTATE_FAILED);
+    reset_log_items();
+
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = alloc_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = failed_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = alloc_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = failed_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // only the first error is reported
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = alloc_buf, .dst.image = failed_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // a rejected copy is counted, but doesn't add to the copied size
+    sg_enable_stats();
+    const sg_frame_stats stats_before = sg_query_stats().cur_frame;
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = failed_img });
+    T(num_log_called == 1);
+    const sg_frame_stats stats_after = sg_query_stats().cur_frame;
+    T(stats_after.num_copy_buffer_to_image == (stats_before.num_copy_buffer_to_image + 1));
+    T(stats_after.size_copy_buffer_to_image == stats_before.size_copy_buffer_to_image);
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_resource_state) {
+    setup(&(sg_desc){0});
+    test_copy_buffer_to_image_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, copy_buffer_to_image_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_copy_buffer_to_image_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// destroyed resources are reported as errors outside the validation layer
+UTEST(sokol_gfx, copy_buffer_to_image_resource_alive) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    sg_buffer dead_buf = create_staging_buffer(1024);
+    sg_image dead_img = create_copy_dst_image(16, 16);
+    sg_destroy_buffer(dead_buf);
+    sg_destroy_image(dead_img);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_image_state(dead_img) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = dead_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_ALIVE);
+    T(num_log_called == 1);
     sg_shutdown();
 }
 
@@ -2006,6 +2093,84 @@ UTEST(sokol_gfx, copy_buffer_to_image_negative_bytes_per_row) {
     sg_shutdown();
 }
 
+// copy resources must be in VALID state, this is checked outside the validation layer
+static void test_copy_buffer_to_buffer_resource_state(int* utest_result) {
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    reset_log_items();
+
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = alloc_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = failed_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = alloc_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = failed_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // only the first error is reported
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = alloc_buf, .dst.buffer = failed_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // a rejected copy is counted, but doesn't add to the copied size
+    sg_enable_stats();
+    const sg_frame_stats stats_before = sg_query_stats().cur_frame;
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = failed_buf, .size = 32 });
+    T(num_log_called == 1);
+    const sg_frame_stats stats_after = sg_query_stats().cur_frame;
+    T(stats_after.num_copy_buffer_to_buffer == (stats_before.num_copy_buffer_to_buffer + 1));
+    T(stats_after.size_copy_buffer_to_buffer == stats_before.size_copy_buffer_to_buffer);
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_state) {
+    setup(&(sg_desc){0});
+    test_copy_buffer_to_buffer_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_copy_buffer_to_buffer_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// destroyed resources are reported as errors outside the validation layer
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_alive) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    sg_buffer dead_buf = create_staging_buffer(64);
+    sg_destroy_buffer(dead_buf);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = dead_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dead_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_ALIVE);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, copy_buffer_to_buffer_stats) {
     setup(&(sg_desc){0});
     sg_buffer src = create_staging_buffer(64);
@@ -2018,13 +2183,13 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_stats) {
     sg_stats stats = sg_query_stats();
     T(stats.cur_frame.num_copy_buffer_to_buffer == 1);
     T(stats.cur_frame.size_copy_buffer_to_buffer == 32);
-    // a copy rejected by validation isn't counted
+    // a copy rejected by validation is counted, but doesn't add to the copied size
     sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src = { .buffer = src, .offset = 48 }, .dst.buffer = dst, .size = 32 });
     T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
     T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
     T(num_log_called == 2);
     stats = sg_query_stats();
-    T(stats.cur_frame.num_copy_buffer_to_buffer == 1);
+    T(stats.cur_frame.num_copy_buffer_to_buffer == 2);
     T(stats.cur_frame.size_copy_buffer_to_buffer == 32);
     sg_shutdown();
 }
@@ -3787,9 +3952,8 @@ UTEST(sokol_gfx, write_buffer_unsealed_only_while_unsealed) {
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     T(num_log_called == 0);
     sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
-    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 2);
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+    T(num_log_called == 1);
     sg_shutdown();
 }
 
@@ -3841,16 +4005,16 @@ UTEST(sokol_gfx, write_image_dst_range_with_default_size) {
     sg_shutdown();
 }
 
+// a buffer without usage.write_unsealed is never in UNSEALED state, so this is
+// rejected by the resource state check before the usage validation is reached
 UTEST(sokol_gfx, write_buffer_unsealed_wrong_usage) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .size = 128 });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     const uint8_t data[64] = {0};
     sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
-    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_USAGE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEBUFFERUNSEALED_RESOURCESTATE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 3);
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+    T(num_log_called == 1);
     sg_shutdown();
 }
 
@@ -3880,8 +4044,110 @@ UTEST(sokol_gfx, write_image_unsealed_only_while_unsealed) {
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(num_log_called == 0);
     sg_write_image_unsealed(&wr_top);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGEUNSEALED_RESOURCESTATE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 2);
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_UNSEALED);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+// write functions check the resource state outside the validation layer, and before
+// the write desc defaults are resolved (which require a valid image pixel format)
+static void test_write_resource_state(int* utest_result) {
+    const uint32_t data[8*8] = {0};
+    sg_buffer valid_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true }, .size = sizeof(data) });
+    sg_buffer unsealed_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_unsealed = true }, .size = sizeof(data) });
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_buffer dead_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true }, .size = sizeof(data) });
+    sg_destroy_buffer(dead_buf);
+    sg_image valid_img = sg_make_image(&(sg_image_desc){ .usage.write_transient = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_image unsealed_img = sg_make_image(&(sg_image_desc){ .usage.write_unsealed = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_image alloc_img = sg_alloc_image();
+    sg_image failed_img = sg_alloc_image();
+    sg_fail_image(failed_img);
+    sg_image dead_img = sg_make_image(&(sg_image_desc){ .usage.write_transient = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_destroy_image(dead_img);
+    T(sg_query_buffer_state(valid_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(unsealed_buf) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_image_state(valid_img) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(unsealed_img) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_image_state(alloc_img) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_image_state(failed_img) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_image_state(dead_img) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+
+    // sg_write_buffer_transient() requires VALID state
+    const sg_buffer wbt_bufs[3] = { unsealed_buf, alloc_buf, failed_buf };
+    for (int i = 0; i < 3; i++) {
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = wbt_bufs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_TRANSIENT_BUFFER_VALID);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = dead_buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_TRANSIENT_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_buffer_unsealed() requires UNSEALED state
+    const sg_buffer wbu_bufs[3] = { valid_buf, alloc_buf, failed_buf };
+    for (int i = 0; i < 3; i++) {
+        sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = wbu_bufs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = dead_buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_image_transient() requires VALID state
+    const sg_image wit_imgs[3] = { unsealed_img, alloc_img, failed_img };
+    for (int i = 0; i < 3; i++) {
+        sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = wit_imgs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_TRANSIENT_IMAGE_VALID);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_TRANSIENT_IMAGE_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_image_unsealed() requires UNSEALED state
+    const sg_image wiu_imgs[3] = { valid_img, alloc_img, failed_img };
+    for (int i = 0; i < 3; i++) {
+        sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = wiu_imgs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_UNSEALED);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // and the resources in the right state can be written
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = valid_buf });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = unsealed_buf });
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = valid_img });
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = unsealed_img });
+    T(num_log_called == 0);
+}
+
+UTEST(sokol_gfx, write_resource_state) {
+    setup(&(sg_desc){0});
+    test_write_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, write_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_write_resource_state(utest_result);
     sg_shutdown();
 }
