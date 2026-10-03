@@ -5590,6 +5590,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_WIDTH_OVERFLOW, "sg_write_image_*: desc.dst.x + desc.size.width must be <= destination mip level width") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_HEIGHT_OVERFLOW, "sg_write_image_*: desc.dst.y + desc.size.height must be <= destination mip level height") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW, "sg_write_image_*: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_X_ALIGNMENT, "sg_write_image_*: desc.dst.x must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_Y_ALIGNMENT, "sg_write_image_*: desc.dst.y must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE, "sg_write_image_*: for compressed pixel formats, desc.size.width must be a multiple of 4, or desc.dst.x + desc.size.width must be equal to the miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE, "sg_write_image_*: for compressed pixel formats, desc.size.height must be a multiple of 4, or desc.dst.y + desc.size.height must be equal to the miplevel height") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALBUFFER_RESOURCESTATE, "sg_seal_buffer: buffer resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_SEALIMAGE_RESOURCESTATE, "sg_seal_image: image resource state must be SG_RESOURCESTATE_UNSEALED") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS, "sg_copy_buffer_to_buffer: must not be called inside a pass") \
@@ -5618,11 +5622,13 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be > 0 and <= destination image width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be > 0 and <= destination image height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE, "sg_copy_buffer_to_image: desc.size.width must be a multiple of 4 for compressed pixel formats") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE, "sg_copy_buffer_to_image: desc.size.height must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE, "sg_copy_buffer_to_image: for compressed pixel formats, desc.size.width must be a multiple of 4, or desc.dst.x + desc.size.width must be equal to the miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE, "sg_copy_buffer_to_image: for compressed pixel formats, desc.size.height must be a multiple of 4, or desc.dst.y + desc.size.height must be equal to the miplevel height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES, "sg_copy_buffer_to_image: desc.size.num_slices must be > 0 and <= destination image num slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE, "sg_copy_buffer_to_image: desc.dst.x must be >= 0 and < miplevel width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE, "sg_copy_buffer_to_image: desc.dst.y must be >= 0 and < miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_X_ALIGNMENT, "sg_copy_buffer_to_image: desc.dst.x must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_Y_ALIGNMENT, "sg_copy_buffer_to_image: desc.dst.y must be a multiple of 4 for compressed pixel formats") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE, "sg_copy_buffer_to_image: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.x + desc.size.width must be <= destination mip level width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
@@ -26113,6 +26119,7 @@ _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, cons
     const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
     const sg_pixel_format fmt = img->cmn.pixel_format;
     const int bsize = _sg_block_bytesize(fmt);
+    const int block_dim = _sg_block_dim(fmt);
     const int row_bytes = _sg_row_pitch(fmt, desc->size.width, 1);
     const int num_rows = _sg_num_rows(fmt, desc->size.height);
     const int bpr = desc->src.bytes_per_row;
@@ -26135,6 +26142,13 @@ _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, cons
     _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_WRITEIMAGE_WRITE_WIDTH_OVERFLOW);
     _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_WRITEIMAGE_WRITE_HEIGHT_OVERFLOW);
     _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_WRITEIMAGE_WRITE_NUMSLICES_OVERFLOW);
+    // NOTE: the < 0 and <= 0 checks prevent misleading validation messages and an assert in _sg_multiple,
+    // a size that's not a multiple of the block size is allowed when the write reaches the miplevel edge
+    // (needed for compressed miplevels smaller than one block)
+    _SG_VALIDATE((desc->dst.x < 0) || _sg_multiple(desc->dst.x, block_dim), VALIDATE_WRITEIMAGE_DST_X_ALIGNMENT);
+    _SG_VALIDATE((desc->dst.y < 0) || _sg_multiple(desc->dst.y, block_dim), VALIDATE_WRITEIMAGE_DST_Y_ALIGNMENT);
+    _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim) || ((desc->dst.x + desc->size.width) == mip_width), VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE);
+    _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim) || ((desc->dst.y + desc->size.height) == mip_height), VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE);
 }
 #endif
 
@@ -26285,9 +26299,11 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL);
         _SG_VALIDATE((desc->size.width > 0) && (desc->size.width <= mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
         _SG_VALIDATE((desc->size.height > 0) && (desc->size.height <= mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
-        // NOTE: the <= 0 checks prevent a misleading validation message and an assert in _sg_multiple
-        _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
-        _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+        // NOTE: the <= 0 checks prevent a misleading validation message and an assert in _sg_multiple,
+        // a size that's not a multiple of the block size is allowed when the copy reaches the miplevel edge
+        // (needed for compressed miplevels smaller than one block)
+        _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim) || ((desc->dst.x + desc->size.width) == mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+        _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim) || ((desc->dst.y + desc->size.height) == mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
         if ((desc->size.width > 0) && (desc->size.height > 0) && (desc->size.num_slices > 0)) {
             const size_t required_size = (size_t)desc->src.offset + _sg_image_copy_size(fmt, bpr, bps, desc->size.width, desc->size.height, desc->size.num_slices);
             _SG_VALIDATE(required_size <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
@@ -26295,6 +26311,9 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         _SG_VALIDATE((desc->size.num_slices > 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES);
         _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE);
         _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE);
+        // NOTE: the < 0 checks prevent a misleading validation message and an assert in _sg_multiple
+        _SG_VALIDATE((desc->dst.x < 0) || _sg_multiple(desc->dst.x, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_X_ALIGNMENT);
+        _SG_VALIDATE((desc->dst.y < 0) || _sg_multiple(desc->dst.y, block_dim), VALIDATE_COPYBUFFERTOIMAGE_DST_Y_ALIGNMENT);
         _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE);
         _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW);
         _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW);
