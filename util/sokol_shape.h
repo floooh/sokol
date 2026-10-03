@@ -1450,7 +1450,6 @@ SOKOL_API_IMPL sg_buffer_desc sshape_vertex_buffer_desc(const sshape_state_t* st
     sg_buffer_desc desc = { 0 };
     if (state->valid) {
         desc.usage.vertex_buffer = true;
-        desc.usage.immutable = true;
         desc.data.ptr = state->vertices.buffer.ptr;
         desc.data.size = state->vertices.data_size;
     }
@@ -1462,7 +1461,6 @@ SOKOL_API_IMPL sg_buffer_desc sshape_index_buffer_desc(const sshape_state_t* sta
     sg_buffer_desc desc = { 0 };
     if (state->valid) {
         desc.usage.index_buffer = true;
-        desc.usage.immutable = true;
         desc.data.ptr = state->indices.buffer.ptr;
         desc.data.size = state->indices.data_size;
     }

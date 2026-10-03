@@ -219,12 +219,10 @@ UTEST(sokol_shape, buffer_descs_elm_range) {
         const sshape_element_range_t elm_range = sshape_element_range(&shp);
         T(vbuf_desc.size == 0);
         T(vbuf_desc.usage.vertex_buffer);
-        T(vbuf_desc.usage.immutable);
         T(vbuf_desc.data.ptr == vx);
         T(vbuf_desc.data.size == 24 * SSHAPE_MAX_VERTEX_SIZE);
         T(ibuf_desc.size == 0);
         T(ibuf_desc.usage.index_buffer);
-        T(ibuf_desc.usage.immutable);
         T(ibuf_desc.data.ptr == ix);
         T(ibuf_desc.data.size == 36 * sizeof(uint16_t));
         T(elm_range.base_element == 0);
@@ -239,12 +237,10 @@ UTEST(sokol_shape, buffer_descs_elm_range) {
         const sshape_element_range_t elm_range = sshape_element_range(&shp);
         T(vbuf_desc.size == 0);
         T(vbuf_desc.usage.vertex_buffer);
-        T(vbuf_desc.usage.immutable);
         T(vbuf_desc.data.ptr == vx);
         T(vbuf_desc.data.size == 28 * SSHAPE_MAX_VERTEX_SIZE);
         T(ibuf_desc.size == 0);
         T(ibuf_desc.usage.index_buffer);
-        T(ibuf_desc.usage.immutable);
         T(ibuf_desc.data.ptr == ix);
         T(ibuf_desc.data.size == 42 * sizeof(uint16_t));
         T(elm_range.base_element == 36);

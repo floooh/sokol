@@ -12,7 +12,8 @@
 
     - object tracking: live and created counts plus per-object state for
       buffers, textures, samplers, libraries, functions, pipeline states,
-      depth-stencil states, command queues, command buffers and encoders
+      depth-stencil states, command queues, command buffers and
+      render/compute/blit encoders
     - call log: every mocked Metal call with its arguments, in call order
     - pass and encoder state: the last render-pass descriptor and the
       bindings and render state set on the current encoder
@@ -27,9 +28,12 @@
     - object identity is the raw heap address. A handle of a released object
       may compare equal to a later object allocated at the same address, so
       only compare handles of objects which are known to be alive
-    - there is one global render-encoder and one global compute-encoder state.
-      sokol-gfx has at most one active encoder, so this is enough, but the
-      state of a previous encoder is lost when a new one is created
+    - there is one global render-encoder, one compute-encoder and one
+      blit-encoder state. sokol-gfx has at most one active encoder of each
+      kind, so this is enough, but the state of a previous encoder is lost
+      when a new one of the same kind is created
+    - blit buffer-to-buffer copies are executed immediately (memcpy between
+      the mock buffers' contents), not when the command buffer completes
 
     Not thread-safe -- this is intended for the sokol-gfx unit-test loop,
     which runs on a single thread.
@@ -42,7 +46,7 @@
 #include <stdbool.h>
 
 #define METAL_MOCK_MAX_CALLS (4096)
-#define METAL_MOCK_MAX_CALL_ARGS (8)
+#define METAL_MOCK_MAX_CALL_ARGS (16)
 #define METAL_MOCK_MAX_COLOR_ATTACHMENTS (8)
 #define METAL_MOCK_MAX_VERTEX_ATTRIBUTES (16)
 // sokol maps vertex buffer bind slots into the upper Metal buffer slots (23..30)
@@ -106,7 +110,10 @@
     _MTLM_XMACRO(setBufferOffset) \
     _MTLM_XMACRO(setTexture) \
     _MTLM_XMACRO(setSamplerState) \
-    _MTLM_XMACRO(dispatchThreadgroups)
+    _MTLM_XMACRO(dispatchThreadgroups) \
+    _MTLM_XMACRO(blitCommandEncoder) \
+    _MTLM_XMACRO(copyFromBufferToBuffer) \
+    _MTLM_XMACRO(copyFromBufferToTexture)
 
 typedef enum {
     METAL_MOCK_FUNC_INVALID = 0,
@@ -131,6 +138,7 @@ typedef enum {
     METAL_MOCK_OBJ_COMMAND_BUFFER,
     METAL_MOCK_OBJ_RENDER_ENCODER,
     METAL_MOCK_OBJ_COMPUTE_ENCODER,
+    METAL_MOCK_OBJ_BLIT_ENCODER,
     METAL_MOCK_OBJ_DRAWABLE,
     METAL_MOCK_OBJ_NUM,
 } metal_mock_obj_t;
@@ -176,6 +184,7 @@ typedef struct {
     bool is_view;               // created via newTextureViewWithPixelFormat
     const void* view_source;    // only valid if 'is_view' is true, retained by the view
     int num_replace_region;
+    int num_copy_from_buffer;   // blit copyFromBuffer:...toTexture: calls
     char label[METAL_MOCK_MAX_STRING];
 } metal_mock_texture_info_t;
 
@@ -327,6 +336,15 @@ typedef struct {
     char label[METAL_MOCK_MAX_STRING];
 } metal_mock_compute_encoder_state_t;
 
+// state of the most recent blit command encoder
+typedef struct {
+    bool ended;
+    int num_buffer_copies;      // copyFromBuffer:...toBuffer:
+    int num_texture_copies;     // copyFromBuffer:...toTexture:
+    int debug_group_depth;
+    char label[METAL_MOCK_MAX_STRING];
+} metal_mock_blit_encoder_state_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -363,6 +381,8 @@ extern int metal_mock_live_objects_total(void);
 extern int metal_mock_num_created(metal_mock_obj_t kind);
 extern bool metal_mock_is_object(metal_mock_obj_t kind, const void* obj);
 extern bool metal_mock_buffer_info(const void* obj, metal_mock_buffer_info_t* out);
+// the CPU-side bytes of a mock MTLBuffer (not logged, unlike -contents), 0 if not a buffer
+extern const void* metal_mock_buffer_data(const void* obj);
 // accepts both METAL_MOCK_OBJ_TEXTURE and METAL_MOCK_OBJ_TEXTURE_VIEW objects
 extern bool metal_mock_texture_info(const void* obj, metal_mock_texture_info_t* out);
 extern bool metal_mock_sampler_info(const void* obj, metal_mock_sampler_info_t* out);
@@ -376,6 +396,7 @@ extern bool metal_mock_depth_stencil_info(const void* obj, metal_mock_depth_sten
 extern const metal_mock_render_pass_info_t* metal_mock_last_render_pass(void);
 extern const metal_mock_render_encoder_state_t* metal_mock_render_encoder_state(void);
 extern const metal_mock_compute_encoder_state_t* metal_mock_compute_encoder_state(void);
+extern const metal_mock_blit_encoder_state_t* metal_mock_blit_encoder_state(void);
 
 // call log
 extern int metal_mock_num_calls(void);
