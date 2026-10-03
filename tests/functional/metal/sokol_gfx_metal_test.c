@@ -523,9 +523,8 @@ static const buffer_usage_case_t buffer_usage_cases[] = {
     { .usage = { .vertex_buffer = true, .copy_src = true }, .with_data = true, .num_slots = 1 },
     { .usage = { .vertex_buffer = true, .copy_dst = true }, .num_slots = 1 },
     { .usage = { .storage_buffer = true, .copy_src = true, .copy_dst = true }, .num_slots = 1 },
-    { .usage = { .staging_buffer = true, .copy_src = true }, .num_slots = 1 },
     { .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
-    { .usage = { .staging_index_buffer = true, .copy_src = true }, .num_slots = 1 },
+    { .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
 };
 
 static void check_buffer_usage_cases(int* utest_result, MTLResourceOptions expected_storage_mode) {
@@ -2770,7 +2769,7 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_2d) {
 UTEST(sokol_gfx_metal, copy_buffer_to_image_non_staging_source) {
     setup();
     // Metal doesn't restrict the source buffer type, nor the row pitch alignment
-    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true }, .size = 1024 });
     sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);     // 64 byte row pitch
     T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -2787,7 +2786,7 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_non_staging_source) {
 
 UTEST(sokol_gfx_metal, copy_buffer_to_image_rejects_staging_index_buffer) {
     setup();
-    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 1024 });
     sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
     T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);

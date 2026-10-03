@@ -1409,7 +1409,7 @@ UTEST(sokol_gfx, view_uninit_count) {
 static sg_buffer create_staging_buffer(size_t size) {
     return sg_make_buffer(&(sg_buffer_desc){
         .size = size,
-        .usage = { .staging_buffer = true, .copy_src = true },
+        .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true },
     });
 }
 
@@ -1512,6 +1512,7 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_validate_size_and_offsets) {
 
 static sg_buffer create_copy_src_buffer(sg_buffer_usage usage, size_t size) {
     usage.copy_src = true;
+    usage.write_transient = true;
     return sg_make_buffer(&(sg_buffer_desc){ .size = size, .usage = usage });
 }
 
@@ -1667,6 +1668,62 @@ UTEST(sokol_gfx, copy_buffer_to_image_webgl2_index_buffer) {
     // without separate buffer types an index buffer source is fine
     set_copy_buffer_to_image_features(true, true, false);
     sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+static void copy_buffer_16_bytes(sg_buffer src, sg_buffer dst) {
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 16 });
+}
+
+// WebGL2 can only copy between two index buffers or two non-index buffers
+UTEST(sokol_gfx, copy_buffer_to_buffer_webgl2_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer src_stg = create_staging_buffer(64);
+    sg_buffer src_stg_idx = create_copy_src_buffer((sg_buffer_usage){ .staging_index_buffer = true }, 64);
+    sg_buffer src_vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 64);
+    sg_buffer src_idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 64);
+    sg_buffer dst_vtx = create_copy_dst_buffer(64);
+    sg_buffer dst_idx = sg_make_buffer(&(sg_buffer_desc){
+        .size = 64,
+        .usage = { .index_buffer = true, .copy_dst = true },
+    });
+    T(sg_query_buffer_state(src_stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_stg_idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst_vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst_idx) == SG_RESOURCESTATE_VALID);
+    const sg_buffer invalid_pairs[4][2] = {
+        { src_stg, dst_idx },
+        { src_vtx, dst_idx },
+        { src_stg_idx, dst_vtx },
+        { src_idx, dst_vtx },
+    };
+
+    // separate buffer types (WebGL2): index-to-index and non-index-to-non-index is fine...
+    _sg.features.separate_buffer_types = true;
+    reset_log_items();
+    copy_buffer_16_bytes(src_stg_idx, dst_idx);
+    copy_buffer_16_bytes(src_idx, dst_idx);
+    copy_buffer_16_bytes(src_stg, dst_vtx);
+    copy_buffer_16_bytes(src_vtx, dst_vtx);
+    T(num_log_called == 0);
+    // ...but mixing index and non-index buffers in either direction is not
+    for (int i = 0; i < 4; i++) {
+        reset_log_items();
+        copy_buffer_16_bytes(invalid_pairs[i][0], invalid_pairs[i][1]);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+    }
+
+    // without separate buffer types, mixing is fine
+    _sg.features.separate_buffer_types = false;
+    reset_log_items();
+    for (int i = 0; i < 4; i++) {
+        copy_buffer_16_bytes(invalid_pairs[i][0], invalid_pairs[i][1]);
+    }
     T(num_log_called == 0);
     sg_shutdown();
 }
@@ -2641,7 +2698,8 @@ UTEST(sokol_gfx, make_buffer_validate_immutable_nodata) {
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ 0 });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NONZERO_SIZE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
@@ -2687,6 +2745,7 @@ UTEST(sokol_gfx, make_buffer_validate_no_data_ptr_but_data_size) {
     setup(&(sg_desc){0});
     const uint32_t data[16] = {0};
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.copy_dst = true,
         .size = sizeof(data),
         .data.size = sizeof(data),
     });
@@ -2749,6 +2808,63 @@ UTEST(sokol_gfx, make_buffer_usage_staging_validation) {
     T(log_items[3] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA);
     T(log_items[4] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
     T(log_items[5] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+// buffers without initial data must be writable via write_unsealed, write_transient or copy_dst
+UTEST(sokol_gfx, make_buffer_validate_expect_data) {
+    setup(&(sg_desc){0});
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .size = 64 });
+    T(sg_query_buffer_state(vbuf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .size = 64 });
+    T(sg_query_buffer_state(ibuf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // a staging buffer without write_transient can never be filled
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 64 });
+    T(sg_query_buffer_state(sbuf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_no_data_writable_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer unsealed = sg_make_buffer(&(sg_buffer_desc){ .usage.write_unsealed = true, .size = 64 });
+    sg_buffer transient = sg_make_buffer(&(sg_buffer_desc){ .usage.write_transient = true, .size = 64 });
+    sg_buffer copy_dst = sg_make_buffer(&(sg_buffer_desc){ .usage.copy_dst = true, .size = 64 });
+    sg_buffer staging = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 64,
+    });
+    sg_buffer staging_index = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 64,
+    });
+    T(sg_query_buffer_state(unsealed) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_buffer_state(transient) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(copy_dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(staging) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(staging_index) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// storage buffers can be initialized by compute shaders, so they don't need data
+// (the storage buffer feature itself is backend-specific, so only check for the absence of EXPECT_DATA)
+UTEST(sokol_gfx, make_buffer_storage_no_data_ok) {
+    setup(&(sg_desc){0});
+    sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    for (int i = 0; i < num_log_called; i++) {
+        T(log_items[i] != SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    }
     sg_shutdown();
 }
 
@@ -4131,7 +4247,8 @@ UTEST(sokol_gfx, write_image_compressed_pitches) {
 // rejected by the resource state check before the usage validation is reached
 UTEST(sokol_gfx, write_buffer_unsealed_wrong_usage) {
     setup(&(sg_desc){0});
-    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .size = 128 });
+    const uint8_t init_data[128] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .data = SG_RANGE(init_data) });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     const uint8_t data[64] = {0};
     sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });

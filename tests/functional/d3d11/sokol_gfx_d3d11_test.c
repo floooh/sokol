@@ -1593,7 +1593,7 @@ UTEST(sokol_gfx_d3d11, copy_buffer_to_image_validation_rejects) {
 
 UTEST(sokol_gfx_d3d11, copy_buffer_to_image_rejects_staging_index_buffer) {
     setup();
-    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 1024 });
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 1024 });
     sg_image img = sg_make_image(&(sg_image_desc){ .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.copy_dst = true });
     T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);

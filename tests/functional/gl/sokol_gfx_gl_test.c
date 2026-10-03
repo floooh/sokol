@@ -1490,8 +1490,8 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
         { .usage = { .index_buffer = true, .write_unsealed = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
         { .usage = { .vertex_buffer = true, .copy_dst = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
         { .usage = { .index_buffer = true, .copy_dst = true, .copy_src = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
-        { .usage = { .staging_buffer = true, .copy_src = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
-        { .usage = { .staging_index_buffer = true, .copy_src = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
         { .usage = { .storage_buffer = true }, .with_data = true, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
         { .usage = { .storage_buffer = true, .write_transient = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
         { .usage = { .storage_buffer = true, .copy_dst = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
@@ -2127,8 +2127,8 @@ UTEST(sokol_gfx_gl, copy_buffer_to_buffer) {
 
 UTEST(sokol_gfx_gl, copy_staging_buffers_into_vertex_and_index_buffers) {
     setup();
-    sg_buffer vstage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 64 });
-    sg_buffer istage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 64 });
+    sg_buffer vstage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
+    sg_buffer istage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 64 });
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .index_buffer = true, .copy_dst = true }, .size = 64 });
     // staging buffers are filled through their regular bind point
@@ -2212,7 +2212,7 @@ UTEST(sokol_gfx_gl, copy_dst_image_usage) {
 
 UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
     setup();
-    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2272,7 +2272,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
 UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
     setup();
     // one row of slack in front of the source data
-    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 9 * 8 * 4 });
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 9 * 8 * 4 });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8, .num_mipmaps = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2326,7 +2326,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
 
 UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     setup();
-    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 6 * 4 * 4 * 4 });
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 6 * 4 * 4 * 4 });
     const GLuint gl_stage = query_gl_buf(stage, 0);
 
     // cube: one glTexSubImage2D per face, each face at its own offset into the buffer
@@ -2386,7 +2386,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
 UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
     setup();
     // 4x2 region with an 8 pixel row pitch: 32 (first row incl. padding) + 16 (last row)
-    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 32 + 16 });
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 32 + 16 });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2413,7 +2413,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
 UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     setup();
     // GL doesn't restrict the source buffer type, nor the row pitch alignment
-    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2438,7 +2438,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
 
 UTEST(sokol_gfx_gl, copy_buffer_to_image_rejects_staging_index_buffer) {
     setup();
-    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
