@@ -1946,6 +1946,121 @@ UTEST(sokol_gfx, copy_buffer_to_image_compressed_sizes) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, copy_buffer_to_image_compressed_small_mips) {
+    setup(&(sg_desc){0});
+    // 24x24 BC1 with miplevels 24, 12, 6, 3, 1
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 24,
+        .height = 24,
+        .num_mipmaps = 5,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // default-sized copies into miplevels smaller than one block are allowed
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .mip_level = 3 } });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .mip_level = 4 } });
+    T(num_log_called == 0);
+
+    // a non-block-multiple size is allowed when the copy reaches the miplevel edge (6x6 miplevel)
+    sg_copy_buffer_to_image_desc desc = {
+        .src.buffer = src,
+        .dst = { .image = dst, .mip_level = 2, .x = 4, .y = 4 },
+        .size = { .width = 2, .height = 2 },
+    };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.dst.x = 0;
+    desc.dst.y = 0;
+    desc.size = (sg_image_extent){ .width = 6, .height = 6 };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+
+    // ...but not when the copy ends inside the miplevel
+    desc.size = (sg_image_extent){ .width = 2, .height = 6 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.size = (sg_image_extent){ .width = 6, .height = 2 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // the same rules in the 3x3 miplevel
+    desc.dst.mip_level = 3;
+    desc.size = (sg_image_extent){ .width = 3, .height = 3 };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.size = (sg_image_extent){ .width = 2, .height = 2 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_compressed_dst_alignment) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // block-aligned destination offsets are fine
+    sg_copy_buffer_to_image_desc desc = {
+        .src.buffer = src,
+        .dst = { .image = dst, .x = 4, .y = 8 },
+        .size = { .width = 4, .height = 4 },
+    };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+
+    // unaligned destination offsets are rejected, even when the copy reaches the miplevel edge
+    desc.dst.x = 2;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_X_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.dst.x = 4;
+    desc.dst.y = 6;
+    desc.size.height = 10;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_Y_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_uncompressed_unaligned_ok) {
+    setup(&(sg_desc){0});
+    // the block alignment rules don't apply to uncompressed formats
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src,
+        .dst = { .image = dst, .x = 3, .y = 5 },
+        .size = { .width = 7, .height = 9 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, copy_buffer_to_image_dst_range_with_default_size) {
     setup(&(sg_desc){0});
     sg_buffer src = create_staging_buffer(1024);
@@ -4238,6 +4353,123 @@ UTEST(sokol_gfx, write_image_compressed_pitches) {
         .src = { .data = SG_RANGE(blocks), .bytes_per_row = 32, .bytes_per_slice = 128 },
         .dst.image = img,
         .size = { .width = 16, .height = 16 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_compressed_small_mips) {
+    setup(&(sg_desc){0});
+    // 24x24 BC1 with miplevels 24, 12, 6, 3, 1
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 24,
+        .height = 24,
+        .num_mipmaps = 5,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t blocks[512] = {0};
+
+    // default-sized writes into miplevels smaller than one block are allowed
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(blocks), .dst = { .image = img, .mip_level = 3 } });
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(blocks), .dst = { .image = img, .mip_level = 4 } });
+    T(num_log_called == 0);
+
+    // a non-block-multiple size is allowed when the write reaches the miplevel edge (6x6 miplevel)
+    sg_write_image_desc desc = {
+        .src.data = SG_RANGE(blocks),
+        .dst = { .image = img, .mip_level = 2, .x = 4, .y = 4 },
+        .size = { .width = 2, .height = 2 },
+    };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+    desc.dst.x = 0;
+    desc.dst.y = 0;
+    desc.size = (sg_image_extent){ .width = 6, .height = 6 };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+
+    // ...but not when the write ends inside the miplevel
+    desc.size = (sg_image_extent){ .width = 2, .height = 6 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.size = (sg_image_extent){ .width = 6, .height = 2 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // the same rules in the 3x3 miplevel
+    desc.dst.mip_level = 3;
+    desc.size = (sg_image_extent){ .width = 3, .height = 3 };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+    desc.size = (sg_image_extent){ .width = 2, .height = 2 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_compressed_dst_alignment) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t blocks[128] = {0};
+
+    // block-aligned destination offsets are fine
+    sg_write_image_desc desc = {
+        .src.data = SG_RANGE(blocks),
+        .dst = { .image = img, .x = 4, .y = 8 },
+        .size = { .width = 4, .height = 4 },
+    };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+
+    // unaligned destination offsets are rejected, even when the write reaches the miplevel edge
+    desc.dst.x = 2;
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_X_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.dst.x = 4;
+    desc.dst.y = 6;
+    desc.size.height = 10;
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_Y_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_uncompressed_unaligned_ok) {
+    setup(&(sg_desc){0});
+    // the block alignment rules don't apply to uncompressed formats
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[16 * 16] = {0};
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src.data = SG_RANGE(pixels),
+        .dst = { .image = img, .x = 3, .y = 5 },
+        .size = { .width = 7, .height = 9 },
     });
     T(num_log_called == 0);
     sg_shutdown();
