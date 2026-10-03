@@ -305,10 +305,9 @@
         resource from unsealed into valid state. For more details see the
         doc section `ON POPULATING IMMUTABLE RESOURCES` below.
 
-    --- to update the content of buffer and image resources:
-
-        For data that's written by the CPU and consumed by the GPU in the
-        *same frame* and doesn't need to survive into the next frame, call:
+    --- to write 'transient' data from the CPU side that's 'consumed'
+        in the same frame by the GPU side (e.g. the data doesn't need
+        to survive into the next frame):
 
             sg_write_buffer_transient(const sg_write_buffer_desc* desc);
             sg_write_image_transient(const sg_write_image_desc* desc);
@@ -318,7 +317,8 @@
         `.usage.write_transient = true` and cannot be pass attachments.
 
         Multiple calls to the write-transient functions are allowed in a frame
-        to incrementally populate the resource, but only until the resource is bound.
+        to incrementally populate the resource, but only until the resource is bound
+        or used as a copy source.
         After a resource has been used in a frame it cannot be written to until
         the next frame.
 
@@ -329,25 +329,24 @@
         layer error. Calling a write-transient function on a resource that isn't
         used for rendering in the same frame is allowed but pointless.
 
-        For data that needs to persist across frames, call:
+    --- to copy data between resources, call one of the `sg_copy_*` funcs:
 
-            sg_update_buffer(sg_buffer buf, const sg_range* data)
-            sg_update_image(sg_image img, const sg_image_data* data)
+            sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc* desc);
+            sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* desc);
 
-        Buffers and images to be updated must have been created with
-        sg_buffer_desc.usage.dynamic_update.
+        The source resource must have been created with usage .copy_src and
+        the destination resource must have been created with usage .copy_dst.
 
-        Only one update per frame is allowed for buffer and image resources when
-        using the sg_update_*() functions. The rationale is to have a simple
-        protection from the CPU scribbling over data the GPU is currently
-        using, or the CPU having to wait for the GPU
+        There are a few backend-specific caveats, for more information see
+        the section ON COPYING DATA BETWEEN RESOURCES.
 
-        Buffer and image updates can be partial, as long as a rendering
-        operation only references the valid (updated) data in the
-        buffer or image.
+    --- to write CPU-side data persistently into buffer and image resources,
+        use a combination of sg_write_buffer_transient() into a 'staging buffer',
+        followed by an sg_copy_* call to perform a copy from the staging
+        buffer into the destination resource.
 
-        NOTE: the update functions will be replaced with more flexible
-        'write-persistent' functions in the next resource API update!
+        For more information on uploading data persistently into resources see
+        the section ON UPLOADING PERSISTENT DATA INTO RESOURCES.
 
     --- to check at runtime for optional features, limits and pixelformat support,
         call:
@@ -1463,6 +1462,227 @@
         data, e.g. it's not possible to transition a resource back from
         'valid' to 'unsealed' resource state.
 
+    ON COPYING DATA BETWEEN RESOURCES
+    =================================
+    NOTE: all `sg_copy_*` functions must be called outside passes!
+
+    To copy data between buffers, call `sg_copy_buffer_to_buffer()`.
+
+        ```c
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+            .src = {
+                .buffer = src_buffer,
+                .offset = src_offset_in_bytes,
+            },
+            .dst = {
+                .buffer = dst_buffer,
+                .offset = dst_offset_in_bytes,
+            },
+            .size = copy_size_in_bytes,
+        });
+        ```
+
+    The source buffer must have been created with `.usage.copy_src = true`,
+    and the destination buffer with `.usage.copy_dst = true`:
+
+        ```c
+        sg_buffer src_buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = {
+                .vertex_buffer = true,
+                .copy_src = true,
+            },
+            .data = { ... },
+        });
+
+        sg_buffer dst_buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = {
+                .vertex_buffer = true,
+                .copy_dst = true,
+            },
+            .size = ...,
+        });
+        ```
+
+    Likewise to copy data from a buffer into an image, call `sg_copy_buffer_to_image`:
+
+        ```c
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+            // source buffer and image data layout
+            .src = {
+                .buffer = src_buf,
+                .offset = offset_in_bytes,
+                .bytes_per_row = ...,
+                .bytes_per_slice = ...,
+            },
+            // destination image, miplevel and location
+            .dst = {
+                .image = dst_img,
+                .mip_level = ...,
+                .x = ...,
+                .y = ...,
+                .slice = ...,
+            },
+            // size of region to copy in pixels
+            .size = {
+                .width = ...,
+                .height = ...,
+                .num_slices = ...,
+            },
+        });
+        ```
+
+    For detailed information on the parameter structs `sg_copy_buffer_to_buffer_desc` and
+    `sg_copy_buffer_to_image_desc` (especially how default values are populated),
+    see the struct documentation headers.
+
+    Copying between resources comes with a lot of caveats caused by backend 3D API
+    restrictions (alignments, valid resource types, etc...). These detailed
+    requirements are listed in the struct documentation below, but for portable
+    code you'll at least need to be aware of the following 'dynamic' restrictions
+    that only trigger a validation check on certain backends:
+
+    - D3D11 does not support copying from D3D buffers into textures, this means
+      that sg_copy_buffer_to_image() is restricted to staging buffers as source
+      (created with .usage.staging_buffer) - e.g. on the D3D11 backend,
+      sg_copy_buffer_to_image() is *only* useful for uploading CPU-side data into
+      images. To check for this restriction at runtime, look at the feature flag
+      `sg_features.copy_buffer_to_image_relaxed_buffer_type`.  When this is true,
+      sg_copy_buffer_to_image() supports copying from regular non-staging buffer
+      types, when false, only `.usage.staging_buffer` buffers are supported.
+    - WebGPU requires `sg_copy_buffer_to_image_desc.src.bytes_per_row` to be
+      a multiple-of-256 when copying from a non-staging buffer (e.g. regular
+      GPU buffers like storage buffers). To check for this restriction at runtime,
+      look at the feature flag `sg_features.copy_buffer_to_image_relaxed_bytes_per_row`.
+      When true, the multiple-of-256 bytes restriction does not apply for source
+      buffers of any type. When false, the restriction applies for non-staging
+      buffers.
+    - WebGL2 has a restriction that a copy into a buffer with `.usage.index_buffer`
+      can only happen from a compatible source buffer which also must contain
+      index data (e.g. the source buffer must have been created with either
+      `.usage.index_buffer` or the special `.usage.staging_index_buffer`).
+      This restriction is gated by the common feature flag
+      `sg_features.separate_buffer_types` which also prevents 'multi-usage'
+      buffers (like combined vertex- and index-buffers).
+    - also on WebGL2 and for the same reason, attempting to copy from an
+      index buffer into an image via `sg_copy_buffer_to_image` is prohibited
+    - on the Apple GL/GLES3 backends, the source buffer offset in `sg_copy_buffer_to_image()`
+      is ignored because of a driver bug (which is unlikely to be fixed because
+      GL on macOS is long deprecated), sokol_gfx.h will log a one-time message
+      when the bug would be triggered
+
+
+    ON UPLOADING PERSISTENT DATA INTO RESOURCES
+    ===========================================
+    To upload CPU-side data into buffers and images (for instance to manage
+    a dynamic texture atlas), first write the data into a 'staging buffer'
+    with a `sg_write_buffer_transient()` call, and then copy the data
+    into the destination resource via `sg_copy_buffer_to_buffer()` or
+    `sg_copy_buffer_to_image()`.
+
+    Create the staging buffer with the usage flags `.staging_buffer`, `.write_transient`
+    and `.copy_src`, this is the same no matter if the destination is a buffer
+    or image:
+
+        ```c
+        sg_buffer staging_buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = {
+                .staging_buffer = true,
+                .write_transient = true,
+                .copy_src = true,
+            },
+            .size = ...,
+        });
+        ```
+    The destination resource must be created with the additional usage flag
+    `.copy_dst`, e.g. for a destination buffer used as vertex buffer:
+
+        ```c
+        sg_buffer dst_buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = {
+                .vertex_buffer = true,
+                .copy_dst = true,
+            },
+            .size = ...,
+        });
+        ```
+
+    ...now first write the data into the staging buffer via a regular
+    sg_write_buffer_transient() call:
+
+        ```c
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = { .ptr = ..., .size = ... },
+            .dst.buffer = staging_buf,
+        });
+        ```
+
+    You can do multiple sg_write_buffer_transient() calls to the same
+    buffer in a frame, but *only* until the first `sg_copy_*` call
+    in the same frame using this buffer as source.
+
+    Next, *outside* a pass, call sg_copy_buffer_to_buffer to copy the
+    data from the transient staging buffer into the 'persistent' destination
+    buffer:
+
+        ```c
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+            .src = {
+                .buffer = staging_buf,
+                .offset = ...,
+            },
+            .dst = {
+                .buffer = dst_buf,
+                .offset = ...,
+            },
+            .size = ...,
+        });
+        ```
+
+    For images the process is similar: the destination image must be created
+    with `usage.copy_dst` and no initial data:
+
+        ```c
+        sg_image dst_img = sg_make_image(&(sg_image_desc){
+            .usage = {
+                .copy_dst = true,
+            },
+            .width = ...,
+            .height = ...,
+            .pixel_format = ...,
+        });
+        ```
+
+    ...then copy a pixel region from the source buffer into the destination
+    image (note that you probably want to provide explicit bytes_per_row and
+    bytes_per_slice values for the source data instead of relying on sokol-gfx
+    filling in the defaults because the default values assume that the entire
+    mip level is copied):
+
+        ```c
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+            // source buffer and image data layout
+            .src = {
+                .buffer = staging_buf,
+                .offset = offset_in_bytes,
+                .bytes_per_row = ...,
+                .bytes_per_slice = ...,
+            },
+            // destination image, miplevel and location
+            .dst = {
+                .image = dst_img,
+                .mip_level = ...,
+                .x = ...,
+                .y = ...,
+                .slice = ...,
+            },
+            // size of region to copy in pixels
+            .size = {
+                .width = ...,
+                .height = ...,
+                .num_slices = ...,
+            },
+        });
+        ```
 
     ON STORAGE BUFFERS
     ==================
@@ -3389,8 +3609,8 @@ typedef struct sg_buffer_usage {
 
     .size:      0       (*must* be >0 for buffers without data)
     .usage      { .vertex_buffer = true }
-    .data.ptr   0       (*must* be valid for immutable buffers without storage buffer usage)
-    .data.size  0       (*must* be > 0 for immutable buffers without storage buffer usage)
+    .data.ptr   0
+    .data.size  0
     .label      0       (optional string label)
 
     For immutable buffers which are initialized with initial data,
@@ -3402,9 +3622,6 @@ typedef struct sg_buffer_usage {
 
     You can also set both size values, but both size values must
     be identical.
-
-    NOTE: Immutable buffers that are neither storage-buffers or have
-    write-unsealed usage *must* be created with initial data.
 
     NOTE: Buffers without initial data will have undefined content, e.g.
     do *not* expect the buffer to be zero-initialized!
@@ -3790,7 +4007,7 @@ typedef struct sg_copy_buffer_to_buffer_desc {
                 .size.height = mip_height - .dst.y
                 .size.num_slices = mip_depth_or_slices - .dst.slice
 
-    Caveats (all checked by the validation layer):
+    Caveats (all checked by the validation layer or via logged errors and warnings):
         - sg_copy_buffer_to_image() must be called outside a pass
         - for compressed image formats, .size.width and .size.height must be
           a multiple of the compression block size
@@ -3806,6 +4023,12 @@ typedef struct sg_copy_buffer_to_buffer_desc {
         - when copying from a *non-staging buffer*, .src.bytes_per_row must be a
           multiple of 256 when `sg_query_features().copy_buffer_to_image_relaxed_bytes_per_row`
           is false (this is a WebGPU restriction)
+        - 'fuzzy' GL restriction (this is not currently enforced by the validation layer):
+          when copying into compressed textures, the source data must be tightly packed
+          (e.g. .src.bytes_per_row and .src.bytes_per_slice will be ignored)
+        - on the Apple GL/GLES3 backends, the source buffer offset in `sg_copy_buffer_to_image()`
+          is ignored because of a driver bug, sokol_gfx.h will log a one-time message
+          when the bug would be triggered
 */
 typedef struct sg_copy_buffer_to_image_desc {
     sg_buffer_image_location src;
@@ -5357,9 +5580,9 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_BYTESPERROW, "sg_write_image_*: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_BYTESPERSLICE, "sg_write_image_*: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_MIPLEVEL, "sg_write_image_*: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WIDTH, "sg_write_image_*: desc.size.width must be >= 0 and <= destination image width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_HEIGHT, "sg_write_image_*: desc.size.height must be >= 0 and <= destination image height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_NUMSLICES, "sg_write_image_*: desc.size.num_slices must be >= 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_WIDTH, "sg_write_image_*: desc.size.width must be > 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_HEIGHT, "sg_write_image_*: desc.size.height must be > 0 and <= destination image height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_NUMSLICES, "sg_write_image_*: desc.size.num_slices must be > 0 and <= destination image num slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_READ_OVERFLOW, "sg_write_image_*: desc.src.offset + size of written data must be <= desc.src.data.size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_X_RANGE, "sg_write_image_*: desc.dst.x must be >= 0 and < miplevel width") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_DST_Y_RANGE, "sg_write_image_*: desc.dst.y must be >= 0 and < miplevel height") \
@@ -5393,17 +5616,17 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE, "sg_copy_buffer_to_image: desc.src.bytes_per_slice must be a multiple of desc.src.bytes_per_row") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW, "sg_copy_buffer_to_image: copy operation may read past end of source buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_MIPLEVEL, "sg_copy_buffer_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be >= 0 and <= destination image width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be >= 0 and <= destination image height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH, "sg_copy_buffer_to_image: desc.size.width must be > 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT, "sg_copy_buffer_to_image: desc.size.height must be > 0 and <= destination image height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE, "sg_copy_buffer_to_image: desc.size.width must be a multiple of 4 for compressed pixel formats") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE, "sg_copy_buffer_to_image: desc.size.height must be a multiple of 4 for compressed pixel formats") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES, "sg_copy_buffer_to_image: desc.size.num_slices must be >= 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES, "sg_copy_buffer_to_image: desc.size.num_slices must be > 0 and <= destination image num slices") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE, "sg_copy_buffer_to_image: desc.dst.x must be >= 0 and < miplevel width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE, "sg_copy_buffer_to_image: desc.dst.y must be >= 0 and < miplevel height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE, "sg_copy_buffer_to_image: desc.dst.slice must be >= 0 and < miplevel depth or array/cubemap slices") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.src.x + desc.size.width must be <= destination mip level width") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.src.y + desc.size.height must be <= destination mip level height") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_buffer_to_image: desc.src.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.x + desc.size.width must be <= destination mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
