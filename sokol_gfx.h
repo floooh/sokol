@@ -6475,7 +6475,11 @@ inline void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc& desc) { 
             #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
         #endif
     #elif defined(__APPLE__)
-        #define _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (1)
+        // NOTE: this special check allows the mock tests to skip
+        // the workaround when running on the GL mock backend
+        #if !defined(_SOKOL_GL_NO_APPLE_PIXEL_UNPACK_WORKAROUND)
+            #define _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (1)
+        #endif
         #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
             #if defined(TARGET_OS_MACCATALYST) && TARGET_OS_MACCATALYST
                 #define _SOKOL_GL_HAS_COLORMASKI (1)
