@@ -1561,12 +1561,15 @@
       This restriction is gated by the common feature flag
       `sg_features.separate_buffer_types` which also prevents 'multi-usage'
       buffers (like combined vertex- and index-buffers).
-    - also on WebGL2 and for the same reason, attempting to copy from an
+    - Also on WebGL2 and for the same reason, attempting to copy from an
       index buffer into an image via `sg_copy_buffer_to_image` is prohibited
-    - on the Apple GL/GLES3 backends, the source buffer offset in `sg_copy_buffer_to_image()`
-      is ignored because of a driver bug (which is unlikely to be fixed because
+    - On the Apple GL/GLES3 backends, when calling `sg_copy_buffer_to_image()`
+      from a non-staging buffer, the source buffer offset is ignored because
+      of a GL driver bug (which is unlikely to be fixed because
       GL on macOS is long deprecated), sokol_gfx.h will log a one-time message
-      when the bug would be triggered
+      when the bug would be triggered. For copying from staging buffers, the
+      offset works because of a special workaround in the sokol-gfx GL backend
+      (staging buffers are actually heap memory allocations).
 
 
     ON UPLOADING PERSISTENT DATA INTO RESOURCES
@@ -4024,9 +4027,13 @@ typedef struct sg_copy_buffer_to_buffer_desc {
         - 'fuzzy' GL restriction (this is not currently enforced by the validation layer):
           when copying into compressed textures, the source data must be tightly packed
           (e.g. .src.bytes_per_row and .src.bytes_per_slice will be ignored)
-        - on the Apple GL/GLES3 backends, the source buffer offset in `sg_copy_buffer_to_image()`
-          is ignored because of a driver bug, sokol_gfx.h will log a one-time message
-          when the bug would be triggered
+        - On the Apple GL/GLES3 backends, when calling `sg_copy_buffer_to_image()`
+          from a non-staging buffer, the source buffer offset is ignored because
+          of a GL driver bug (which is unlikely to be fixed because
+          GL on macOS is long deprecated), sokol_gfx.h will log a one-time message
+          when the bug would be triggered. For copying from staging buffers, the
+          offset works because of a special workaround in the sokol-gfx GL backend
+          (staging buffers are actually heap memory allocations).
 */
 typedef struct sg_copy_buffer_to_image_desc {
     sg_buffer_image_location src;
@@ -5065,7 +5072,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNSUPPORTED, "framebuffer completeness check failed with GL_FRAMEBUFFER_UNSUPPORTED (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE, "framebuffer completeness check failed with GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE (gl)") \
     _SG_LOGITEM_XMACRO(GL_FRAMEBUFFER_STATUS_UNKNOWN, "framebuffer completeness check failed (unknown reason) (gl)") \
-    _SG_LOGITEM_XMACRO(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG, "NOTE: Apple's GL driver ignores source data offset when copying from buffer into texture! (in sg_copy_buffer_to_image())") \
+    _SG_LOGITEM_XMACRO(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG, "sg_copy_buffer_to_image: NOTE: Apple's GL driver ignores source data offset when copying from GL buffer into a texture! (to fix: create source buffer with .usage.staging_buffer)") \
     _SG_LOGITEM_XMACRO(D3D11_FEATURE_LEVEL_0_DETECTED, "D3D11 Feature Level 0 device detected, this restricts the number of UAV slots to 8! (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_FAILED, "CreateBuffer() failed (d3d11)") \
     _SG_LOGITEM_XMACRO(D3D11_CREATE_BUFFER_SRV_FAILED, "CreateShaderResourceView() failed for storage buffer (d3d11)") \
@@ -7205,7 +7212,10 @@ typedef struct _sg_buffer_s {
     struct {
         GLuint buf[SG_NUM_INFLIGHT_FRAMES];
         uint8_t gpu_dirty_flags; // combination of _sg_gl_gpudirty_t flags
-        bool injected;  // if true, external buffers were injected with sg_buffer_desc.gl_buffers
+        bool injected;          // if true, external buffers were injected with sg_buffer_desc.gl_buffers
+        #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+        uint8_t* staging_ptr;   // workaround for broken Apple driver: staging buffers are actually heap allocations
+        #endif
     } gl;
 } _sg_gl_buffer_t;
 typedef _sg_gl_buffer_t _sg_buffer_t;
@@ -11546,6 +11556,17 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
 //-- GL backend resource creation and destruction ------------------------------
 _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const sg_buffer_desc* desc) {
     SOKOL_ASSERT(buf && desc);
+
+    // workaround for broken pixel-unpack-offset on Apple drivers,
+    // staging buffer are actually allocated as sysmem allocations
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    if (desc->usage.staging_buffer || desc->usage.staging_index_buffer) {
+        SOKOL_ASSERT(!buf->gl.staging_ptr);
+        buf->gl.staging_ptr = (uint8_t*)_sg_malloc((size_t)buf->cmn.size);
+        return SG_RESOURCESTATE_VALID;
+    }
+    #endif
+
     _SG_GL_CHECK_ERROR();
     buf->gl.injected = (0 != desc->gl_buffer);
     const GLenum gl_target = _sg_gl_buffer_target(&buf->cmn.usage);
@@ -11574,6 +11595,11 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_buffer(_sg_buffer_t* buf, const s
 
 _SOKOL_PRIVATE void _sg_gl_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    if (buf->gl.staging_ptr) {
+        _sg_free(buf->gl.staging_ptr);
+    }
+    #endif
     _SG_GL_CHECK_ERROR();
     for (int slot = 0; slot < buf->cmn.num_slots; slot++) {
         if (buf->gl.buf[slot]) {
@@ -11666,20 +11692,6 @@ _SOKOL_PRIVATE void _sg_gl_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT(_sg_multiple(src_bytes_per_slice, src_bytes_per_row));
     SOKOL_ASSERT((src_offset + _sg_image_copy_size(img->cmn.pixel_format, src_bytes_per_row, src_bytes_per_slice, width, height, num_slices)) <= src_size);
     _SOKOL_UNUSED(src_size);
-
-    /*
-        NOTE: macOS (and presumably iOS) GL drivers ignore a source data offset when
-        reading from the GL_PIXEL_UNPACK_BUFFER bindpoint, no matter if the
-        offset is provided via the glTexImage* data parameter or via
-        the GL_UNPACK_SKIP_PIXELS state.
-    */
-    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
-    static bool warn_once = false;
-    if ((src_ptr == 0) && (src_offset != 0) && !warn_once) {
-        _SG_WARN(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG);
-        warn_once = true;
-    }
-    #endif
 
     const bool compressed = _sg_is_compressed_pixel_format(img->cmn.pixel_format);
     const sg_pixel_format fmt = img->cmn.pixel_format;
@@ -13222,12 +13234,22 @@ _SOKOL_PRIVATE void _sg_gl_write_buffer_common(_sg_buffer_t* buf, const sg_write
     SOKOL_ASSERT((desc->dst.offset + desc->size) <= (size_t)buf->cmn.size);
     SOKOL_ASSERT((desc->src.offset + desc->size) <= desc->src.data.size);
     SOKOL_ASSERT(buf->cmn.active_slot < buf->cmn.num_slots);
+
+    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
+
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    if (buf->cmn.usage.staging_buffer || buf->cmn.usage.staging_index_buffer) {
+        SOKOL_ASSERT(buf->gl.staging_ptr);
+        uint8_t* dst_ptr = buf->gl.staging_ptr + desc->dst.offset;
+        memcpy(dst_ptr, src_ptr, desc->size);
+        return;
+    }
+    #endif
     const GLenum gl_tgt = _sg_gl_buffer_target(&buf->cmn.usage);
     const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
     _SG_GL_CHECK_ERROR();
     _sg_gl_cache_store_buffer_binding(gl_tgt);
     _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
-    const uint8_t* src_ptr = ((uint8_t*)desc->src.data.ptr) + desc->src.offset;
     glBufferSubData(gl_tgt, (GLintptr)desc->dst.offset, (GLsizeiptr)desc->size, (const void*)src_ptr);
     _sg_gl_cache_restore_buffer_binding(gl_tgt);
     _SG_GL_CHECK_ERROR();
@@ -13291,6 +13313,23 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_buff
     SOKOL_ASSERT(dst_buf->cmn.usage.copy_dst);
     _SG_GL_CHECK_ERROR();
 
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    if (src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer) {
+        SOKOL_ASSERT(src_buf->gl.staging_ptr);
+        SOKOL_ASSERT((desc->src.offset + desc->size) <= (size_t)src_buf->cmn.size);
+        const GLenum gl_tgt = _sg_gl_buffer_target(&dst_buf->cmn.usage);
+        const GLuint gl_buf = dst_buf->gl.buf[dst_buf->cmn.active_slot];
+        _SG_GL_CHECK_ERROR();
+        _sg_gl_cache_store_buffer_binding(gl_tgt);
+        _sg_gl_cache_bind_buffer(gl_tgt, gl_buf);
+        const uint8_t* src_ptr = src_buf->gl.staging_ptr + desc->src.offset;
+        glBufferSubData(gl_tgt, (GLintptr)desc->dst.offset, (GLsizeiptr)desc->size, (const void*)src_ptr);
+        _sg_gl_cache_restore_buffer_binding(gl_tgt);
+        _SG_GL_CHECK_ERROR();
+        return;
+    }
+    #endif
+
     // NOTE: the general barrier is not great, but OTH resource copies should be rare
     #if defined(_SOKOL_GL_HAS_COMPUTE)
     if (src_buf->cmn.usage.storage_buffer || dst_buf->cmn.usage.storage_buffer) {
@@ -13316,24 +13355,50 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
     SOKOL_ASSERT(!src_buf->cmn.usage.staging_index_buffer);
 
+    const uint8_t* src_ptr = 0;
+    #if defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    /*
+        NOTE: macOS (and presumably iOS) GL drivers ignore a source data offset when
+        reading from the GL_PIXEL_UNPACK_BUFFER bindpoint, no matter if the
+        offset is provided via the glTexImage* data parameter or via
+        the GL_UNPACK_SKIP_PIXELS state.
+    */
+    if (src_buf->cmn.usage.staging_buffer || src_buf->cmn.usage.staging_index_buffer) {
+        SOKOL_ASSERT(src_buf->gl.staging_ptr);
+        src_ptr = src_buf->gl.staging_ptr;
+    }
+    static bool warn_once = false;
+    if ((src_ptr == 0) && (desc->src.offset != 0) && !warn_once) {
+        _SG_WARN(GL_APPLE_PIXEL_UNPACK_OFFSET_BUG);
+        warn_once = true;
+    }
+    #endif
+
     #if defined(_SOKOL_GL_HAS_COMPUTE)
     if (src_buf->cmn.usage.storage_buffer || dst_img->cmn.usage.storage_image) {
         glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT|GL_TEXTURE_UPDATE_BARRIER_BIT|GL_PIXEL_BUFFER_BARRIER_BIT);
     }
     #endif
 
-    // source buffer is bound to the PIXEL_UNPACK_BUFFER bind point
-    // which then becomes the source for the glTexImage2D operation
-    const GLuint gl_src_buf = src_buf->gl.buf[src_buf->cmn.active_slot];
+    if (!src_ptr) {
+        // source buffer is bound to the PIXEL_UNPACK_BUFFER bind point
+        // which then becomes the source for the glTexImage2D operation
+        // NOTE: on Apple, copying from a pixel unpack buffer is not possible
+        // with an offset (most likely a driver bug), that's why on Apple staging
+        // buffers are allocated as regular sysmem chunks
+        const GLuint gl_src_buf = src_buf->gl.buf[src_buf->cmn.active_slot];
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, gl_src_buf);
+    }
+
     const GLuint gl_dst_img = dst_img->gl.tex[dst_img->cmn.active_slot];
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, gl_src_buf);
     _sg_gl_cache_store_texture_sampler_binding(0);
     _sg_gl_cache_bind_texture_sampler(0, dst_img->gl.target, gl_dst_img, 0);
 
-    // call the common _sg_gl_write_miplevel_data with a nullptr (the glTexImage data
-    // arg will be interpreted as offset if a buffer is bound to the GL_PIXEL_UNPACK_BUFFER bindpoint
+    // NOTE: when _sg_gl_write_miplevel_data() is called with a nullptr,
+    // the glTexImage data arg will be interpreted as offset if a buffer
+    // is bound to the GL_PIXEL_UNPACK_BUFFER bindpoint
     _sg_gl_write_miplevel_data(dst_img,
-        0,  // source data as nullptr
+        src_ptr,    // source data ptr is nullptr when copying from a GL buffer
         (size_t)src_buf->cmn.size,
         desc->src.offset,
         desc->src.bytes_per_row,
