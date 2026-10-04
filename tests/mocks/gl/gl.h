@@ -48,6 +48,18 @@
     gated on an _sg.features flag derived from the version the mock
     reports. But tests must never key on _SOKOL_GL_HAS_*, gate on
     GL_MOCK_VERSION instead (see TEST_HAS_* in sokol_gfx_gl_test.c).
+
+    The Apple GL driver workaround (staging buffers are heap allocations
+    because Apple drivers ignore GL_PIXEL_UNPACK_BUFFER source offsets)
+    comes from GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (0 or 1, default 0),
+    also independent of the host platform:
+
+    - 1: predefines _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN, which
+      enables the workaround on all hosts
+    - 0: predefines _SOKOL_GL_NO_APPLE_PIXEL_UNPACK_WORKAROUND, which
+      keeps sokol_gfx.h from enabling the workaround on Apple hosts
+
+    Tests gate on TEST_APPLE_PIXEL_UNPACK_WORKAROUND in sokol_gfx_gl_test.c.
 */
 #ifndef GL_MOCK_GL_H_INCLUDED
 #define GL_MOCK_GL_H_INCLUDED
@@ -123,6 +135,16 @@
         #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXVIEWS (1)
     #endif
+#endif
+
+// Apple GL driver workaround, selected by the mock option and not by the host
+#if !defined(GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    #define GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (0)
+#endif
+#if GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN
+    #define _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN (1)
+#else
+    #define _SOKOL_GL_NO_APPLE_PIXEL_UNPACK_WORKAROUND
 #endif
 
 // GL types

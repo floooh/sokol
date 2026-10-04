@@ -19,6 +19,8 @@ runtest linux_gl_debug
 runtest d3d11_mock_debug sokol-d3d11-test
 runtest glcore_mock_debug sokol-gl41-test
 runtest glcore_mock_debug sokol-gl43-test
+runtest glcore_mock_debug sokol-gl41-apple-test
 runtest gles3_mock_debug sokol-gles30-test
 runtest gles3_mock_debug sokol-gles31-test
 runtest gles3_mock_debug sokol-gles32-test
+runtest gles3_mock_debug sokol-gles30-apple-test

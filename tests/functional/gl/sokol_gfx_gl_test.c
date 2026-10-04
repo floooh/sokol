@@ -9,6 +9,11 @@
 //      SOKOL_GLCORE: 410, 430
 //      SOKOL_GLES3:  300, 310, 320
 //
+//  One extra executable per GL flavour (sokol-gl41-apple-test and
+//  sokol-gles30-apple-test) is built with -DGL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN=1.
+//  This enables the Apple GL driver workaround (heap staging buffers) on all
+//  hosts. The other executables disable the workaround on all hosts.
+//
 //  Only exercises paths that are backend-specific -- generic public API
 //  behaviour is covered by the DUMMY-backend suite in sokol_gfx_test.c and
 //  is not repeated here.
@@ -66,6 +71,16 @@
 #else
     #define TEST_HAS_COMPUTE    (GL_MOCK_VERSION >= 310)
     #define TEST_HAS_TEXSTORAGE (1)
+#endif
+
+// Apple GL driver workaround gate, also keyed on the mock option and never on
+// the host. On the workaround path staging buffers are heap allocations without
+// GL buffer objects, see _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN.
+#define TEST_APPLE_PIXEL_UNPACK_WORKAROUND (GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+#if TEST_APPLE_PIXEL_UNPACK_WORKAROUND && !defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    #error "Apple GL workaround expected but not enabled in sokol_gfx.h"
+#elif !TEST_APPLE_PIXEL_UNPACK_WORKAROUND && defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    #error "Apple GL workaround enabled in sokol_gfx.h but not expected"
 #endif
 
 //------------------------------------------------------------------------------
@@ -132,6 +147,21 @@ static sg_shader make_test_shader(void) {
         .vertex_func.source = "void main() { gl_Position = vec4(0); }",
         .fragment_func.source = "void main() { }",
     });
+}
+
+// fills a staging buffer with a known byte pattern, with the Apple GL
+// workaround the copy calls then read this pattern from heap memory
+#define TEST_PATTERN_SIZE (512)
+static uint8_t test_pattern[TEST_PATTERN_SIZE];
+
+static void fill_staging_buffer(sg_buffer buf, size_t size) {
+    for (size_t i = 0; i < TEST_PATTERN_SIZE; i++) {
+        test_pattern[i] = (uint8_t)(i * 7 + 1);
+    }
+    if (size > TEST_PATTERN_SIZE) {
+        size = TEST_PATTERN_SIZE;
+    }
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = { test_pattern, size }, .dst.buffer = buf });
 }
 
 //------------------------------------------------------------------------------
@@ -1359,6 +1389,30 @@ UTEST(sokol_gfx_gl, buffer_write_transient_uses_dst_offset) {
     teardown();
 }
 
+UTEST(sokol_gfx_gl, staging_buffer_write_transient) {
+    setup();
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
+    uint8_t bytes[32] = {0};
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst = { .buffer = stage, .offset = 16 } });
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // staging buffers are heap memory, the write is a memcpy without GL calls
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 0);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 0);
+    #else
+        // staging buffers are filled through the vertex buffer bind point
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 1);
+        const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+        T(call->args[0].i == GL_ARRAY_BUFFER);
+        T(call->args[1].i == 16);
+        T(call->args[2].i == (int64_t)sizeof(bytes));
+        T(call->args[3].p == bytes);
+    #endif
+    sg_destroy_buffer(stage);
+    T(no_errors());
+    teardown();
+}
+
 UTEST(sokol_gfx_gl, image_write_transient_calls_texSubImage2D) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
@@ -1462,6 +1516,12 @@ static GLuint query_gl_buf(sg_buffer buf, int slot) {
     return info.buf[slot];
 }
 
+// the active slot rotates with each first write_transient in a frame
+static GLuint query_active_gl_buf(sg_buffer buf) {
+    const sg_gl_buffer_info info = sg_gl_query_buffer_info(buf);
+    return info.buf[info.active_slot];
+}
+
 static GLuint query_gl_tex(sg_image img, int slot) {
     const sg_gl_image_info info = sg_gl_query_image_info(img);
     return info.tex[slot];
@@ -1511,6 +1571,22 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
         const sg_resource_state expected_state = c->usage.write_unsealed ? SG_RESOURCESTATE_UNSEALED : SG_RESOURCESTATE_VALID;
         T(sg_query_buffer_state(buf) == expected_state);
         T(sg_query_buffer_info(buf).num_slots == c->num_slots);
+        #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        if (c->usage.staging_buffer || c->usage.staging_index_buffer) {
+            // staging buffers are heap memory without GL buffer objects
+            T(gl_mock_num_calls() == 0);
+            T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
+            const sg_gl_buffer_info gl_info = sg_gl_query_buffer_info(buf);
+            for (int slot = 0; slot < c->num_slots; slot++) {
+                T(gl_info.buf[slot] == 0);
+            }
+            sg_destroy_buffer(buf);
+            T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == 0);
+            T(no_errors());
+            teardown();
+            continue;
+        }
+        #endif
         T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == c->num_slots);
         T(gl_mock_count_calls(GL_MOCK_FUNC_glGenBuffers) == c->num_slots);
         T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferData) == c->num_slots);
@@ -1552,7 +1628,7 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
         T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == c->num_slots);
         T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
         T(no_errors());
-    teardown();
+        teardown();
     }
 }
 
@@ -2131,25 +2207,58 @@ UTEST(sokol_gfx_gl, copy_staging_buffers_into_vertex_and_index_buffers) {
     sg_buffer istage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 64 });
     sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .index_buffer = true, .copy_dst = true }, .size = 64 });
-    // staging buffers are filled through their regular bind point
-    uint8_t bytes[64] = { 0 };
-    (void)bytes;
+    fill_staging_buffer(vstage, 64);
+    fill_staging_buffer(istage, 64);
     gl_mock_clear_calls();
     sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = vstage, .dst.buffer = vbuf, .size = 64 });
-    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = istage, .dst.buffer = ibuf, .size = 64 });
-    T(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 2);
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = istage, .offset = 16 },
+        .dst = { .buffer = ibuf, .offset = 32 },
+        .size = 16,
+    });
     // no memory barriers for non-storage buffers
     T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
-    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCopyBufferSubData);
-    TA(c != 0);
-    T(c->args[2].i == 0);
-    T(c->args[3].i == 0);
-    T(c->args[4].i == 64);
     gl_mock_buffer_info_t mi;
-    TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
-    T(mi.num_copy_write == 1);
-    TA(gl_mock_buffer_info(query_gl_buf(istage, 0), &mi));
-    T(mi.num_copy_read == 1);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // staging buffers are heap memory, each copy is a glBufferSubData
+        // into the destination buffer
+        T(query_active_gl_buf(vstage) == 0);
+        T(query_active_gl_buf(istage) == 0);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 0);
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 2);
+        const int v_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, 0);
+        const int i_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, v_idx + 1);
+        TA((v_idx >= 0) && (i_idx > v_idx));
+        const gl_mock_call_t* c = gl_mock_call(v_idx);
+        T(c->args[0].i == GL_ARRAY_BUFFER);
+        T(c->args[1].i == 0);
+        T(c->args[2].i == 64);
+        TA(c->args[3].p != 0);
+        T(memcmp(c->args[3].p, test_pattern, 64) == 0);
+        c = gl_mock_call(i_idx);
+        T(c->args[0].i == GL_ELEMENT_ARRAY_BUFFER);
+        T(c->args[1].i == 32);
+        T(c->args[2].i == 16);
+        TA(c->args[3].p != 0);
+        T(memcmp(c->args[3].p, test_pattern + 16, 16) == 0);
+        TA(gl_mock_buffer_info(query_gl_buf(vbuf, 0), &mi));
+        T(mi.num_subdata == 1);
+        T(mi.num_copy_write == 0);
+        TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
+        T(mi.num_subdata == 1);
+        T(mi.num_copy_write == 0);
+    #else
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 0);
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 2);
+        const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCopyBufferSubData);
+        T(c->args[2].i == 16);
+        T(c->args[3].i == 32);
+        T(c->args[4].i == 16);
+        TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
+        T(mi.num_copy_write == 1);
+        TA(gl_mock_buffer_info(query_active_gl_buf(istage), &mi));
+        T(mi.num_copy_read == 1);
+    #endif
     sg_destroy_buffer(vstage);
     sg_destroy_buffer(istage);
     sg_destroy_buffer(vbuf);
@@ -2218,20 +2327,27 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage.copy_dst = true,
     });
-    const GLuint gl_stage = query_gl_buf(stage, 0);
     const sg_gl_image_info img_info = sg_gl_query_image_info(img);
     const GLuint gl_tex = img_info.tex[img_info.active_slot];
+    fill_staging_buffer(stage, 8 * 8 * 4);
+    const GLuint gl_stage = query_active_gl_buf(stage);
     gl_mock_clear_calls();
     sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stage, .dst.image = img });
-    // bind the staging buffer as pixel unpack source...
-    const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
-    TA(bind_idx >= 0);
-    T(gl_mock_call(bind_idx)->args[1].i == gl_stage);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the staging buffer is heap memory and is not bound as pixel unpack source...
+        T(gl_stage == 0);
+        const int bind_idx = 0;
+    #else
+        // bind the staging buffer as pixel unpack source...
+        const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
+        TA(bind_idx >= 0);
+        T(gl_mock_call(bind_idx)->args[1].i == gl_stage);
+    #endif
     // ...configure the unpack layout...
     const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, bind_idx, GL_UNPACK_ROW_LENGTH);
-    TA(row_idx > bind_idx);
+    TA(row_idx >= bind_idx);
     T(gl_mock_call(row_idx)->args[1].i == 8);
-    // ...upload from buffer offset 0 (a null data pointer)...
+    // ...upload the data...
     const int sub_idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, row_idx);
     TA(sub_idx > row_idx);
     const gl_mock_call_t* sub = gl_mock_call(sub_idx);
@@ -2243,19 +2359,33 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
     T(sub->args[5].i == 8);
     T(sub->args[6].i == GL_RGBA);
     T(sub->args[7].i == GL_UNSIGNED_BYTE);
-    T(sub->args[8].p == 0);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // ...directly from the staging buffer heap memory...
+        TA(sub->args[8].p != 0);
+        T(memcmp(sub->args[8].p, test_pattern, 8 * 8 * 4) == 0);
+        // (the only pixel unpack buffer bind is the unbind after the upload)
+        T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER) > sub_idx);
+    #else
+        // ...from buffer offset 0 (a null data pointer)...
+        T(sub->args[8].p == 0);
+    #endif
     // ...and unbind the pixel unpack buffer again
     const int unbind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, sub_idx, GL_PIXEL_UNPACK_BUFFER);
     TA(unbind_idx > sub_idx);
     T(gl_mock_call(unbind_idx)->args[1].i == 0);
     T(gl_mock_bindings()->pixel_unpack_buffer == 0);
     T(gl_mock_render_state()->unpack_row_length == 0);
-    // the upload went into the image texture and was sourced from the staging buffer
+    // the upload went into the image texture
     gl_mock_texture_info_t ti;
     TA(gl_mock_texture_info(gl_tex, &ti));
     T(ti.num_subimage == 1);
-    T(ti.num_subimage_unpack_buffer == 1);
-    T(ti.last_unpack_buffer == gl_stage);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        T(ti.num_subimage_unpack_buffer == 0);
+        T(ti.last_unpack_buffer == 0);
+    #else
+        T(ti.num_subimage_unpack_buffer == 1);
+        T(ti.last_unpack_buffer == gl_stage);
+    #endif
     // no barriers needed (staging source, non-storage destination)
     T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 0);
@@ -2266,9 +2396,6 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
     teardown();
 }
 
-// NOTE: the Apple pixel-unpack-offset warning is a 'warn once' static inside
-// sokol_gfx.h, so this must be the only test that copies with a non-zero
-// source offset
 UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
     setup();
     // one row of slack in front of the source data
@@ -2278,6 +2405,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage.copy_dst = true,
     });
+    fill_staging_buffer(stage, 9 * 8 * 4);
     gl_mock_clear_calls();
     // copy a 4x2 region at (2, 4) of mip 0, source rows are 8 pixels wide, source offset is one row
     sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
@@ -2292,19 +2420,23 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
     T(sub->args[3].i == 4);
     T(sub->args[4].i == 4);
     T(sub->args[5].i == 2);
-    // with a bound pixel unpack buffer, the data pointer is the buffer offset
-    T(sub->args[8].p == (const void*)(uintptr_t)32);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the data pointer points into the staging buffer heap memory
+        const uint8_t* offset_ptr = (const uint8_t*)sub->args[8].p;
+        TA(offset_ptr != 0);
+        T(memcmp(offset_ptr, test_pattern + 32, 4 * 4) == 0);
+        T(memcmp(offset_ptr + 32, test_pattern + 64, 4 * 4) == 0);
+    #else
+        // with a bound pixel unpack buffer, the data pointer is the buffer offset
+        T(sub->args[8].p == (const void*)(uintptr_t)32);
+    #endif
     const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH);
     const int hgt_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT);
     TA((row_idx >= 0) && (hgt_idx >= 0));
     T(gl_mock_call(row_idx)->args[1].i == 8);
     T(gl_mock_call(hgt_idx)->args[1].i == 2);
-    // the macOS/iOS GL drivers ignore that offset, sokol_gfx warns about it
-    #if defined(__APPLE__)
-        T(logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
-    #else
-        T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
-    #endif
+    // staging buffer sources never trigger the Apple offset warning
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
 
     // a smaller mip level: default size is the whole 2x2 mip, rows default to 2 pixels
     reset_log();
@@ -2315,7 +2447,12 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
     T(sub->args[1].i == 2);
     T(sub->args[4].i == 2);
     T(sub->args[5].i == 2);
-    T(sub->args[8].p == 0);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the data pointer is the start of the staging buffer heap memory
+        T(offset_ptr - (const uint8_t*)sub->args[8].p == 32);
+    #else
+        T(sub->args[8].p == 0);
+    #endif
     T(gl_mock_call(find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH))->args[1].i == 2);
     T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
     sg_destroy_buffer(stage);
@@ -2327,7 +2464,8 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
 UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     setup();
     sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 6 * 4 * 4 * 4 });
-    const GLuint gl_stage = query_gl_buf(stage, 0);
+    fill_staging_buffer(stage, 6 * 4 * 4 * 4);
+    const GLuint gl_stage = query_active_gl_buf(stage);
 
     // cube: one glTexSubImage2D per face, each face at its own offset into the buffer
     sg_image cube = sg_make_image(&(sg_image_desc){
@@ -2337,18 +2475,34 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
     gl_mock_clear_calls();
     sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stage, .dst.image = cube });
     TA(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 6);
+    // with the Apple GL workaround, the data pointers point into the staging buffer heap memory
+    const uint8_t* base_ptr = (const uint8_t*)gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0))->args[8].p;
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        TA(base_ptr != 0);
+    #else
+        T(base_ptr == 0);
+    #endif
     int idx = 0;
     for (int face = 0; face < 6; face++) {
         idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, idx);
         TA(idx >= 0);
         const gl_mock_call_t* c = gl_mock_call(idx++);
         T(c->args[0].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
-        T(c->args[8].p == (const void*)(uintptr_t)(face * 64));
+        T((uintptr_t)c->args[8].p - (uintptr_t)base_ptr == (uintptr_t)(face * 64));
+        #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+            T(memcmp(c->args[8].p, test_pattern + face * 64, 64) == 0);
+        #endif
     }
     gl_mock_texture_info_t ti;
     TA(gl_mock_texture_info(query_gl_tex(cube, 0), &ti));
-    T(ti.num_subimage_unpack_buffer == 6);
-    T(ti.last_unpack_buffer == gl_stage);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        T(gl_stage == 0);
+        T(ti.num_subimage_unpack_buffer == 0);
+        T(ti.last_unpack_buffer == 0);
+    #else
+        T(ti.num_subimage_unpack_buffer == 6);
+        T(ti.last_unpack_buffer == gl_stage);
+    #endif
 
     // array and 3D: a single glTexSubImage3D
     const sg_image_type types[2] = { SG_IMAGETYPE_ARRAY, SG_IMAGETYPE_3D };
@@ -2370,7 +2524,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
         T(sub->args[0].i == targets[i]);
         T(sub->args[4].i == 1);     // zoffset
         T(sub->args[7].i == 3);     // depth
-        T(sub->args[10].p == 0);
+        T(sub->args[10].p == base_ptr);
         T(gl_mock_call(find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT))->args[1].i == 4);
         T(gl_mock_bindings()->pixel_unpack_buffer == 0);
         sg_destroy_image(img);
@@ -2410,6 +2564,9 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
     teardown();
 }
 
+// NOTE: the Apple pixel-unpack-offset warning is a 'warn once' static inside
+// sokol_gfx.h, so this must be the only test that copies from a non-staging
+// buffer with a non-zero source offset
 UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     setup();
     // GL doesn't restrict the source buffer type, nor the row pitch alignment
@@ -2430,6 +2587,26 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     T(sub->args[8].p == 0);
     T(gl_mock_bindings()->pixel_unpack_buffer == 0);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
+
+    // non-zero source offset: also with the Apple GL workaround, non-staging
+    // buffers are bound as pixel unpack source, the data pointer is the buffer offset
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = vbuf, .offset = 32, .bytes_per_row = 32, .bytes_per_slice = 4 * 32 },
+        .dst.image = img,
+        .size = { .width = 4, .height = 4 },
+    });
+    const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
+    TA(bind_idx >= 0);
+    T(gl_mock_call(bind_idx)->args[1].i == query_gl_buf(vbuf, 0));
+    sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[8].p == (const void*)(uintptr_t)32);
+    // the Apple GL drivers ignore that offset, sokol_gfx warns about it
+    T(logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG) == TEST_APPLE_PIXEL_UNPACK_WORKAROUND);
+    T(gl_mock_bindings()->pixel_unpack_buffer == 0);
     sg_destroy_buffer(vbuf);
     sg_destroy_image(img);
     T(no_errors());
