@@ -142,7 +142,7 @@ The sokol_gfx.h public API changes in detail:
   what type of pass)
 - a struct `sg_buffer_image_location` has been added, this is similar to the
   existing `sg_buffer_location`, but adds image data layout items `.bytes_per_row`
-  and `.bytes_per_slice`, used to define the source data in `sg_copy_buffer_to_image()`
+  and `.bytes_per_slice`, used to define the source data layout in `sg_copy_buffer_to_image()`
 - a struct `sg_copy_buffer_to_buffer_desc` has been added, this is the parameter
   to the function `sg_copy_buffer_to_buffer()`
 - a struct `sg_copy_buffer_to_image_desc` has been added, likewise, parameter
@@ -165,8 +165,8 @@ And some more esoteric changes, which probably/hopefully affect nobody:
 
 ...also some minor unrelated 'drive-by' bugfixes in sokol_gfx.h
 
-- the Metal implementation of `sg_begin_pass` stencil attachment store action
-  was actually taken from the depth attachment
+- in the Metal implementation of `sg_begin_pass`, the stencil attachment store action
+  was actually assigned from the depth attachment store action
 - in the GL backend, creating a compressed texture without initial data is
   now allowed (e.g. no longer asserts)
 - in the `sg_write_buffer_*` functions the default write size was computed
