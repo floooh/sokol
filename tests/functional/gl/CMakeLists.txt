@@ -5,14 +5,18 @@
 # the mock library in tests/mocks/gl and set the backend define.
 #
 # The GL version is a compile-time choice, so one executable is built per
-# supported version, all from the same source file.
+# supported version, all from the same source file. One extra executable per
+# GL flavour enables the Apple GL driver workaround (heap staging buffers), so
+# that the workaround path and the normal path are tested on every host.
 
 if (SOKOL_BACKEND STREQUAL SOKOL_GLCORE)
-    set(gl_versions 410 430)
-    set(gl_names gl41 gl43)
+    set(gl_versions 410 430 410)
+    set(gl_names gl41 gl43 gl41-apple)
+    set(gl_apple 0 0 1)
 else()
-    set(gl_versions 300 310 320)
-    set(gl_names gles30 gles31 gles32)
+    set(gl_versions 300 310 320 300)
+    set(gl_names gles30 gles31 gles32 gles30-apple)
+    set(gl_apple 0 0 0 1)
 endif()
 
 list(LENGTH gl_versions num_gl_versions)
@@ -20,9 +24,12 @@ math(EXPR last_gl_version "${num_gl_versions} - 1")
 foreach (i RANGE ${last_gl_version})
     list(GET gl_versions ${i} gl_version)
     list(GET gl_names ${i} gl_name)
+    list(GET gl_apple ${i} apple)
     set(target sokol-${gl_name}-test)
     add_executable(${target} sokol_gfx_gl_test.c)
-    target_compile_definitions(${target} PRIVATE GL_MOCK_VERSION=${gl_version})
+    target_compile_definitions(${target} PRIVATE
+        GL_MOCK_VERSION=${gl_version}
+        GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN=${apple})
     # The configure_c() macro adds include paths relative to tests/functional/;
     # they don't reach the sokol headers from this deeper subdirectory. Add the
     # sokol root and utest.h dir explicitly.

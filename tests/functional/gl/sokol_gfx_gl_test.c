@@ -9,6 +9,11 @@
 //      SOKOL_GLCORE: 410, 430
 //      SOKOL_GLES3:  300, 310, 320
 //
+//  One extra executable per GL flavour (sokol-gl41-apple-test and
+//  sokol-gles30-apple-test) is built with -DGL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN=1.
+//  This enables the Apple GL driver workaround (heap staging buffers) on all
+//  hosts. The other executables disable the workaround on all hosts.
+//
 //  Only exercises paths that are backend-specific -- generic public API
 //  behaviour is covered by the DUMMY-backend suite in sokol_gfx_test.c and
 //  is not repeated here.
@@ -27,8 +32,10 @@
 //    - View creation (texture / attachment / MSAA) _sg_gl_create_view
 //    - Pass begin/end (swapchain, offscreen, MSAA) _sg_gl_begin_pass / _sg_gl_end_pass
 //    - Draw / dispatch                             _sg_gl_draw / _sg_gl_dispatch
-//    - Resource updates                            _sg_gl_update_* / _sg_gl_append_*
-//    - Injected native handles                     sg_*_desc.gl_buffers / .gl_textures / .gl_sampler
+//    - Resource writes (transient / unsealed)      _sg_gl_write_* / _sg_gl_write_miplevel_data
+//    - Resource copies                             _sg_gl_copy_buffer_to_buffer / _sg_gl_copy_buffer_to_image
+//    - Compute memory barriers                     _sg_gl_handle_memory_barriers
+//    - Injected native handles                     sg_*_desc.gl_buffer / .gl_texture / .gl_sampler
 //    - Error paths                                 shader compile / link failure
 //------------------------------------------------------------------------------
 #define SOKOL_IMPL
@@ -66,20 +73,35 @@
     #define TEST_HAS_TEXSTORAGE (1)
 #endif
 
+// Apple GL driver workaround gate, also keyed on the mock option and never on
+// the host. On the workaround path staging buffers are heap allocations without
+// GL buffer objects, see _SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN.
+#define TEST_APPLE_PIXEL_UNPACK_WORKAROUND (GL_MOCK_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+#if TEST_APPLE_PIXEL_UNPACK_WORKAROUND && !defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    #error "Apple GL workaround expected but not enabled in sokol_gfx.h"
+#elif !TEST_APPLE_PIXEL_UNPACK_WORKAROUND && defined(_SOKOL_GL_APPLE_PIXEL_UNPACK_OFFSET_BROKEN)
+    #error "Apple GL workaround enabled in sokol_gfx.h but not expected"
+#endif
+
 //------------------------------------------------------------------------------
 //  test harness
 //------------------------------------------------------------------------------
 #define MAX_LOG_ITEMS (64)
 static sg_log_item log_items[MAX_LOG_ITEMS];
 static int num_log_items;
+static int num_error_logs;      // panic- and error-level log messages (incl. validation errors)
 
 static void reset_log(void) {
     num_log_items = 0;
+    num_error_logs = 0;
     memset(log_items, 0, sizeof(log_items));
 }
 
 static void capture_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* msg, uint32_t line_nr, const char* file, void* ud) {
-    (void)tag; (void)log_level; (void)msg; (void)line_nr; (void)file; (void)ud;
+    (void)tag; (void)msg; (void)line_nr; (void)file; (void)ud;
+    if (log_level <= 1) {
+        num_error_logs++;
+    }
     if (num_log_items < MAX_LOG_ITEMS) {
         log_items[num_log_items++] = (sg_log_item)log_item_id;
     }
@@ -92,7 +114,16 @@ static bool logged(sg_log_item item) {
     return false;
 }
 
+static bool no_errors(void) {
+    return num_error_logs == 0;
+}
+
 static void setup(void) {
+    // a previous test aborted by TA() may have skipped its teardown
+    if (sg_isvalid()) {
+        sg_shutdown();
+        gl_mock_shutdown();
+    }
     reset_log();
     gl_mock_setup();
     sg_setup(&(sg_desc){
@@ -116,6 +147,21 @@ static sg_shader make_test_shader(void) {
         .vertex_func.source = "void main() { gl_Position = vec4(0); }",
         .fragment_func.source = "void main() { }",
     });
+}
+
+// fills a staging buffer with a known byte pattern, with the Apple GL
+// workaround the copy calls then read this pattern from heap memory
+#define TEST_PATTERN_SIZE (512)
+static uint8_t test_pattern[TEST_PATTERN_SIZE];
+
+static void fill_staging_buffer(sg_buffer buf, size_t size) {
+    for (size_t i = 0; i < TEST_PATTERN_SIZE; i++) {
+        test_pattern[i] = (uint8_t)(i * 7 + 1);
+    }
+    if (size > TEST_PATTERN_SIZE) {
+        size = TEST_PATTERN_SIZE;
+    }
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = { test_pattern, size }, .dst.buffer = buf });
 }
 
 //------------------------------------------------------------------------------
@@ -213,6 +259,9 @@ UTEST(sokol_gfx_gl, features) {
     #endif
     T(!f.mrt_independent_blend_state);
     T(f.vertexformat_int10_n2);
+    T(f.copy_buffer_to_image_relaxed_buffer_type);
+    T(f.copy_buffer_to_image_relaxed_bytes_per_row);
+    T(!f.separate_buffer_types);    // only set on GLES3 under emscripten
     teardown();
 }
 
@@ -311,14 +360,14 @@ UTEST(sokol_gfx_gl, image_create_destroy) {
     teardown();
 }
 
-UTEST(sokol_gfx_gl, dynamic_image_uses_renaming_slots) {
+UTEST(sokol_gfx_gl, write_transient_image_uses_renaming_slots) {
     setup();
-    // a non-immutable image is created with SG_NUM_INFLIGHT_FRAMES textures
+    // a write-transient image is created with SG_NUM_INFLIGHT_FRAMES textures
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == SG_NUM_INFLIGHT_FRAMES);
@@ -387,7 +436,7 @@ UTEST(sokol_gfx_gl, full_round_trip_leaves_no_objects) {
     const int base = gl_mock_live_objects_total();
     static const float data[] = { 1.0f, 2.0f, 3.0f, 4.0f };
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
-    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .usage.dynamic_update = true });
+    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .usage.write_transient = true });
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
     sg_shader shd = make_test_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd });
@@ -450,17 +499,17 @@ UTEST(sokol_gfx_gl, call_log) {
 //------------------------------------------------------------------------------
 //  buffer creation code paths
 //------------------------------------------------------------------------------
-UTEST(sokol_gfx_gl, buffer_dynamic_uses_dynamic_draw) {
+UTEST(sokol_gfx_gl, buffer_copy_dst_uses_dynamic_copy) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .size = 256, .usage.dynamic_update = true,
+        .size = 256, .usage.copy_dst = true,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
-    // dynamic buffer uses SG_NUM_INFLIGHT_FRAMES renaming slots
-    T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == SG_NUM_INFLIGHT_FRAMES);
+    // a copy-dst buffer has a single slot
+    T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 1);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
     TA(call != 0);
-    T(call->args[3].i == GL_DYNAMIC_DRAW);
+    T(call->args[3].i == GL_DYNAMIC_COPY);
     sg_destroy_buffer(buf);
     T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
     teardown();
@@ -472,6 +521,8 @@ UTEST(sokol_gfx_gl, buffer_stream_uses_stream_draw) {
         .size = 128, .usage.write_transient = true,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    // write-transient buffers use SG_NUM_INFLIGHT_FRAMES renaming slots
+    T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == SG_NUM_INFLIGHT_FRAMES);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferData);
     TA(call != 0);
     T(call->args[3].i == GL_STREAM_DRAW);
@@ -515,8 +566,7 @@ UTEST(sokol_gfx_gl, buffer_inject_native) {
     const uint32_t injected_buf = 0xDEAD;
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 64,
-        .usage.immutable = true,
-        .gl_buffers = { injected_buf },
+        .gl_buffer = injected_buf,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     // sokol must not call glGenBuffers/glBufferData for injected handles
@@ -537,7 +587,7 @@ UTEST(sokol_gfx_gl, image_3d_takes_texstorage3d_or_teximage3d) {
         .type = SG_IMAGETYPE_3D,
         .width = 8, .height = 8, .num_slices = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == SG_NUM_INFLIGHT_FRAMES);
@@ -661,8 +711,7 @@ UTEST(sokol_gfx_gl, image_inject_native) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .gl_textures = { injected_tex },
+        .gl_texture = injected_tex,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     // no glGenTextures / glTexStorage / glTexImage for injected handles
@@ -1305,17 +1354,17 @@ UTEST(sokol_gfx_gl, apply_uniforms_calls_glUniformXfv) {
 }
 
 //------------------------------------------------------------------------------
-//  resource updates -- glBufferSubData, glTexSubImage2D, append + rename
+//  resource writes -- glBufferSubData, glTexSubImage2D
 //------------------------------------------------------------------------------
-UTEST(sokol_gfx_gl, buffer_update_calls_bufferSubData) {
+UTEST(sokol_gfx_gl, buffer_write_transient_calls_bufferSubData) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .size = 64, .usage.dynamic_update = true,
+        .size = 64, .usage.write_transient = true,
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
     uint8_t bytes[64] = {0};
     gl_mock_clear_calls();
-    sg_update_buffer(buf, &SG_RANGE(bytes));
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst.buffer = buf });
     T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 1);
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
     T(call->args[1].i == 0);                    // offset
@@ -1324,17 +1373,15 @@ UTEST(sokol_gfx_gl, buffer_update_calls_bufferSubData) {
     teardown();
 }
 
-UTEST(sokol_gfx_gl, buffer_append_uses_offset) {
+UTEST(sokol_gfx_gl, buffer_write_transient_uses_dst_offset) {
     setup();
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .size = 256, .usage.dynamic_update = true,
+        .size = 256, .usage.write_transient = true,
     });
     uint8_t bytes[32] = {0};
-    int off1 = sg_append_buffer(buf, &SG_RANGE(bytes));
-    int off2 = sg_append_buffer(buf, &SG_RANGE(bytes));
-    T(off1 == 0);
-    T(off2 == 32);
-    // second append uses non-zero offset in glBufferSubData
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst = { .buffer = buf, .offset = 0 } });
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst = { .buffer = buf, .offset = 32 } });
+    // second write uses non-zero offset in glBufferSubData
     const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
     TA(call != 0);
     T(call->args[1].i == 32);
@@ -1342,15 +1389,39 @@ UTEST(sokol_gfx_gl, buffer_append_uses_offset) {
     teardown();
 }
 
-UTEST(sokol_gfx_gl, image_update_calls_texSubImage2D) {
+UTEST(sokol_gfx_gl, staging_buffer_write_transient) {
+    setup();
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
+    uint8_t bytes[32] = {0};
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst = { .buffer = stage, .offset = 16 } });
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // staging buffers are heap memory, the write is a memcpy without GL calls
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 0);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 0);
+    #else
+        // staging buffers are filled through the vertex buffer bind point
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 1);
+        const gl_mock_call_t* call = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+        T(call->args[0].i == GL_ARRAY_BUFFER);
+        T(call->args[1].i == 16);
+        T(call->args[2].i == (int64_t)sizeof(bytes));
+        T(call->args[3].p == bytes);
+    #endif
+    sg_destroy_buffer(stage);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, image_write_transient_calls_texSubImage2D) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.dynamic_update = true,
+        .usage.write_transient = true,
     });
     uint32_t pixels[8 * 8] = {0};
     gl_mock_clear_calls();
-    sg_update_image(img, &(sg_image_data){ .mip_levels[0] = SG_RANGE(pixels) });
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst.image = img });
     T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 1);
     sg_destroy_image(img);
     T(sg_isvalid());
@@ -1423,6 +1494,2317 @@ UTEST(sokol_gfx_gl, storage_image_binding_uses_bindImageTexture) {
 #endif
 
 //------------------------------------------------------------------------------
+//  buffer usage combinations -- GL target, GL usage hint, slot count
+//------------------------------------------------------------------------------
+
+// index of the first call to 'func' at or after 'start' whose first argument
+// equals 'arg0', or -1
+static int find_call_arg0(gl_mock_func_t func, int start, int64_t arg0) {
+    int i = start;
+    while ((i = gl_mock_find_call(func, i)) >= 0) {
+        if (gl_mock_call(i)->args[0].i == arg0) {
+            return i;
+        }
+        i++;
+    }
+    return -1;
+}
+
+// NOTE: MSVC warns (C4223) on indexing an array in a returned struct
+static GLuint query_gl_buf(sg_buffer buf, int slot) {
+    const sg_gl_buffer_info info = sg_gl_query_buffer_info(buf);
+    return info.buf[slot];
+}
+
+// the active slot rotates with each first write_transient in a frame
+static GLuint query_active_gl_buf(sg_buffer buf) {
+    const sg_gl_buffer_info info = sg_gl_query_buffer_info(buf);
+    return info.buf[info.active_slot];
+}
+
+static GLuint query_gl_tex(sg_image img, int slot) {
+    const sg_gl_image_info info = sg_gl_query_image_info(img);
+    return info.tex[slot];
+}
+
+typedef struct {
+    sg_buffer_usage usage;
+    bool with_data;
+    bool needs_compute;
+    GLenum gl_target;
+    GLenum gl_usage;
+    int num_slots;
+} buffer_usage_case_t;
+
+UTEST(sokol_gfx_gl, buffer_usage_combinations) {
+    static const uint32_t data[16] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+    const buffer_usage_case_t cases[] = {
+        { .usage = { .vertex_buffer = true }, .with_data = true, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .index_buffer = true }, .with_data = true, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        // vertex_buffer takes precedence when a buffer has several types
+        { .usage = { .vertex_buffer = true, .index_buffer = true }, .with_data = true, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .vertex_buffer = true, .copy_src = true }, .with_data = true, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .vertex_buffer = true, .write_transient = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .index_buffer = true, .write_transient = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .vertex_buffer = true, .write_unsealed = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .index_buffer = true, .write_unsealed = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .vertex_buffer = true, .copy_dst = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
+        { .usage = { .index_buffer = true, .copy_dst = true, .copy_src = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
+        { .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .gl_target = GL_ELEMENT_ARRAY_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .storage_buffer = true }, .with_data = true, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .storage_buffer = true, .write_transient = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .storage_buffer = true, .copy_dst = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
+    };
+    for (size_t ci = 0; ci < sizeof(cases) / sizeof(cases[0]); ci++) {
+        const buffer_usage_case_t* c = &cases[ci];
+        if (c->needs_compute && !TEST_HAS_COMPUTE) {
+            continue;
+        }
+        setup();
+        gl_mock_clear_calls();
+        sg_buffer_desc desc = { .usage = c->usage, .size = sizeof(data) };
+        if (c->with_data) {
+            desc.data = SG_RANGE(data);
+        }
+        sg_buffer buf = sg_make_buffer(&desc);
+        const sg_resource_state expected_state = c->usage.write_unsealed ? SG_RESOURCESTATE_UNSEALED : SG_RESOURCESTATE_VALID;
+        T(sg_query_buffer_state(buf) == expected_state);
+        T(sg_query_buffer_info(buf).num_slots == c->num_slots);
+        #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        if (c->usage.staging_buffer || c->usage.staging_index_buffer) {
+            // staging buffers are heap memory without GL buffer objects
+            T(gl_mock_num_calls() == 0);
+            T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
+            const sg_gl_buffer_info gl_info = sg_gl_query_buffer_info(buf);
+            for (int slot = 0; slot < c->num_slots; slot++) {
+                T(gl_info.buf[slot] == 0);
+            }
+            sg_destroy_buffer(buf);
+            T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == 0);
+            T(no_errors());
+            teardown();
+            continue;
+        }
+        #endif
+        T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == c->num_slots);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glGenBuffers) == c->num_slots);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferData) == c->num_slots);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == (c->with_data ? c->num_slots : 0));
+        const sg_gl_buffer_info gl_info = sg_gl_query_buffer_info(buf);
+        int call_idx = 0;
+        for (int slot = 0; slot < c->num_slots; slot++) {
+            const GLuint gl_buf = gl_info.buf[slot];
+            T(gl_buf != 0);
+            // each slot: bind, allocate with glBufferData(data=0), then upload with glBufferSubData
+            const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, call_idx, c->gl_target);
+            TA(bind_idx >= 0);
+            T(gl_mock_call(bind_idx)->args[1].i == gl_buf);
+            const int data_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferData, bind_idx);
+            TA(data_idx > bind_idx);
+            const gl_mock_call_t* bd = gl_mock_call(data_idx);
+            T(bd->args[0].i == c->gl_target);
+            T(bd->args[1].i == (int64_t)sizeof(data));
+            T(bd->args[2].p == 0);
+            T(bd->args[3].i == c->gl_usage);
+            call_idx = data_idx + 1;
+            if (c->with_data) {
+                const int sub_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, data_idx);
+                TA(sub_idx == data_idx + 1);
+                const gl_mock_call_t* bsd = gl_mock_call(sub_idx);
+                T(bsd->args[0].i == c->gl_target);
+                T(bsd->args[1].i == 0);
+                T(bsd->args[2].i == (int64_t)sizeof(data));
+                T(bsd->args[3].p == data);
+                call_idx = sub_idx + 1;
+            }
+            gl_mock_buffer_info_t mock_info;
+            TA(gl_mock_buffer_info(gl_buf, &mock_info));
+            T(mock_info.target == c->gl_target);
+            T(mock_info.usage == c->gl_usage);
+            T(mock_info.size == (GLsizeiptr)sizeof(data));
+        }
+        sg_destroy_buffer(buf);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == c->num_slots);
+        T(gl_mock_live_objects(GL_MOCK_OBJ_BUFFER) == 0);
+        T(no_errors());
+        teardown();
+    }
+}
+
+UTEST(sokol_gfx_gl, buffer_create_restores_previous_binding) {
+    setup();
+    static const float data[4] = { 0 };
+    sg_buffer a = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
+    const GLuint gl_a = query_gl_buf(a, 0);
+    // after the first create, the new buffer stays bound in the cache
+    T(gl_mock_bindings()->array_buffer == gl_a);
+    gl_mock_clear_calls();
+    sg_buffer b = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
+    const GLuint gl_b = query_gl_buf(b, 0);
+    // the second create binds b, uploads, then restores a
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 2);
+    T(gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glBindBuffer, 0))->args[1].i == gl_b);
+    T(gl_mock_last_call(GL_MOCK_FUNC_glBindBuffer)->args[1].i == gl_a);
+    T(gl_mock_bindings()->array_buffer == gl_a);
+    // index buffers have their own bind point and stored binding
+    static const uint16_t idata[4] = { 0 };
+    sg_buffer c = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(idata) });
+    sg_buffer d = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(idata) });
+    T(gl_mock_bindings()->element_array_buffer == query_gl_buf(c, 0));
+    T(gl_mock_bindings()->array_buffer == gl_a);
+    // destroying a bound buffer drops it from the cache, so the next create
+    // has nothing to restore
+    sg_destroy_buffer(a);
+    sg_destroy_buffer(c);
+    gl_mock_clear_calls();
+    sg_buffer e = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(data) });
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 1);
+    sg_destroy_buffer(b);
+    sg_destroy_buffer(d);
+    sg_destroy_buffer(e);
+    T(no_errors());
+    teardown();
+}
+
+#if TEST_HAS_COMPUTE
+UTEST(sokol_gfx_gl, storage_buffer_create_restores_previous_binding) {
+    setup();
+    static const uint32_t data[4] = { 0 };
+    sg_buffer a = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = SG_RANGE(data) });
+    sg_buffer b = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = SG_RANGE(data) });
+    T(gl_mock_bindings()->shader_storage_buffer == query_gl_buf(a, 0));
+    sg_destroy_buffer(a);
+    sg_destroy_buffer(b);
+    T(no_errors());
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
+//  buffer writes -- write_transient (slot rotation) and write_unsealed + seal
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, buffer_write_transient_rotates_slots) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_transient = true });
+    const sg_gl_buffer_info info0 = sg_gl_query_buffer_info(buf);
+    T(info0.active_slot == 0);
+    T(info0.buf[0] != info0.buf[1]);
+    uint8_t bytes[32];
+    for (int i = 0; i < 32; i++) { bytes[i] = (uint8_t)i; }
+
+    // first write in a frame rotates to the next slot
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src = { .data = SG_RANGE(bytes), .offset = 8 },
+        .dst = { .buffer = buf, .offset = 16 },
+        .size = 16,
+    });
+    T(sg_gl_query_buffer_info(buf).active_slot == 1);
+    const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_ARRAY_BUFFER);
+    TA(bind_idx >= 0);
+    T(gl_mock_call(bind_idx)->args[1].i == info0.buf[1]);
+    const int sub_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, bind_idx);
+    TA(sub_idx > bind_idx);
+    const gl_mock_call_t* sub = gl_mock_call(sub_idx);
+    T(sub->args[0].i == GL_ARRAY_BUFFER);
+    T(sub->args[1].i == 16);
+    T(sub->args[2].i == 16);
+    T(sub->args[3].p == &bytes[8]);
+    gl_mock_buffer_info_t mi;
+    TA(gl_mock_buffer_info(info0.buf[1], &mi));
+    T(mi.num_subdata == 1);
+    TA(gl_mock_buffer_info(info0.buf[0], &mi));
+    T(mi.num_subdata == 0);
+
+    // a second write in the same frame stays in the same slot, size defaults to src size
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst = { .buffer = buf, .offset = 32 } });
+    T(sg_gl_query_buffer_info(buf).active_slot == 1);
+    sub = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+    TA(sub != 0);
+    T(sub->args[1].i == 32);
+    T(sub->args[2].i == (int64_t)sizeof(bytes));
+    T(sub->args[3].p == bytes);
+    // bind slot 1 for the write, then restore the previously bound slot 0
+    // (creating the 2 slots left slot 0 bound)
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glBindBuffer) == 2);
+    T(gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glBindBuffer, 0))->args[1].i == info0.buf[1]);
+    T(gl_mock_last_call(GL_MOCK_FUNC_glBindBuffer)->args[1].i == info0.buf[0]);
+    T(gl_mock_bindings()->array_buffer == info0.buf[0]);
+
+    // the next frame wraps around to slot 0
+    sg_commit();
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(bytes), .dst.buffer = buf });
+    T(sg_gl_query_buffer_info(buf).active_slot == 0);
+    T(gl_mock_bindings()->array_buffer == info0.buf[0]);
+    TA(gl_mock_buffer_info(info0.buf[0], &mi));
+    T(mi.num_subdata == 1);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
+// default write size is the src data size minus the src offset
+UTEST(sokol_gfx_gl, buffer_write_default_size_with_src_offset) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_transient = true });
+    uint8_t bytes[32] = { 0 };
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src = { .data = SG_RANGE(bytes), .offset = 8 },
+        .dst.buffer = buf,
+    });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+    TA(sub != 0);
+    T(sub->args[1].i == 0);
+    T(sub->args[2].i == 24);
+    T(sub->args[3].p == &bytes[8]);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, index_buffer_write_transient_uses_element_array_target) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage = { .index_buffer = true, .write_transient = true } });
+    uint16_t indices[8] = { 0 };
+    gl_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(indices), .dst.buffer = buf });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+    TA(sub != 0);
+    T(sub->args[0].i == GL_ELEMENT_ARRAY_BUFFER);
+    const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_ELEMENT_ARRAY_BUFFER);
+    TA(bind_idx >= 0);
+    T(gl_mock_call(bind_idx)->args[1].i == query_gl_buf(buf, 1));
+    // the previous index buffer binding is restored
+    T(gl_mock_bindings()->element_array_buffer == query_gl_buf(buf, 0));
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, buffer_write_unsealed_then_seal) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_unsealed = true });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    const GLuint gl_buf = query_gl_buf(buf, 0);
+    uint8_t part0[32] = { 0 };
+    uint8_t part1[32] = { 0 };
+    gl_mock_clear_calls();
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(part0), .dst.buffer = buf });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(part1), .dst = { .buffer = buf, .offset = 32 } });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 2);
+    const int first = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, 0);
+    const gl_mock_call_t* c0 = gl_mock_call(first);
+    const gl_mock_call_t* c1 = gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, first + 1));
+    T(c0->args[0].i == GL_ARRAY_BUFFER);
+    T(c0->args[1].i == 0);
+    T(c0->args[2].i == 32);
+    T(c0->args[3].p == part0);
+    T(c1->args[1].i == 32);
+    T(c1->args[2].i == 32);
+    T(c1->args[3].p == part1);
+    T(gl_mock_bindings()->array_buffer == gl_buf);
+    // an unsealed buffer is never renamed
+    T(sg_gl_query_buffer_info(buf).active_slot == 0);
+
+    // sealing is a pure state change in the GL backend, no GL calls
+    gl_mock_clear_calls();
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(gl_mock_num_calls() == 0);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  image writes -- write_transient (slot rotation) and write_unsealed + seal
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, image_write_transient_rotates_slots_and_sets_unpack_state) {
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8, .num_mipmaps = 2,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_transient = true,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    const sg_gl_image_info info0 = sg_gl_query_image_info(img);
+    T(info0.tex_target == GL_TEXTURE_2D);
+    T(info0.active_slot == 0);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == SG_NUM_INFLIGHT_FRAMES);
+    #if !TEST_HAS_TEXSTORAGE
+        // without glTexStorage the max mip level is set explicitly
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexParameteri) >= SG_NUM_INFLIGHT_FRAMES);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexImage2D) == 2 * SG_NUM_INFLIGHT_FRAMES);
+    #else
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage2D) == SG_NUM_INFLIGHT_FRAMES);
+    #endif
+
+    // write a 2x2 region into mip level 1 (4x4), source rows are 4 pixels wide
+    uint32_t pixels[4 * 4] = { 0 };
+    gl_mock_clear_calls();
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = SG_RANGE(pixels),
+        .dst = { .image = img, .mip_level = 1, .x = 1, .y = 2 },
+        .size = { .width = 2, .height = 2 },
+    });
+    T(sg_gl_query_image_info(img).active_slot == 1);
+    const int tbind_idx = gl_mock_find_call(GL_MOCK_FUNC_glBindTexture, 0);
+    TA(tbind_idx >= 0);
+    T(gl_mock_call(tbind_idx)->args[0].i == GL_TEXTURE_2D);
+    T(gl_mock_call(tbind_idx)->args[1].i == info0.tex[1]);
+    const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH);
+    const int hgt_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT);
+    const int sub_idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0);
+    TA((row_idx >= 0) && (hgt_idx >= 0) && (sub_idx >= 0));
+    T(row_idx < sub_idx);
+    T(hgt_idx < sub_idx);
+    T(gl_mock_call(row_idx)->args[1].i == 4);
+    T(gl_mock_call(hgt_idx)->args[1].i == 4);
+    const gl_mock_call_t* sub = gl_mock_call(sub_idx);
+    T(sub->args[0].i == GL_TEXTURE_2D);
+    T(sub->args[1].i == 1);     // mip level
+    T(sub->args[2].i == 1);     // x
+    T(sub->args[3].i == 2);     // y
+    T(sub->args[4].i == 2);     // width
+    T(sub->args[5].i == 2);     // height
+    T(sub->args[6].i == GL_RGBA);
+    T(sub->args[7].i == GL_UNSIGNED_BYTE);
+    T(sub->args[8].p == pixels);
+    // unpack state is reset afterwards
+    T(gl_mock_render_state()->unpack_row_length == 0);
+    T(gl_mock_render_state()->unpack_image_height == 0);
+    gl_mock_texture_info_t ti;
+    TA(gl_mock_texture_info(info0.tex[1], &ti));
+    T(ti.num_subimage == 1);
+    TA(gl_mock_texture_info(info0.tex[0], &ti));
+    T(ti.num_subimage == 0);
+
+    // the next frame wraps around to slot 0
+    sg_commit();
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst = { .image = img, .mip_level = 1 } });
+    T(sg_gl_query_image_info(img).active_slot == 0);
+    TA(gl_mock_texture_info(info0.tex[0], &ti));
+    T(ti.num_subimage == 1);
+    sg_destroy_image(img);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 0);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, image_write_transient_cube_writes_each_face) {
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 4, .height = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_transient = true,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    static uint8_t pixels[6 * 4 * 4 * 4];
+    gl_mock_clear_calls();
+    // all six faces
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst.image = img });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 6);
+    int idx = 0;
+    for (int face = 0; face < 6; face++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, idx);
+        TA(idx >= 0);
+        const gl_mock_call_t* c = gl_mock_call(idx++);
+        T(c->args[0].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
+        T(c->args[8].p == &pixels[face * 64]);
+    }
+    // faces 2 and 3 only
+    gl_mock_clear_calls();
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = pixels, .size = 2 * 64 },
+        .dst = { .image = img, .slice = 2 },
+        .size.num_slices = 2,
+    });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 2);
+    idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0);
+    T(gl_mock_call(idx)->args[0].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + 2);
+    T(gl_mock_call(idx)->args[8].p == &pixels[0]);
+    idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, idx + 1);
+    T(gl_mock_call(idx)->args[0].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3);
+    T(gl_mock_call(idx)->args[8].p == &pixels[64]);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, image_write_transient_array_and_3d_use_texsubimage3d) {
+    setup();
+    const sg_image_type types[2] = { SG_IMAGETYPE_ARRAY, SG_IMAGETYPE_3D };
+    const GLenum targets[2] = { GL_TEXTURE_2D_ARRAY, GL_TEXTURE_3D };
+    static uint8_t pixels[2 * 8 * 8 * 4];
+    for (int i = 0; i < 2; i++) {
+        sg_image img = sg_make_image(&(sg_image_desc){
+            .type = types[i],
+            .width = 4, .height = 4, .num_slices = 4,
+            .pixel_format = SG_PIXELFORMAT_RGBA8,
+            .usage.write_transient = true,
+        });
+        T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+        T(sg_gl_query_image_info(img).tex_target == targets[i]);
+        gl_mock_clear_calls();
+        // write slices 1 and 2, source rows are padded to 8 pixels, source slices to 8 rows
+        sg_write_image_transient(&(sg_write_image_desc){
+            .src = { .data = SG_RANGE(pixels), .bytes_per_row = 32, .bytes_per_slice = 8 * 32 },
+            .dst = { .image = img, .slice = 1 },
+            .size = { .num_slices = 2 },
+        });
+        const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage3D);
+        TA(sub != 0);
+        T(sub->args[0].i == targets[i]);
+        T(sub->args[1].i == 0);     // mip level
+        T(sub->args[4].i == 1);     // zoffset == slice
+        T(sub->args[5].i == 4);     // width
+        T(sub->args[6].i == 4);     // height
+        T(sub->args[7].i == 2);     // depth == num_slices
+        T(sub->args[10].p == pixels);
+        const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH);
+        const int hgt_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT);
+        TA((row_idx >= 0) && (hgt_idx >= 0));
+        T(gl_mock_call(row_idx)->args[1].i == 8);
+        T(gl_mock_call(hgt_idx)->args[1].i == 8);
+        sg_destroy_image(img);
+    }
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, image_write_unsealed_then_seal) {
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    // write_unsealed implies immutable, so a single texture
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 1);
+    // the texture is allocated without data
+    #if TEST_HAS_TEXSTORAGE
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage2D) == 1);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
+    #else
+        const gl_mock_call_t* ti = gl_mock_last_call(GL_MOCK_FUNC_glTexImage2D);
+        TA(ti != 0);
+        T(ti->args[8].p == 0);
+    #endif
+    const GLuint tex = query_gl_tex(img, 0);
+    uint32_t top[8 * 4] = { 0 };
+    uint32_t bottom[8 * 4] = { 0 };
+    gl_mock_clear_calls();
+    // a partial-height write needs an explicit bytes_per_slice (default is the whole mip surface)
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src = { .data = SG_RANGE(top), .bytes_per_slice = sizeof(top) }, .dst.image = img, .size.height = 4 });
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src = { .data = SG_RANGE(bottom), .bytes_per_slice = sizeof(bottom) }, .dst = { .image = img, .y = 4 } });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 2);
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    T(sub->args[3].i == 4);     // y
+    T(sub->args[5].i == 4);     // height
+    T(sub->args[8].p == bottom);
+    gl_mock_texture_info_t mi;
+    TA(gl_mock_texture_info(tex, &mi));
+    T(mi.num_subimage == 2);
+    T(mi.num_subimage_unpack_buffer == 0);
+
+    gl_mock_clear_calls();
+    sg_seal_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(gl_mock_num_calls() == 0);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+#if !TEST_HAS_TEXSTORAGE
+// without texstorage, compressed images without data are allocated with
+// glCompressedTexImage2D/3D, imageSize must match the format and size
+UTEST(sokol_gfx_gl, image_compressed_alloc_size_without_data) {
+    setup();
+    // BC1: 8 bytes per 4x4 block, mip sizes for 8x8: 32, 8, 8, 8
+    const int mip_sizes[4] = { 32, 8, 8, 8 };
+    gl_mock_clear_calls();
+    sg_image img2d = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8, .num_mipmaps = 4,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img2d) == SG_RESOURCESTATE_UNSEALED);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) == 4);
+    int idx = -1;
+    for (int mip = 0; mip < 4; mip++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glCompressedTexImage2D, idx + 1);
+        TA(idx >= 0);
+        const gl_mock_call_t* c = gl_mock_call(idx);
+        T(c->args[1].i == mip);
+        T(c->args[6].i == mip_sizes[mip]);
+        T(c->args[7].p == 0);
+    }
+
+    // cube: one call per face with the face size
+    gl_mock_clear_calls();
+    sg_image img_cube = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img_cube) == SG_RESOURCESTATE_UNSEALED);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) == 6);
+    idx = -1;
+    for (int face = 0; face < 6; face++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glCompressedTexImage2D, idx + 1);
+        TA(idx >= 0);
+        T(gl_mock_call(idx)->args[6].i == 32);
+    }
+
+    // array: size covers all slices
+    gl_mock_clear_calls();
+    sg_image img_arr = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 8, .height = 8, .num_slices = 3,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img_arr) == SG_RESOURCESTATE_UNSEALED);
+    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCompressedTexImage3D);
+    TA(c != 0);
+    T(c->args[5].i == 3);
+    T(c->args[7].i == 3 * 32);
+    T(c->args[8].p == 0);
+
+    sg_destroy_image(img2d);
+    sg_destroy_image(img_cube);
+    sg_destroy_image(img_arr);
+    T(no_errors());
+    teardown();
+}
+#endif
+
+UTEST(sokol_gfx_gl, image_write_unsealed_compressed) {
+    setup();
+    // BC1: 8 bytes per 4x4 block
+    static uint8_t blocks[6 * 32];
+    // 2D: glCompressedTexSubImage2D with the block-compressed size of the region
+    sg_image img2d = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    T(sg_query_image_state(img2d) == SG_RESOURCESTATE_UNSEALED);
+    gl_mock_clear_calls();
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = { .ptr = blocks, .size = 32 }, .dst.image = img2d });
+    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCompressedTexSubImage2D);
+    TA(c != 0);
+    T(c->args[0].i == GL_TEXTURE_2D);
+    T(c->args[4].i == 8);
+    T(c->args[5].i == 8);
+    T(c->args[7].i == 32);
+    T(c->args[8].p == blocks);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
+    sg_seal_image(img2d);
+
+    // array: glCompressedTexSubImage3D, size covers all written slices
+    sg_image img_arr = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 8, .height = 8, .num_slices = 2,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    gl_mock_clear_calls();
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = { .ptr = blocks, .size = 64 }, .dst.image = img_arr });
+    c = gl_mock_last_call(GL_MOCK_FUNC_glCompressedTexSubImage3D);
+    TA(c != 0);
+    T(c->args[0].i == GL_TEXTURE_2D_ARRAY);
+    T(c->args[7].i == 2);       // depth
+    T(c->args[9].i == 64);      // imageSize
+    T(c->args[10].p == blocks);
+
+    // cube: one glCompressedTexSubImage2D per face
+    sg_image img_cube = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE,
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.write_unsealed = true,
+    });
+    gl_mock_clear_calls();
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(blocks), .dst.image = img_cube });
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexSubImage2D) == 6);
+    c = gl_mock_last_call(GL_MOCK_FUNC_glCompressedTexSubImage2D);
+    TA(c != 0);
+    T(c->args[0].i == GL_TEXTURE_CUBE_MAP_NEGATIVE_Z);
+    T(c->args[8].p == &blocks[5 * 32]);
+    sg_destroy_image(img2d);
+    sg_destroy_image(img_arr);
+    sg_destroy_image(img_cube);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  sg_copy_buffer_to_buffer
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, copy_buffer_to_buffer) {
+    setup();
+    static const uint32_t data[16] = { 0 };
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true }, .data = SG_RANGE(data) });
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = sizeof(data) });
+    const GLuint gl_src = query_gl_buf(src, 0);
+    const GLuint gl_dst = query_gl_buf(dst, 0);
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 8 },
+        .dst = { .buffer = dst, .offset = 16 },
+        .size = 32,
+    });
+    // exact call sequence: bind read + write targets, copy, unbind both
+    TA(gl_mock_num_calls() == 5);
+    const gl_mock_call_t* c = gl_mock_call(0);
+    T(c->func == GL_MOCK_FUNC_glBindBuffer);
+    T(c->args[0].i == GL_COPY_READ_BUFFER);
+    T(c->args[1].i == gl_src);
+    c = gl_mock_call(1);
+    T(c->func == GL_MOCK_FUNC_glBindBuffer);
+    T(c->args[0].i == GL_COPY_WRITE_BUFFER);
+    T(c->args[1].i == gl_dst);
+    c = gl_mock_call(2);
+    T(c->func == GL_MOCK_FUNC_glCopyBufferSubData);
+    T(c->args[0].i == GL_COPY_READ_BUFFER);
+    T(c->args[1].i == GL_COPY_WRITE_BUFFER);
+    T(c->args[2].i == 8);
+    T(c->args[3].i == 16);
+    T(c->args[4].i == 32);
+    c = gl_mock_call(3);
+    T(c->func == GL_MOCK_FUNC_glBindBuffer);
+    T(c->args[0].i == GL_COPY_READ_BUFFER);
+    T(c->args[1].i == 0);
+    c = gl_mock_call(4);
+    T(c->func == GL_MOCK_FUNC_glBindBuffer);
+    T(c->args[0].i == GL_COPY_WRITE_BUFFER);
+    T(c->args[1].i == 0);
+    T(gl_mock_bindings()->copy_read_buffer == 0);
+    T(gl_mock_bindings()->copy_write_buffer == 0);
+    gl_mock_buffer_info_t mi;
+    TA(gl_mock_buffer_info(gl_src, &mi));
+    T(mi.num_copy_read == 1);
+    TA(gl_mock_buffer_info(gl_dst, &mi));
+    T(mi.num_copy_write == 1);
+    sg_destroy_buffer(src);
+    sg_destroy_buffer(dst);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_staging_buffers_into_vertex_and_index_buffers) {
+    setup();
+    sg_buffer vstage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
+    sg_buffer istage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 64 });
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 64 });
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .index_buffer = true, .copy_dst = true }, .size = 64 });
+    fill_staging_buffer(vstage, 64);
+    fill_staging_buffer(istage, 64);
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = vstage, .dst.buffer = vbuf, .size = 64 });
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = istage, .offset = 16 },
+        .dst = { .buffer = ibuf, .offset = 32 },
+        .size = 16,
+    });
+    // no memory barriers for non-storage buffers
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    gl_mock_buffer_info_t mi;
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // staging buffers are heap memory, each copy is a glBufferSubData
+        // into the destination buffer
+        T(query_active_gl_buf(vstage) == 0);
+        T(query_active_gl_buf(istage) == 0);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 0);
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 2);
+        const int v_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, 0);
+        const int i_idx = gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, v_idx + 1);
+        TA((v_idx >= 0) && (i_idx > v_idx));
+        const gl_mock_call_t* c = gl_mock_call(v_idx);
+        T(c->args[0].i == GL_ARRAY_BUFFER);
+        T(c->args[1].i == 0);
+        T(c->args[2].i == 64);
+        TA(c->args[3].p != 0);
+        T(memcmp(c->args[3].p, test_pattern, 64) == 0);
+        c = gl_mock_call(i_idx);
+        T(c->args[0].i == GL_ELEMENT_ARRAY_BUFFER);
+        T(c->args[1].i == 32);
+        T(c->args[2].i == 16);
+        TA(c->args[3].p != 0);
+        T(memcmp(c->args[3].p, test_pattern + 16, 16) == 0);
+        TA(gl_mock_buffer_info(query_gl_buf(vbuf, 0), &mi));
+        T(mi.num_subdata == 1);
+        T(mi.num_copy_write == 0);
+        TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
+        T(mi.num_subdata == 1);
+        T(mi.num_copy_write == 0);
+    #else
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glBufferSubData) == 0);
+        TA(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 2);
+        const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glCopyBufferSubData);
+        T(c->args[2].i == 16);
+        T(c->args[3].i == 32);
+        T(c->args[4].i == 16);
+        TA(gl_mock_buffer_info(query_gl_buf(ibuf, 0), &mi));
+        T(mi.num_copy_write == 1);
+        TA(gl_mock_buffer_info(query_active_gl_buf(istage), &mi));
+        T(mi.num_copy_read == 1);
+    #endif
+    sg_destroy_buffer(vstage);
+    sg_destroy_buffer(istage);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_buffer(ibuf);
+    T(no_errors());
+    teardown();
+}
+
+#if TEST_HAS_COMPUTE
+UTEST(sokol_gfx_gl, copy_buffer_to_buffer_storage_issues_barrier) {
+    setup();
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .copy_src = true, .copy_dst = true }, .size = 64 });
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_src = true, .copy_dst = true }, .size = 64 });
+    // storage buffer as source
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = sbuf, .dst.buffer = vbuf, .size = 64 });
+    TA(gl_mock_num_calls() == 6);
+    T(gl_mock_call(0)->func == GL_MOCK_FUNC_glMemoryBarrier);
+    T(gl_mock_call(0)->args[0].i == GL_BUFFER_UPDATE_BARRIER_BIT);
+    T(gl_mock_call(3)->func == GL_MOCK_FUNC_glCopyBufferSubData);
+    // storage buffer as destination
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = vbuf, .dst.buffer = sbuf, .size = 64 });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 1);
+    T(gl_mock_last_call(GL_MOCK_FUNC_glMemoryBarrier)->args[0].i == GL_BUFFER_UPDATE_BARRIER_BIT);
+    sg_destroy_buffer(sbuf);
+    sg_destroy_buffer(vbuf);
+    T(no_errors());
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
+//  sg_copy_buffer_to_image -- staging buffer via GL_PIXEL_UNPACK_BUFFER
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, copy_dst_image_usage) {
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    // the image is allocated without data, copy-dst images have a single slot
+    T(sg_query_image_info(img).num_slots == 1);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 1);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
+    #if TEST_HAS_TEXSTORAGE
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glTexStorage2D) == 1);
+    #else
+        const gl_mock_call_t* ti = gl_mock_last_call(GL_MOCK_FUNC_glTexImage2D);
+        TA(ti != 0);
+        T(ti->args[8].p == 0);
+    #endif
+    sg_destroy_image(img);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 0);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_2d) {
+    setup();
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    const sg_gl_image_info img_info = sg_gl_query_image_info(img);
+    const GLuint gl_tex = img_info.tex[img_info.active_slot];
+    fill_staging_buffer(stage, 8 * 8 * 4);
+    const GLuint gl_stage = query_active_gl_buf(stage);
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stage, .dst.image = img });
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the staging buffer is heap memory and is not bound as pixel unpack source...
+        T(gl_stage == 0);
+        const int bind_idx = 0;
+    #else
+        // bind the staging buffer as pixel unpack source...
+        const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
+        TA(bind_idx >= 0);
+        T(gl_mock_call(bind_idx)->args[1].i == gl_stage);
+    #endif
+    // ...configure the unpack layout...
+    const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, bind_idx, GL_UNPACK_ROW_LENGTH);
+    TA(row_idx >= bind_idx);
+    T(gl_mock_call(row_idx)->args[1].i == 8);
+    // ...upload the data...
+    const int sub_idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, row_idx);
+    TA(sub_idx > row_idx);
+    const gl_mock_call_t* sub = gl_mock_call(sub_idx);
+    T(sub->args[0].i == GL_TEXTURE_2D);
+    T(sub->args[1].i == 0);
+    T(sub->args[2].i == 0);
+    T(sub->args[3].i == 0);
+    T(sub->args[4].i == 8);
+    T(sub->args[5].i == 8);
+    T(sub->args[6].i == GL_RGBA);
+    T(sub->args[7].i == GL_UNSIGNED_BYTE);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // ...directly from the staging buffer heap memory...
+        TA(sub->args[8].p != 0);
+        T(memcmp(sub->args[8].p, test_pattern, 8 * 8 * 4) == 0);
+        // (the only pixel unpack buffer bind is the unbind after the upload)
+        T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER) > sub_idx);
+    #else
+        // ...from buffer offset 0 (a null data pointer)...
+        T(sub->args[8].p == 0);
+    #endif
+    // ...and unbind the pixel unpack buffer again
+    const int unbind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, sub_idx, GL_PIXEL_UNPACK_BUFFER);
+    TA(unbind_idx > sub_idx);
+    T(gl_mock_call(unbind_idx)->args[1].i == 0);
+    T(gl_mock_bindings()->pixel_unpack_buffer == 0);
+    T(gl_mock_render_state()->unpack_row_length == 0);
+    // the upload went into the image texture
+    gl_mock_texture_info_t ti;
+    TA(gl_mock_texture_info(gl_tex, &ti));
+    T(ti.num_subimage == 1);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        T(ti.num_subimage_unpack_buffer == 0);
+        T(ti.last_unpack_buffer == 0);
+    #else
+        T(ti.num_subimage_unpack_buffer == 1);
+        T(ti.last_unpack_buffer == gl_stage);
+    #endif
+    // no barriers needed (staging source, non-storage destination)
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glCopyBufferSubData) == 0);
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
+    sg_destroy_buffer(stage);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_subregion_with_src_offset) {
+    setup();
+    // one row of slack in front of the source data
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 9 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8, .num_mipmaps = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    fill_staging_buffer(stage, 9 * 8 * 4);
+    gl_mock_clear_calls();
+    // copy a 4x2 region at (2, 4) of mip 0, source rows are 8 pixels wide, source offset is one row
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = stage, .offset = 32, .bytes_per_row = 32, .bytes_per_slice = 2 * 32 },
+        .dst = { .image = img, .x = 2, .y = 4 },
+        .size = { .width = 4, .height = 2 },
+    });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[1].i == 0);
+    T(sub->args[2].i == 2);
+    T(sub->args[3].i == 4);
+    T(sub->args[4].i == 4);
+    T(sub->args[5].i == 2);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the data pointer points into the staging buffer heap memory
+        const uint8_t* offset_ptr = (const uint8_t*)sub->args[8].p;
+        TA(offset_ptr != 0);
+        T(memcmp(offset_ptr, test_pattern + 32, 4 * 4) == 0);
+        T(memcmp(offset_ptr + 32, test_pattern + 64, 4 * 4) == 0);
+    #else
+        // with a bound pixel unpack buffer, the data pointer is the buffer offset
+        T(sub->args[8].p == (const void*)(uintptr_t)32);
+    #endif
+    const int row_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH);
+    const int hgt_idx = find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT);
+    TA((row_idx >= 0) && (hgt_idx >= 0));
+    T(gl_mock_call(row_idx)->args[1].i == 8);
+    T(gl_mock_call(hgt_idx)->args[1].i == 2);
+    // staging buffer sources never trigger the Apple offset warning
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
+
+    // a smaller mip level: default size is the whole 2x2 mip, rows default to 2 pixels
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stage, .dst = { .image = img, .mip_level = 2 } });
+    sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[1].i == 2);
+    T(sub->args[4].i == 2);
+    T(sub->args[5].i == 2);
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        // the data pointer is the start of the staging buffer heap memory
+        T(offset_ptr - (const uint8_t*)sub->args[8].p == 32);
+    #else
+        T(sub->args[8].p == 0);
+    #endif
+    T(gl_mock_call(find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_ROW_LENGTH))->args[1].i == 2);
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
+    sg_destroy_buffer(stage);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_cube_array_3d) {
+    setup();
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 6 * 4 * 4 * 4 });
+    fill_staging_buffer(stage, 6 * 4 * 4 * 4);
+    const GLuint gl_stage = query_active_gl_buf(stage);
+
+    // cube: one glTexSubImage2D per face, each face at its own offset into the buffer
+    sg_image cube = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE, .width = 4, .height = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.copy_dst = true,
+    });
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stage, .dst.image = cube });
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 6);
+    // with the Apple GL workaround, the data pointers point into the staging buffer heap memory
+    const uint8_t* base_ptr = (const uint8_t*)gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0))->args[8].p;
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        TA(base_ptr != 0);
+    #else
+        T(base_ptr == 0);
+    #endif
+    int idx = 0;
+    for (int face = 0; face < 6; face++) {
+        idx = gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, idx);
+        TA(idx >= 0);
+        const gl_mock_call_t* c = gl_mock_call(idx++);
+        T(c->args[0].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + face);
+        T((uintptr_t)c->args[8].p - (uintptr_t)base_ptr == (uintptr_t)(face * 64));
+        #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+            T(memcmp(c->args[8].p, test_pattern + face * 64, 64) == 0);
+        #endif
+    }
+    gl_mock_texture_info_t ti;
+    TA(gl_mock_texture_info(query_gl_tex(cube, 0), &ti));
+    #if TEST_APPLE_PIXEL_UNPACK_WORKAROUND
+        T(gl_stage == 0);
+        T(ti.num_subimage_unpack_buffer == 0);
+        T(ti.last_unpack_buffer == 0);
+    #else
+        T(ti.num_subimage_unpack_buffer == 6);
+        T(ti.last_unpack_buffer == gl_stage);
+    #endif
+
+    // array and 3D: a single glTexSubImage3D
+    const sg_image_type types[2] = { SG_IMAGETYPE_ARRAY, SG_IMAGETYPE_3D };
+    const GLenum targets[2] = { GL_TEXTURE_2D_ARRAY, GL_TEXTURE_3D };
+    for (int i = 0; i < 2; i++) {
+        sg_image img = sg_make_image(&(sg_image_desc){
+            .type = types[i], .width = 4, .height = 4, .num_slices = 4,
+            .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.copy_dst = true,
+        });
+        T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+        gl_mock_clear_calls();
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+            .src.buffer = stage,
+            .dst = { .image = img, .slice = 1 },
+            .size.num_slices = 3,
+        });
+        const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage3D);
+        TA(sub != 0);
+        T(sub->args[0].i == targets[i]);
+        T(sub->args[4].i == 1);     // zoffset
+        T(sub->args[7].i == 3);     // depth
+        T(sub->args[10].p == base_ptr);
+        T(gl_mock_call(find_call_arg0(GL_MOCK_FUNC_glPixelStorei, 0, GL_UNPACK_IMAGE_HEIGHT))->args[1].i == 4);
+        T(gl_mock_bindings()->pixel_unpack_buffer == 0);
+        sg_destroy_image(img);
+    }
+    sg_destroy_image(cube);
+    sg_destroy_buffer(stage);
+    T(no_errors());
+    teardown();
+}
+
+// the source buffer only needs to hold the bytes actually read by the copy,
+// e.g. no padding after the last row
+UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
+    setup();
+    // 4x2 region with an 8 pixel row pitch: 32 (first row incl. padding) + 16 (last row)
+    sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 32 + 16 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = stage, .bytes_per_row = 32, .bytes_per_slice = 2 * 32 },
+        .dst = { .image = img, .x = 2, .y = 4 },
+        .size = { .width = 4, .height = 2 },
+    });
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[2].i == 2);
+    T(sub->args[3].i == 4);
+    T(sub->args[4].i == 4);
+    T(sub->args[5].i == 2);
+    sg_destroy_buffer(stage);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+// NOTE: the Apple pixel-unpack-offset warning is a 'warn once' static inside
+// sokol_gfx.h, so this must be the only test that copies from a non-staging
+// buffer with a non-zero source offset
+UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
+    setup();
+    // GL doesn't restrict the source buffer type, nor the row pitch alignment
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(vbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vbuf, .dst.image = img });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    const gl_mock_call_t* sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[8].p == 0);
+    T(gl_mock_bindings()->pixel_unpack_buffer == 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    T(!logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG));
+
+    // non-zero source offset: also with the Apple GL workaround, non-staging
+    // buffers are bound as pixel unpack source, the data pointer is the buffer offset
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = vbuf, .offset = 32, .bytes_per_row = 32, .bytes_per_slice = 4 * 32 },
+        .dst.image = img,
+        .size = { .width = 4, .height = 4 },
+    });
+    const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
+    TA(bind_idx >= 0);
+    T(gl_mock_call(bind_idx)->args[1].i == query_gl_buf(vbuf, 0));
+    sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
+    TA(sub != 0);
+    T(sub->args[8].p == (const void*)(uintptr_t)32);
+    // the Apple GL drivers ignore that offset, sokol_gfx warns about it
+    T(logged(SG_LOGITEM_GL_APPLE_PIXEL_UNPACK_OFFSET_BUG) == TEST_APPLE_PIXEL_UNPACK_WORKAROUND);
+    T(gl_mock_bindings()->pixel_unpack_buffer == 0);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, copy_buffer_to_image_rejects_staging_index_buffer) {
+    setup();
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(ibuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = ibuf, .dst.image = img });
+    T(logged(SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER));
+    T(logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D) == 0);
+    sg_destroy_buffer(ibuf);
+    sg_destroy_image(img);
+    teardown();
+}
+
+#if TEST_HAS_COMPUTE
+UTEST(sokol_gfx_gl, copy_buffer_to_image_storage_buffer_issues_barrier) {
+    setup();
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(sbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    gl_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = sbuf, .dst.image = img });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    // shader-written buffer data must be visible to the GL_PIXEL_UNPACK_BUFFER read
+    TA(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 1);
+    const GLbitfield bits = (GLbitfield)gl_mock_last_call(GL_MOCK_FUNC_glMemoryBarrier)->args[0].i;
+    T((bits & GL_PIXEL_BUFFER_BARRIER_BIT) != 0);
+    T((bits & GL_BUFFER_UPDATE_BARRIER_BIT) != 0);
+    T((bits & GL_TEXTURE_UPDATE_BARRIER_BIT) != 0);
+    // the barrier must be issued before the texture upload
+    T(gl_mock_find_call(GL_MOCK_FUNC_glMemoryBarrier, 0) < gl_mock_find_call(GL_MOCK_FUNC_glTexSubImage2D, 0));
+    sg_destroy_buffer(sbuf);
+    sg_destroy_image(img);
+    T(no_errors());
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
+//  compute memory barriers (GL 4.3 / GLES 3.1+)
+//------------------------------------------------------------------------------
+#if TEST_HAS_COMPUTE
+static int count_barriers(GLbitfield* out_bits) {
+    int n = 0;
+    GLbitfield bits = 0;
+    for (int i = 0; i < gl_mock_num_calls(); i++) {
+        const gl_mock_call_t* c = gl_mock_call(i);
+        if (c->func == GL_MOCK_FUNC_glMemoryBarrier) {
+            n++;
+            bits |= (GLbitfield)c->args[0].i;
+        }
+    }
+    if (out_bits) {
+        *out_bits = bits;
+    }
+    return n;
+}
+
+UTEST(sokol_gfx_gl, memory_barriers_after_compute_writes) {
+    setup();
+    // a buffer that's written by compute and then read as vertex-, index- and storage-buffer
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .index_buffer = true, .storage_buffer = true },
+        .size = 256,
+    });
+    // an image that's written by compute and then sampled and rendered to
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .storage_image = true, .color_attachment = true },
+    });
+    sg_view sbuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    sg_view simg_view = sg_make_view(&(sg_view_desc){ .storage_image.image = img });
+    sg_view tex_view = sg_make_view(&(sg_view_desc){ .texture.image = img });
+    sg_view att_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = img });
+    sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){0});
+    T(sg_query_view_state(sbuf_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(simg_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(tex_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(att_view) == SG_RESOURCESTATE_VALID);
+
+    sg_shader cs = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = false },
+        .views[1].storage_image = {
+            .stage = SG_SHADERSTAGE_COMPUTE,
+            .image_type = SG_IMAGETYPE_2D,
+            .access_format = SG_PIXELFORMAT_RGBA8,
+        },
+    });
+    sg_pipeline cpip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = cs, .compute = true });
+    sg_shader rs = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs",
+        .fragment_func.source = "fs",
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true },
+        .views[1].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 1, .sampler_slot = 0, .glsl_name = "tex" },
+    });
+    sg_pipeline rpip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = rs,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT4,
+        .index_type = SG_INDEXTYPE_UINT16,
+    });
+    T(sg_query_pipeline_state(cpip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(rpip) == SG_RESOURCESTATE_VALID);
+    const sg_swapchain swapchain = {
+        .width = 16, .height = 16, .sample_count = 1,
+        .color_format = SG_PIXELFORMAT_RGBA8, .depth_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+    };
+    GLbitfield bits = 0;
+
+    // 1st compute pass: nothing is dirty yet, so no barrier, but the
+    // bound storage buffer and storage image become dirty
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_apply_bindings(&(sg_bindings){ .views = { [0] = sbuf_view, [1] = simg_view } });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    T(count_barriers(0) == 0);
+
+    // render pass reading everything that was written: one combined barrier
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain });
+    sg_apply_pipeline(rpip);
+    const sg_bindings rbnd = {
+        .vertex_buffers[0] = buf,
+        .index_buffer = buf,
+        .views = { [0] = sbuf_view, [1] = tex_view },
+        .samplers[0] = smp,
+    };
+    sg_apply_bindings(&rbnd);
+    T(count_barriers(&bits) == 1);
+    T(bits == (GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ELEMENT_ARRAY_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT));
+    // the dirty flags are cleared, binding again needs no barrier
+    gl_mock_clear_calls();
+    sg_apply_bindings(&rbnd);
+    T(count_barriers(0) == 0);
+    sg_end_pass();
+
+    // render into the image as color attachment: framebuffer barrier at pass begin
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = att_view });
+    T(count_barriers(&bits) == 1);
+    T(bits == GL_FRAMEBUFFER_BARRIER_BIT);
+    sg_end_pass();
+
+    // 2nd compute pass: only the storage image access is still dirty
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_apply_bindings(&(sg_bindings){ .views = { [0] = sbuf_view, [1] = simg_view } });
+    T(count_barriers(&bits) == 1);
+    T(bits == GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    sg_end_pass();
+
+    // a later copy out of the compute-written storage buffer needs a buffer-update barrier
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 256 });
+    sg_commit();
+    T(sg_isvalid());
+
+    sg_destroy_buffer(dst);
+    sg_destroy_pipeline(rpip);
+    sg_destroy_shader(rs);
+    sg_destroy_pipeline(cpip);
+    sg_destroy_shader(cs);
+    sg_destroy_sampler(smp);
+    sg_destroy_view(att_view);
+    sg_destroy_view(tex_view);
+    sg_destroy_view(simg_view);
+    sg_destroy_view(sbuf_view);
+    sg_destroy_image(img);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, memory_barriers_readonly_storage_buffer_stays_clean) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .storage_buffer = true },
+        .size = 256,
+    });
+    sg_view sbuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    // compute shader only *reads* the storage buffer
+    sg_shader cs = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true },
+    });
+    sg_pipeline cpip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = cs, .compute = true });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sbuf_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sbuf_view });
+    sg_end_pass();
+    sg_commit();
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    sg_destroy_pipeline(cpip);
+    sg_destroy_shader(cs);
+    sg_destroy_view(sbuf_view);
+    sg_destroy_buffer(buf);
+    T(no_errors());
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
+//  injected images with an explicit texture target
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, image_inject_native_with_texture_target) {
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .gl_texture = 0xC0DE,
+    });
+    T(query_gl_tex(img, 0) == 0xC0DE);
+    T(sg_gl_query_image_info(img).tex_target == GL_TEXTURE_2D);
+    sg_image img2 = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 16, .height = 16, .num_slices = 2,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .gl_texture = 0xC0DF,
+        .gl_texture_target = GL_TEXTURE_3D,
+    });
+    T(sg_query_image_state(img2) == SG_RESOURCESTATE_VALID);
+    T(sg_gl_query_image_info(img2).tex_target == GL_TEXTURE_3D);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glGenTextures) == 0);
+    sg_destroy_image(img);
+    sg_destroy_image(img2);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteTextures) == 0);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, buffer_inject_native_query) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.index_buffer = true, .gl_buffer = 0xBEEF });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(query_gl_buf(buf, 0) == 0xBEEF);
+    T(sg_query_buffer_info(buf).num_slots == 1);
+    sg_destroy_buffer(buf);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDeleteBuffers) == 0);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  render pipeline state -> GL render state
+//------------------------------------------------------------------------------
+static const sg_swapchain test_swapchain = {
+    .width = 32, .height = 32, .sample_count = 1,
+    .color_format = SG_PIXELFORMAT_RGBA8, .depth_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+};
+
+// creates a pipeline, applies it in the current pass and destroys it again
+static void apply_tmp_pipeline(sg_pipeline_desc desc) {
+    sg_pipeline pip = sg_make_pipeline(&desc);
+    sg_apply_pipeline(pip);
+    sg_destroy_pipeline(pip);
+}
+
+UTEST(sokol_gfx_gl, pipeline_compare_funcs) {
+    setup();
+    const GLenum expected[_SG_COMPAREFUNC_NUM] = {
+        [SG_COMPAREFUNC_NEVER] = GL_NEVER,
+        [SG_COMPAREFUNC_LESS] = GL_LESS,
+        [SG_COMPAREFUNC_EQUAL] = GL_EQUAL,
+        [SG_COMPAREFUNC_LESS_EQUAL] = GL_LEQUAL,
+        [SG_COMPAREFUNC_GREATER] = GL_GREATER,
+        [SG_COMPAREFUNC_NOT_EQUAL] = GL_NOTEQUAL,
+        [SG_COMPAREFUNC_GREATER_EQUAL] = GL_GEQUAL,
+        [SG_COMPAREFUNC_ALWAYS] = GL_ALWAYS,
+    };
+    sg_shader shd = make_test_shader();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    for (int i = SG_COMPAREFUNC_NEVER; i < _SG_COMPAREFUNC_NUM; i++) {
+        const sg_compare_func cmp = (sg_compare_func)i;
+        apply_tmp_pipeline((sg_pipeline_desc){
+            .shader = shd,
+            .depth.compare = cmp,
+            .stencil = { .enabled = true, .front.compare = cmp, .back.compare = cmp, .ref = 3, .read_mask = 0x0F },
+        });
+        T(gl_mock_render_state()->depth_func == expected[i]);
+        T(gl_mock_render_state()->stencil_front.func == expected[i]);
+        T(gl_mock_render_state()->stencil_back.func == expected[i]);
+        T(gl_mock_render_state()->stencil_front.ref == 3);
+        T(gl_mock_render_state()->stencil_front.mask == 0x0F);
+        T(gl_mock_is_enabled(GL_STENCIL_TEST));
+    }
+    // a pipeline without stencil disables the stencil test again
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd });
+    T(!gl_mock_is_enabled(GL_STENCIL_TEST));
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_stencil_ops) {
+    setup();
+    const GLenum expected[_SG_STENCILOP_NUM] = {
+        [SG_STENCILOP_KEEP] = GL_KEEP,
+        [SG_STENCILOP_ZERO] = GL_ZERO,
+        [SG_STENCILOP_REPLACE] = GL_REPLACE,
+        [SG_STENCILOP_INCR_CLAMP] = GL_INCR,
+        [SG_STENCILOP_DECR_CLAMP] = GL_DECR,
+        [SG_STENCILOP_INVERT] = GL_INVERT,
+        [SG_STENCILOP_INCR_WRAP] = GL_INCR_WRAP,
+        [SG_STENCILOP_DECR_WRAP] = GL_DECR_WRAP,
+    };
+    sg_shader shd = make_test_shader();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    for (int i = SG_STENCILOP_KEEP; i < _SG_STENCILOP_NUM; i++) {
+        // rotate the ops so that each face/op slot sees a different value
+        const sg_stencil_op op0 = (sg_stencil_op)i;
+        const sg_stencil_op op1 = (sg_stencil_op)(((i - 1 + 1) % (_SG_STENCILOP_NUM - 1)) + 1);
+        const sg_stencil_op op2 = (sg_stencil_op)(((i - 1 + 2) % (_SG_STENCILOP_NUM - 1)) + 1);
+        apply_tmp_pipeline((sg_pipeline_desc){
+            .shader = shd,
+            .stencil = {
+                .enabled = true,
+                .front = { .fail_op = op0, .depth_fail_op = op1, .pass_op = op2 },
+                .back = { .fail_op = op2, .depth_fail_op = op0, .pass_op = op1 },
+                .write_mask = 0x7F,
+            },
+        });
+        const gl_mock_render_state_t* rs = gl_mock_render_state();
+        T(rs->stencil_front.fail_op == expected[op0]);
+        T(rs->stencil_front.depth_fail_op == expected[op1]);
+        T(rs->stencil_front.pass_op == expected[op2]);
+        T(rs->stencil_back.fail_op == expected[op2]);
+        T(rs->stencil_back.depth_fail_op == expected[op0]);
+        T(rs->stencil_back.pass_op == expected[op1]);
+        T(rs->stencil_write_mask == 0x7F);
+    }
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_blend_factors_and_ops) {
+    setup();
+    const GLenum factors[_SG_BLENDFACTOR_NUM] = {
+        [SG_BLENDFACTOR_ZERO] = GL_ZERO,
+        [SG_BLENDFACTOR_ONE] = GL_ONE,
+        [SG_BLENDFACTOR_SRC_COLOR] = GL_SRC_COLOR,
+        [SG_BLENDFACTOR_ONE_MINUS_SRC_COLOR] = GL_ONE_MINUS_SRC_COLOR,
+        [SG_BLENDFACTOR_SRC_ALPHA] = GL_SRC_ALPHA,
+        [SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA] = GL_ONE_MINUS_SRC_ALPHA,
+        [SG_BLENDFACTOR_DST_COLOR] = GL_DST_COLOR,
+        [SG_BLENDFACTOR_ONE_MINUS_DST_COLOR] = GL_ONE_MINUS_DST_COLOR,
+        [SG_BLENDFACTOR_DST_ALPHA] = GL_DST_ALPHA,
+        [SG_BLENDFACTOR_ONE_MINUS_DST_ALPHA] = GL_ONE_MINUS_DST_ALPHA,
+        [SG_BLENDFACTOR_SRC_ALPHA_SATURATED] = GL_SRC_ALPHA_SATURATE,
+        [SG_BLENDFACTOR_BLEND_COLOR] = GL_CONSTANT_COLOR,
+        [SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR] = GL_ONE_MINUS_CONSTANT_COLOR,
+        [SG_BLENDFACTOR_BLEND_ALPHA] = GL_CONSTANT_ALPHA,
+        [SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA] = GL_ONE_MINUS_CONSTANT_ALPHA,
+        [SG_BLENDFACTOR_SRC1_COLOR] = GL_SRC1_COLOR,
+        [SG_BLENDFACTOR_ONE_MINUS_SRC1_COLOR] = GL_ONE_MINUS_SRC1_COLOR,
+        [SG_BLENDFACTOR_SRC1_ALPHA] = GL_SRC1_ALPHA,
+        [SG_BLENDFACTOR_ONE_MINUS_SRC1_ALPHA] = GL_ONE_MINUS_SRC1_ALPHA,
+    };
+    const GLenum ops[_SG_BLENDOP_NUM] = {
+        [SG_BLENDOP_ADD] = GL_FUNC_ADD,
+        [SG_BLENDOP_SUBTRACT] = GL_FUNC_SUBTRACT,
+        [SG_BLENDOP_REVERSE_SUBTRACT] = GL_FUNC_REVERSE_SUBTRACT,
+        [SG_BLENDOP_MIN] = GL_MIN,
+        [SG_BLENDOP_MAX] = GL_MAX,
+    };
+    // the dual-source factors are only available with dual-source blending
+    const int num_factors = sg_query_features().dual_source_blending ? _SG_BLENDFACTOR_NUM : SG_BLENDFACTOR_SRC1_COLOR;
+    sg_shader shd = make_test_shader();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    for (int i = SG_BLENDFACTOR_ZERO; i < num_factors; i++) {
+        const sg_blend_factor f0 = (sg_blend_factor)i;
+        const sg_blend_factor f1 = (sg_blend_factor)(((i - 1 + 3) % (num_factors - 1)) + 1);
+        apply_tmp_pipeline((sg_pipeline_desc){
+            .shader = shd,
+            .colors[0].blend = {
+                .enabled = true,
+                .src_factor_rgb = f0, .dst_factor_rgb = f1,
+                .src_factor_alpha = f1, .dst_factor_alpha = f0,
+                .op_rgb = SG_BLENDOP_ADD, .op_alpha = SG_BLENDOP_SUBTRACT,
+            },
+        });
+        const gl_mock_render_state_t* rs = gl_mock_render_state();
+        T(gl_mock_is_enabled(GL_BLEND));
+        T(rs->blend_src_rgb == factors[f0]);
+        T(rs->blend_dst_rgb == factors[f1]);
+        T(rs->blend_src_alpha == factors[f1]);
+        T(rs->blend_dst_alpha == factors[f0]);
+    }
+    for (int i = SG_BLENDOP_ADD; i < _SG_BLENDOP_NUM; i++) {
+        const sg_blend_op op = (sg_blend_op)i;
+        apply_tmp_pipeline((sg_pipeline_desc){
+            .shader = shd,
+            .colors[0].blend = {
+                .enabled = true,
+                .src_factor_rgb = SG_BLENDFACTOR_ONE, .dst_factor_rgb = SG_BLENDFACTOR_ONE,
+                .src_factor_alpha = SG_BLENDFACTOR_ONE, .dst_factor_alpha = SG_BLENDFACTOR_ONE,
+                .op_rgb = op, .op_alpha = op,
+            },
+        });
+        T(gl_mock_render_state()->blend_op_rgb == ops[op]);
+        T(gl_mock_render_state()->blend_op_alpha == ops[op]);
+    }
+    // blend disabled again, plus a blend color
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .blend_color = { 0.25f, 0.5f, 0.75f, 1.0f } });
+    T(!gl_mock_is_enabled(GL_BLEND));
+    T(gl_mock_render_state()->blend_color[0] == 0.25f);
+    T(gl_mock_render_state()->blend_color[2] == 0.75f);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_rasterizer_state) {
+    setup();
+    sg_shader shd = make_test_shader();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    // cull modes and face winding
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .cull_mode = SG_CULLMODE_FRONT, .face_winding = SG_FACEWINDING_CW });
+    T(gl_mock_is_enabled(GL_CULL_FACE));
+    T(gl_mock_render_state()->cull_face == GL_FRONT);
+    T(gl_mock_render_state()->front_face == GL_CW);
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .cull_mode = SG_CULLMODE_BACK, .face_winding = SG_FACEWINDING_CCW });
+    T(gl_mock_is_enabled(GL_CULL_FACE));
+    T(gl_mock_render_state()->cull_face == GL_BACK);
+    T(gl_mock_render_state()->front_face == GL_CCW);
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .cull_mode = SG_CULLMODE_NONE });
+    T(!gl_mock_is_enabled(GL_CULL_FACE));
+    // depth bias toggles GL_POLYGON_OFFSET_FILL
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .depth = { .bias = 1.0f, .bias_slope_scale = 2.0f } });
+    T(gl_mock_is_enabled(GL_POLYGON_OFFSET_FILL));
+    T(gl_mock_render_state()->polygon_offset_factor == 2.0f);
+    T(gl_mock_render_state()->polygon_offset_units == 1.0f);
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd });
+    T(!gl_mock_is_enabled(GL_POLYGON_OFFSET_FILL));
+    // depth write
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .depth = { .write_enabled = true, .compare = SG_COMPAREFUNC_LESS_EQUAL } });
+    T(gl_mock_render_state()->depth_mask == GL_TRUE);
+    // color write mask on the only color attachment
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .colors[0].write_mask = SG_COLORMASK_RB });
+    T(gl_mock_render_state()->color_mask[0][0] == GL_TRUE);
+    T(gl_mock_render_state()->color_mask[0][1] == GL_FALSE);
+    T(gl_mock_render_state()->color_mask[0][2] == GL_TRUE);
+    T(gl_mock_render_state()->color_mask[0][3] == GL_FALSE);
+    sg_end_pass();
+
+    // a clearing pass must reset the color mask and the depth state for the clear...
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){
+        .swapchain = test_swapchain,
+        .action = {
+            .colors[0].load_action = SG_LOADACTION_CLEAR,
+            .depth.load_action = SG_LOADACTION_CLEAR,
+            .stencil.load_action = SG_LOADACTION_CLEAR,
+        },
+    });
+    const gl_mock_call_t* cm = gl_mock_last_call(GL_MOCK_FUNC_glColorMask);
+    TA(cm != 0);
+    T(cm->args[0].i == GL_TRUE && cm->args[1].i == GL_TRUE && cm->args[2].i == GL_TRUE && cm->args[3].i == GL_TRUE);
+    T(gl_mock_render_state()->depth_func == GL_ALWAYS);
+    // ...and the next pipeline must restore the color mask
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .colors[0].write_mask = SG_COLORMASK_A });
+    T(gl_mock_render_state()->color_mask[0][0] == GL_FALSE);
+    T(gl_mock_render_state()->color_mask[0][3] == GL_TRUE);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_msaa_and_alpha_to_coverage) {
+    setup();
+    sg_shader shd = make_test_shader();
+    sg_swapchain msaa_swapchain = test_swapchain;
+    msaa_swapchain.sample_count = 4;
+    sg_begin_pass(&(sg_pass){ .swapchain = msaa_swapchain });
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .sample_count = 4, .alpha_to_coverage_enabled = true });
+    T(gl_mock_is_enabled(GL_SAMPLE_ALPHA_TO_COVERAGE));
+    #if defined(SOKOL_GLCORE)
+    T(gl_mock_is_enabled(GL_MULTISAMPLE));
+    #endif
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd, .sample_count = 4 });
+    T(!gl_mock_is_enabled(GL_SAMPLE_ALPHA_TO_COVERAGE));
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    apply_tmp_pipeline((sg_pipeline_desc){ .shader = shd });
+    #if defined(SOKOL_GLCORE)
+    T(!gl_mock_is_enabled(GL_MULTISAMPLE));
+    #endif
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_mrt_color_write_masks) {
+    setup();
+    sg_image imgs[2];
+    sg_view views[2];
+    for (int i = 0; i < 2; i++) {
+        imgs[i] = sg_make_image(&(sg_image_desc){
+            .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.color_attachment = true,
+        });
+        views[i] = sg_make_view(&(sg_view_desc){ .color_attachment.image = imgs[i] });
+    }
+    sg_shader shd = make_test_shader();
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .color_count = 2,
+        .colors = { [0].write_mask = SG_COLORMASK_R, [1].write_mask = SG_COLORMASK_GB },
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_begin_pass(&(sg_pass){ .attachments.colors = { views[0], views[1] } });
+    gl_mock_clear_calls();
+    sg_apply_pipeline(pip);
+    if (sg_query_features().mrt_independent_write_mask) {
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glColorMaski) == 2);
+        T(gl_mock_render_state()->color_mask[1][0] == GL_FALSE);
+        T(gl_mock_render_state()->color_mask[1][1] == GL_TRUE);
+        T(gl_mock_render_state()->color_mask[1][2] == GL_TRUE);
+    } else {
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glColorMask) == 1);
+    }
+    T(gl_mock_render_state()->color_mask[0][0] == GL_TRUE);
+    T(gl_mock_render_state()->color_mask[0][1] == GL_FALSE);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    for (int i = 0; i < 2; i++) {
+        sg_destroy_view(views[i]);
+        sg_destroy_image(imgs[i]);
+    }
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  vertex formats -> glVertexAttrib(I)Pointer
+//------------------------------------------------------------------------------
+typedef struct {
+    sg_vertex_format fmt;
+    GLint size;
+    GLenum type;
+    bool normalized;
+    bool integer;
+} vertex_format_case_t;
+
+UTEST(sokol_gfx_gl, pipeline_vertex_formats) {
+    const vertex_format_case_t cases[] = {
+        { SG_VERTEXFORMAT_FLOAT,     1, GL_FLOAT, false, false },
+        { SG_VERTEXFORMAT_FLOAT2,    2, GL_FLOAT, false, false },
+        { SG_VERTEXFORMAT_FLOAT3,    3, GL_FLOAT, false, false },
+        { SG_VERTEXFORMAT_FLOAT4,    4, GL_FLOAT, false, false },
+        { SG_VERTEXFORMAT_INT,       1, GL_INT, false, true },
+        { SG_VERTEXFORMAT_INT2,      2, GL_INT, false, true },
+        { SG_VERTEXFORMAT_INT3,      3, GL_INT, false, true },
+        { SG_VERTEXFORMAT_INT4,      4, GL_INT, false, true },
+        { SG_VERTEXFORMAT_UINT,      1, GL_UNSIGNED_INT, false, true },
+        { SG_VERTEXFORMAT_UINT2,     2, GL_UNSIGNED_INT, false, true },
+        { SG_VERTEXFORMAT_UINT3,     3, GL_UNSIGNED_INT, false, true },
+        { SG_VERTEXFORMAT_UINT4,     4, GL_UNSIGNED_INT, false, true },
+        { SG_VERTEXFORMAT_BYTE4,     4, GL_BYTE, false, true },
+        { SG_VERTEXFORMAT_BYTE4N,    4, GL_BYTE, true, false },
+        { SG_VERTEXFORMAT_UBYTE4,    4, GL_UNSIGNED_BYTE, false, true },
+        { SG_VERTEXFORMAT_UBYTE4N,   4, GL_UNSIGNED_BYTE, true, false },
+        { SG_VERTEXFORMAT_SHORT2,    2, GL_SHORT, false, true },
+        { SG_VERTEXFORMAT_SHORT2N,   2, GL_SHORT, true, false },
+        { SG_VERTEXFORMAT_USHORT2,   2, GL_UNSIGNED_SHORT, false, true },
+        { SG_VERTEXFORMAT_USHORT2N,  2, GL_UNSIGNED_SHORT, true, false },
+        { SG_VERTEXFORMAT_SHORT4,    4, GL_SHORT, false, true },
+        { SG_VERTEXFORMAT_SHORT4N,   4, GL_SHORT, true, false },
+        { SG_VERTEXFORMAT_USHORT4,   4, GL_UNSIGNED_SHORT, false, true },
+        { SG_VERTEXFORMAT_USHORT4N,  4, GL_UNSIGNED_SHORT, true, false },
+        { SG_VERTEXFORMAT_INT10_N2,  4, GL_INT_2_10_10_10_REV, true, false },
+        { SG_VERTEXFORMAT_UINT10_N2, 4, GL_UNSIGNED_INT_2_10_10_10_REV, true, false },
+        { SG_VERTEXFORMAT_HALF2,     2, GL_HALF_FLOAT, false, false },
+        { SG_VERTEXFORMAT_HALF4,     4, GL_HALF_FLOAT, false, false },
+    };
+    const int num_cases = (int)(sizeof(cases) / sizeof(cases[0]));
+    T(num_cases == (_SG_VERTEXFORMAT_NUM - 1));
+    setup();
+    static const uint8_t vdata[256] = { 0 };
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(vdata) });
+    sg_shader shd = make_test_shader();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    for (int i = 0; i < num_cases; i++) {
+        const vertex_format_case_t* c = &cases[i];
+        sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+            .shader = shd,
+            .layout = {
+                .buffers[0].stride = 32,
+                .attrs[0] = { .format = c->fmt, .offset = 4 },
+            },
+        });
+        T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+        gl_mock_clear_calls();
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .vertex_buffer_offsets[0] = (i & 1) * 32 });
+        const gl_mock_call_t* p;
+        if (c->integer) {
+            T(gl_mock_count_calls(GL_MOCK_FUNC_glVertexAttribPointer) == 0);
+            p = gl_mock_last_call(GL_MOCK_FUNC_glVertexAttribIPointer);
+            TA(p != 0);
+            T(p->args[0].i == 0);
+            T(p->args[1].i == c->size);
+            T(p->args[2].i == c->type);
+            T(p->args[3].i == 32);
+            T(p->args[4].p == (const void*)(uintptr_t)(4 + (i & 1) * 32));
+        } else {
+            T(gl_mock_count_calls(GL_MOCK_FUNC_glVertexAttribIPointer) == 0);
+            p = gl_mock_last_call(GL_MOCK_FUNC_glVertexAttribPointer);
+            TA(p != 0);
+            T(p->args[0].i == 0);
+            T(p->args[1].i == c->size);
+            T(p->args[2].i == c->type);
+            T(p->args[3].i == (c->normalized ? GL_TRUE : GL_FALSE));
+            T(p->args[4].i == 32);
+        }
+        sg_destroy_pipeline(pip);
+    }
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_shader(shd);
+    sg_destroy_buffer(vbuf);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_instancing_and_disabled_attrs) {
+    setup();
+    static const float vdata[64] = { 0 };
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(vdata) });
+    sg_shader shd = make_test_shader();
+    sg_pipeline pip2 = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout = {
+            .buffers[1] = { .step_func = SG_VERTEXSTEP_PER_INSTANCE, .step_rate = 2 },
+            .attrs = {
+                [0] = { .format = SG_VERTEXFORMAT_FLOAT3, .buffer_index = 0 },
+                [1] = { .format = SG_VERTEXFORMAT_FLOAT4, .buffer_index = 1 },
+            },
+        },
+    });
+    sg_pipeline pip1 = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    gl_mock_clear_calls();
+    sg_apply_pipeline(pip2);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers = { vbuf, vbuf } });
+    // per-instance attribute gets the step rate as divisor
+    int idx = find_call_arg0(GL_MOCK_FUNC_glVertexAttribDivisor, 0, 1);
+    TA(idx >= 0);
+    T(gl_mock_call(idx)->args[1].i == 2);
+    T(gl_mock_vertex_attrib_enabled(0));
+    T(gl_mock_vertex_attrib_enabled(1));
+    // switching to a pipeline with fewer attributes disables the unused one
+    gl_mock_clear_calls();
+    sg_apply_pipeline(pip1);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    idx = find_call_arg0(GL_MOCK_FUNC_glDisableVertexAttribArray, 0, 1);
+    T(idx >= 0);
+    T(gl_mock_vertex_attrib_enabled(0));
+    T(!gl_mock_vertex_attrib_enabled(1));
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_pipeline(pip1);
+    sg_destroy_pipeline(pip2);
+    sg_destroy_shader(shd);
+    sg_destroy_buffer(vbuf);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, pipeline_attr_not_found_in_shader) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs", .fragment_func.source = "fs",
+        .attrs = { [0].glsl_name = "pos", [1].glsl_name = "color" },
+    });
+    // the first glGetAttribLocation ('pos') returns -1
+    gl_mock_fail_next_attrib_location(1);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs = { [0].format = SG_VERTEXFORMAT_FLOAT3, [1].format = SG_VERTEXFORMAT_FLOAT4 },
+    });
+    // a missing attribute is only a warning
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(logged(SG_LOGITEM_GL_VERTEX_ATTRIBUTE_NOT_FOUND_IN_SHADER));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glGetAttribLocation) == 2);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  uniform types -> glUniform*
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, apply_uniforms_all_types_native_layout) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs", .fragment_func.source = "fs",
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_VERTEX,
+            .size = 176,
+            .layout = SG_UNIFORMLAYOUT_NATIVE,
+            .glsl_uniforms = {
+                [0] = { .type = SG_UNIFORMTYPE_FLOAT,  .glsl_name = "u_f1" },
+                [1] = { .type = SG_UNIFORMTYPE_FLOAT2, .glsl_name = "u_f2" },
+                [2] = { .type = SG_UNIFORMTYPE_FLOAT3, .glsl_name = "u_f3" },
+                [3] = { .type = SG_UNIFORMTYPE_FLOAT4, .glsl_name = "u_f4" },
+                [4] = { .type = SG_UNIFORMTYPE_INT,    .glsl_name = "u_i1" },
+                [5] = { .type = SG_UNIFORMTYPE_INT2,   .glsl_name = "u_i2" },
+                [6] = { .type = SG_UNIFORMTYPE_INT3,   .glsl_name = "u_i3" },
+                [7] = { .type = SG_UNIFORMTYPE_INT4,   .glsl_name = "u_i4" },
+                [8] = { .type = SG_UNIFORMTYPE_MAT4,   .glsl_name = "u_m4" },
+                [9] = { .type = SG_UNIFORMTYPE_FLOAT4, .array_count = 2, .glsl_name = "u_f4arr" },
+            },
+        },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd });
+    // fill the uniform data so that each member is recognizable
+    union { float f[44]; int32_t i[44]; } ub;
+    memset(&ub, 0, sizeof(ub));
+    ub.f[0] = 1.0f;                     // u_f1 @ 0
+    ub.f[1] = 2.0f; ub.f[2] = 2.5f;     // u_f2 @ 4
+    ub.f[3] = 3.0f;                     // u_f3 @ 12
+    ub.f[6] = 4.0f;                     // u_f4 @ 24
+    ub.i[10] = 5;                       // u_i1 @ 40
+    ub.i[11] = 6;                       // u_i2 @ 44
+    ub.i[13] = 7;                       // u_i3 @ 52
+    ub.i[16] = 8;                       // u_i4 @ 64
+    ub.f[20] = 9.0f;                    // u_m4 @ 80
+    ub.f[36] = 10.0f;                   // u_f4arr @ 144
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    gl_mock_clear_calls();
+    sg_apply_uniforms(0, &(sg_range){ &ub, 176 });
+    const gl_mock_call_t* c;
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform1fv)) != 0);
+    T(c->args[1].i == 1 && c->args[2].f == 1.0);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform2fv)) != 0);
+    T(c->args[2].f == 2.0 && c->args[3].f == 2.5);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform3fv)) != 0);
+    T(c->args[2].f == 3.0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glUniform4fv) == 2);
+    TA((c = gl_mock_call(gl_mock_find_call(GL_MOCK_FUNC_glUniform4fv, 0))) != 0);
+    T(c->args[1].i == 1 && c->args[2].f == 4.0);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform4fv)) != 0);
+    T(c->args[1].i == 2 && c->args[2].f == 10.0);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform1iv)) != 0);
+    T(c->args[2].i == 5);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform2iv)) != 0);
+    T(c->args[2].i == 6);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform3iv)) != 0);
+    T(c->args[2].i == 7);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform4iv)) != 0);
+    T(c->args[2].i == 8);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniformMatrix4fv)) != 0);
+    T(c->args[1].i == 1 && c->args[2].i == GL_FALSE && c->args[3].f == 9.0);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, apply_uniforms_std140_and_missing_uniform) {
+    setup();
+    // the first uniform location lookup fails: a warning at creation, skipped in apply_uniforms
+    gl_mock_fail_next_uniform_location(1);
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs", .fragment_func.source = "fs",
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .size = 48,
+            .layout = SG_UNIFORMLAYOUT_STD140,
+            .glsl_uniforms = {
+                [0] = { .type = SG_UNIFORMTYPE_FLOAT,  .glsl_name = "missing" },  // @ 0
+                [1] = { .type = SG_UNIFORMTYPE_FLOAT3, .glsl_name = "u_f3" },     // @ 16
+                [2] = { .type = SG_UNIFORMTYPE_INT,    .glsl_name = "u_i1" },     // @ 28
+                [3] = { .type = SG_UNIFORMTYPE_FLOAT2, .glsl_name = "u_f2" },     // @ 32
+            },
+        },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    T(logged(SG_LOGITEM_GL_UNIFORMBLOCK_NAME_NOT_FOUND_IN_SHADER));
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd });
+    union { float f[12]; int32_t i[12]; } ub;
+    memset(&ub, 0, sizeof(ub));
+    ub.f[4] = 3.0f;
+    ub.i[7] = 7;
+    ub.f[8] = 2.0f;
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    gl_mock_clear_calls();
+    sg_apply_uniforms(0, &(sg_range){ &ub, sizeof(ub) });
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glUniform1fv) == 0);
+    const gl_mock_call_t* c;
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform3fv)) != 0);
+    T(c->args[2].f == 3.0);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform1iv)) != 0);
+    T(c->args[2].i == 7);
+    TA((c = gl_mock_last_call(GL_MOCK_FUNC_glUniform2fv)) != 0);
+    T(c->args[2].f == 2.0);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, shader_texture_sampler_name_not_found) {
+    setup();
+    gl_mock_fail_next_uniform_location(1);
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs", .fragment_func.source = "fs",
+        .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    T(logged(SG_LOGITEM_GL_IMAGE_SAMPLER_NAME_NOT_FOUND_IN_SHADER));
+    sg_destroy_shader(shd);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  framebuffer completeness errors
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, framebuffer_status_errors) {
+    const struct { GLenum status; sg_log_item item; } cases[] = {
+        { GL_FRAMEBUFFER_UNDEFINED, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_UNDEFINED },
+        { GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_INCOMPLETE_ATTACHMENT },
+        { GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_INCOMPLETE_MISSING_ATTACHMENT },
+        { GL_FRAMEBUFFER_UNSUPPORTED, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_UNSUPPORTED },
+        { GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_INCOMPLETE_MULTISAMPLE },
+        { 0x1234, SG_LOGITEM_GL_FRAMEBUFFER_STATUS_UNKNOWN },
+    };
+    setup();
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.color_attachment = true,
+    });
+    sg_view att = sg_make_view(&(sg_view_desc){ .color_attachment.image = img });
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        reset_log();
+        gl_mock_set_framebuffer_status(cases[i].status);
+        sg_begin_pass(&(sg_pass){ .attachments.colors[0] = att });
+        T(logged(cases[i].item));
+        sg_end_pass();
+    }
+    // a complete framebuffer works again
+    gl_mock_set_framebuffer_status(GL_FRAMEBUFFER_COMPLETE);
+    reset_log();
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = att });
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    sg_destroy_view(att);
+    sg_destroy_image(img);
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  pass details: sRGB swapchain, depth-only and stencil-only clears,
+//  cube and array color attachments
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, swapchain_pass_srgb_and_partial_clears) {
+    setup();
+    sg_swapchain sc = test_swapchain;
+    #if defined(SOKOL_GLCORE)
+        sc.color_format = SG_PIXELFORMAT_SRGB8A8;
+        sg_begin_pass(&(sg_pass){ .swapchain = sc });
+        T(gl_mock_is_enabled(GL_FRAMEBUFFER_SRGB));
+        sg_end_pass();
+        sc.color_format = SG_PIXELFORMAT_RGBA8;
+        sg_begin_pass(&(sg_pass){ .swapchain = sc });
+        T(!gl_mock_is_enabled(GL_FRAMEBUFFER_SRGB));
+        sg_end_pass();
+    #endif
+    // depth-only clear
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){
+        .swapchain = sc,
+        .action = {
+            .colors[0].load_action = SG_LOADACTION_LOAD,
+            .depth = { .load_action = SG_LOADACTION_CLEAR, .clear_value = 0.5f },
+            .stencil.load_action = SG_LOADACTION_LOAD,
+        },
+    });
+    int idx = find_call_arg0(GL_MOCK_FUNC_glClearBufferfv, 0, GL_DEPTH);
+    T(idx >= 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glClearBufferfi) == 0);
+    sg_end_pass();
+    // stencil-only clear
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){
+        .swapchain = sc,
+        .action = {
+            .colors[0].load_action = SG_LOADACTION_LOAD,
+            .depth.load_action = SG_LOADACTION_LOAD,
+            .stencil = { .load_action = SG_LOADACTION_CLEAR, .clear_value = 7 },
+        },
+    });
+    idx = find_call_arg0(GL_MOCK_FUNC_glClearBufferiv, 0, GL_STENCIL);
+    T(idx >= 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glClearBufferfi) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, cube_and_array_color_attachments) {
+    setup();
+    sg_image cube = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_CUBE, .width = 16, .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.color_attachment = true,
+    });
+    sg_image arr = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY, .width = 16, .height = 16, .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8, .usage.color_attachment = true,
+    });
+    sg_view cube_att = sg_make_view(&(sg_view_desc){ .color_attachment = { .image = cube, .slice = 3 } });
+    sg_view arr_att = sg_make_view(&(sg_view_desc){ .color_attachment = { .image = arr, .slice = 2 } });
+    const GLuint gl_cube = query_gl_tex(cube, 0);
+    const GLuint gl_arr = query_gl_tex(arr, 0);
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = cube_att });
+    sg_end_pass();
+    // find the attach call (unused attachments are explicitly detached afterwards)
+    const gl_mock_call_t* c = 0;
+    for (int i = gl_mock_find_call(GL_MOCK_FUNC_glFramebufferTexture2D, 0); i >= 0; i = gl_mock_find_call(GL_MOCK_FUNC_glFramebufferTexture2D, i + 1)) {
+        if (gl_mock_call(i)->args[3].u == gl_cube) {
+            c = gl_mock_call(i);
+            break;
+        }
+    }
+    TA(c != 0);
+    T(c->args[1].i == GL_COLOR_ATTACHMENT0);
+    T(c->args[2].i == GL_TEXTURE_CUBE_MAP_POSITIVE_X + 3);
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = arr_att });
+    sg_end_pass();
+    c = gl_mock_last_call(GL_MOCK_FUNC_glFramebufferTextureLayer);
+    TA(c != 0);
+    T(c->args[1].i == GL_COLOR_ATTACHMENT0);
+    T(c->args[2].i == gl_arr);
+    T(c->args[3].i == 0);
+    T(c->args[4].i == 2);
+    sg_commit();
+    sg_destroy_view(cube_att);
+    sg_destroy_view(arr_att);
+    sg_destroy_image(cube);
+    sg_destroy_image(arr);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  samplers: wrap modes, filters, border colors, anisotropy clamping
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, sampler_wrap_filter_border_aniso) {
+    setup();
+    #if defined(SOKOL_GLCORE)
+        const GLint clamp_to_border = GL_CLAMP_TO_BORDER;
+    #else
+        const GLint clamp_to_border = GL_CLAMP_TO_EDGE;
+    #endif
+    sg_sampler s0 = sg_make_sampler(&(sg_sampler_desc){
+        .wrap_u = SG_WRAP_REPEAT, .wrap_v = SG_WRAP_MIRRORED_REPEAT, .wrap_w = SG_WRAP_CLAMP_TO_BORDER,
+        .min_filter = SG_FILTER_NEAREST, .mipmap_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR,
+        .border_color = SG_BORDERCOLOR_OPAQUE_WHITE,
+    });
+    gl_mock_sampler_info_t si;
+    TA(gl_mock_sampler_info(sg_gl_query_sampler_info(s0).smp, &si));
+    T(si.wrap_s == GL_REPEAT);
+    T(si.wrap_t == GL_MIRRORED_REPEAT);
+    T(si.wrap_r == clamp_to_border);
+    T(si.min_filter == GL_NEAREST_MIPMAP_LINEAR);
+    T(si.mag_filter == GL_LINEAR);
+    #if defined(SOKOL_GLCORE)
+        T(si.border_color[0] == 1.0f && si.border_color[3] == 1.0f);
+    #endif
+    sg_sampler s1 = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_LINEAR, .mipmap_filter = SG_FILTER_NEAREST,
+        .wrap_u = SG_WRAP_CLAMP_TO_BORDER,
+        .border_color = SG_BORDERCOLOR_TRANSPARENT_BLACK,
+    });
+    TA(gl_mock_sampler_info(sg_gl_query_sampler_info(s1).smp, &si));
+    T(si.min_filter == GL_LINEAR_MIPMAP_NEAREST);
+    T(si.wrap_s == clamp_to_border);
+    #if defined(SOKOL_GLCORE)
+        T(si.border_color[0] == 0.0f && si.border_color[3] == 0.0f);
+    #endif
+    // anisotropy is clamped to GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT (16 in the mock)
+    sg_sampler s2 = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR, .mipmap_filter = SG_FILTER_LINEAR,
+        .max_anisotropy = 32,
+    });
+    TA(gl_mock_sampler_info(sg_gl_query_sampler_info(s2).smp, &si));
+    T(si.min_filter == GL_LINEAR_MIPMAP_LINEAR);
+    T(si.max_anisotropy == 16.0f);
+    sg_destroy_sampler(s0);
+    sg_destroy_sampler(s1);
+    sg_destroy_sampler(s2);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  all pixel formats: texture creation with initial data / as attachment
+//------------------------------------------------------------------------------
+UTEST(sokol_gfx_gl, image_all_pixel_formats) {
+    setup();
+    static uint8_t data[4 * 4 * 16 * 2];
+    int num_tested = 0;
+    for (int i = SG_PIXELFORMAT_NONE + 1; i < _SG_PIXELFORMAT_NUM; i++) {
+        const sg_pixel_format fmt = (sg_pixel_format)i;
+        const sg_pixelformat_info info = sg_query_pixelformat(fmt);
+        if (info.depth) {
+            if (info.render) {
+                sg_image img = sg_make_image(&(sg_image_desc){
+                    .width = 4, .height = 4, .pixel_format = fmt, .usage.depth_stencil_attachment = true,
+                });
+                T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+                sg_destroy_image(img);
+                num_tested++;
+            }
+            continue;
+        }
+        if (!info.sample) {
+            continue;
+        }
+        const int pitch = sg_query_surface_pitch(fmt, 4, 4, 1);
+        TA((pitch > 0) && (pitch * 2 <= (int)sizeof(data)));
+        gl_mock_clear_calls();
+        // 2D with initial data
+        sg_image img = sg_make_image(&(sg_image_desc){
+            .width = 4, .height = 4, .pixel_format = fmt,
+            .data.mip_levels[0] = { .ptr = data, .size = (size_t)pitch },
+        });
+        T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+        gl_mock_texture_info_t ti;
+        TA(gl_mock_texture_info(query_gl_tex(img, 0), &ti));
+        T(ti.internal_format != 0);
+        if (info.compressed) {
+            T((gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage2D) + gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexSubImage2D)) == 1);
+        } else {
+            T((gl_mock_count_calls(GL_MOCK_FUNC_glTexImage2D) + gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage2D)) == 1);
+        }
+        sg_destroy_image(img);
+        // 2D array with initial data
+        gl_mock_clear_calls();
+        img = sg_make_image(&(sg_image_desc){
+            .type = SG_IMAGETYPE_ARRAY, .width = 4, .height = 4, .num_slices = 2, .pixel_format = fmt,
+            .data.mip_levels[0] = { .ptr = data, .size = (size_t)(pitch * 2) },
+        });
+        T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+        if (info.compressed) {
+            T((gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexImage3D) + gl_mock_count_calls(GL_MOCK_FUNC_glCompressedTexSubImage3D)) == 1);
+        } else {
+            T((gl_mock_count_calls(GL_MOCK_FUNC_glTexImage3D) + gl_mock_count_calls(GL_MOCK_FUNC_glTexSubImage3D)) == 1);
+        }
+        sg_destroy_image(img);
+        // renderable formats as color attachment
+        if (info.render) {
+            img = sg_make_image(&(sg_image_desc){
+                .width = 4, .height = 4, .pixel_format = fmt, .usage.color_attachment = true,
+            });
+            T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+            sg_destroy_image(img);
+        }
+        num_tested++;
+    }
+    T(num_tested > 40);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 0);
+    T(no_errors());
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  compute-only paths: storage buffer binding invalidation, GLSL binding limits
+//------------------------------------------------------------------------------
+#if TEST_HAS_COMPUTE
+UTEST(sokol_gfx_gl, destroy_bound_storage_buffer_unbinds_it) {
+    setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    sg_shader cs = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = false, .glsl_binding_n = 3 },
+    });
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = cs, .compute = true });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    gl_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glBindBufferRange);
+    TA(c != 0);
+    T(c->args[0].i == GL_SHADER_STORAGE_BUFFER);
+    T(c->args[1].i == 3);
+    T(c->args[2].i == query_gl_buf(buf, 0));
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    // destroy before sg_commit(), which would soft-clear the binding cache
+    sg_destroy_view(view);
+    gl_mock_clear_calls();
+    sg_destroy_buffer(buf);
+    // the indexed binding point is reset before the buffer is deleted
+    const int idx = find_call_arg0(GL_MOCK_FUNC_glBindBufferBase, 0, GL_SHADER_STORAGE_BUFFER);
+    TA(idx >= 0);
+    T(gl_mock_call(idx)->args[1].i == 3);
+    T(gl_mock_call(idx)->args[2].i == 0);
+    T(idx < gl_mock_find_call(GL_MOCK_FUNC_glDeleteBuffers, 0));
+    sg_commit();
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(cs);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, shader_glsl_binding_out_of_range) {
+    if (sg_isvalid()) { sg_shutdown(); gl_mock_shutdown(); }
+    reset_log();
+    gl_mock_setup();
+    gl_mock_set_int(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, 4);
+    gl_mock_set_int(GL_MAX_IMAGE_UNITS, 2);
+    sg_setup(&(sg_desc){ .logger.func = capture_log });
+    T(sg_query_limits().max_storage_buffer_bindings_per_stage == 4);
+    sg_shader s0 = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .glsl_binding_n = 5 },
+    });
+    T(sg_query_shader_state(s0) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_GL_STORAGEBUFFER_GLSL_BINDING_OUT_OF_RANGE));
+    sg_shader s1 = sg_make_shader(&(sg_shader_desc){
+        .compute_func.source = "cs",
+        .views[0].storage_image = {
+            .stage = SG_SHADERSTAGE_COMPUTE, .image_type = SG_IMAGETYPE_2D,
+            .access_format = SG_PIXELFORMAT_RGBA8, .glsl_binding_n = 3,
+        },
+    });
+    T(sg_query_shader_state(s1) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_GL_STORAGEIMAGE_GLSL_BINDING_OUT_OF_RANGE));
+    // no GL program objects leak from the failed shaders
+    T(gl_mock_live_objects(GL_MOCK_OBJ_PROGRAM) == 0);
+    sg_destroy_shader(s0);
+    sg_destroy_shader(s1);
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
 //  no-leaks full lifecycle
 //------------------------------------------------------------------------------
 UTEST(sokol_gfx_gl, no_leaks_full_lifecycle) {
@@ -1431,7 +3813,7 @@ UTEST(sokol_gfx_gl, no_leaks_full_lifecycle) {
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
     });
-    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.dynamic_update = true });
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 64, .usage.write_transient = true });
     sg_image color = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32, .pixel_format = SG_PIXELFORMAT_RGBA8,
         .usage.color_attachment = true,

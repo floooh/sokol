@@ -29,10 +29,12 @@ call :runtest win_d3d11_mock sokol-d3d11-test || exit /b 10
 
 call :runtest win_glcore_mock sokol-gl41-test || exit /b 10
 call :runtest win_glcore_mock sokol-gl43-test || exit /b 10
+call :runtest win_glcore_mock sokol-gl41-apple-test || exit /b 10
 
 call :runtest win_gles3_mock sokol-gles30-test || exit /b 10
 call :runtest win_gles3_mock sokol-gles31-test || exit /b 10
 call :runtest win_gles3_mock sokol-gles32-test || exit /b 10
+call :runtest win_gles3_mock sokol-gles30-apple-test || exit /b 10
 
 goto :eof
 

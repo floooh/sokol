@@ -72,6 +72,7 @@ static struct {
     metal_mock_render_pass_info_t last_render_pass;
     metal_mock_render_encoder_state_t render_encoder_state;
     metal_mock_compute_encoder_state_t compute_encoder_state;
+    metal_mock_blit_encoder_state_t blit_encoder_state;
 } _mtlm;
 
 //== helpers ===================================================================
@@ -586,6 +587,9 @@ static NSError* _mtlm_error(void) {
 @interface _mtlm_compute_encoder : _mtlm_obj <MTLComputeCommandEncoder>
 @end
 
+@interface _mtlm_blit_encoder : _mtlm_obj <MTLBlitCommandEncoder>
+@end
+
 @interface _mtlm_command_buffer : _mtlm_obj <MTLCommandBuffer> {
 @public
     NSMutableArray* handlers;
@@ -646,7 +650,7 @@ static NSError* _mtlm_error(void) {
         bytesPerImage:(NSUInteger)bytesPerImage
 {
     metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_replaceRegion, self);
-    c->num_args = 8;
+    c->num_args = 11;
     c->args[0].u = region.origin.x;
     c->args[1].u = region.origin.y;
     c->args[2].u = region.size.width;
@@ -655,7 +659,9 @@ static NSError* _mtlm_error(void) {
     c->args[5].u = slice;
     c->args[6].u = bytesPerRow;
     c->args[7].u = bytesPerImage;
-    (void)pixelBytes;
+    c->args[8].u = region.origin.z;
+    c->args[9].u = region.size.depth;
+    c->args[10].p = pixelBytes;
     info.num_replace_region++;
 }
 - (id<MTLTexture>)newTextureViewWithPixelFormat:(MTLPixelFormat)pixelFormat
@@ -1067,6 +1073,95 @@ static NSError* _mtlm_error(void) {
 }
 @end
 
+@implementation _mtlm_blit_encoder
+
+- (void)endEncoding {
+    _mtlm_log(METAL_MOCK_FUNC_endEncoding, self);
+    _mtlm.blit_encoder_state.ended = true;
+}
+
+- (void)pushDebugGroup:(NSString*)string {
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_pushDebugGroup, self);
+    c->num_args = 1;
+    _mtlm_log_str(c, 0, string);
+    _mtlm.blit_encoder_state.debug_group_depth++;
+}
+
+- (void)popDebugGroup {
+    _mtlm_log(METAL_MOCK_FUNC_popDebugGroup, self);
+    _mtlm.blit_encoder_state.debug_group_depth--;
+}
+
+- (void)setLabel:(NSString*)label {
+    [super setLabel:label];
+    _mtlm_copy_str(_mtlm.blit_encoder_state.label, label);
+}
+
+// args: [0] src buffer, [1] src offset, [2] dst buffer, [3] dst offset, [4] size
+- (void)copyFromBuffer:(id<MTLBuffer>)sourceBuffer
+          sourceOffset:(NSUInteger)sourceOffset
+              toBuffer:(id<MTLBuffer>)destinationBuffer
+     destinationOffset:(NSUInteger)destinationOffset
+                  size:(NSUInteger)size
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_copyFromBufferToBuffer, self);
+    c->num_args = 5;
+    c->args[0].p = sourceBuffer;
+    c->args[1].u = sourceOffset;
+    c->args[2].p = destinationBuffer;
+    c->args[3].u = destinationOffset;
+    c->args[4].u = size;
+    _MTLM_ASSERT(!_mtlm.blit_encoder_state.ended);
+    _MTLM_ASSERT(_mtlm_is_obj(sourceBuffer, METAL_MOCK_OBJ_BUFFER));
+    _MTLM_ASSERT(_mtlm_is_obj(destinationBuffer, METAL_MOCK_OBJ_BUFFER));
+    _mtlm_buffer* src = (_mtlm_buffer*)sourceBuffer;
+    _mtlm_buffer* dst = (_mtlm_buffer*)destinationBuffer;
+    // Metal requires the copy to be in bounds
+    _MTLM_ASSERT((sourceOffset + size) <= src->info.length);
+    _MTLM_ASSERT((destinationOffset + size) <= dst->info.length);
+    if (size > 0) {
+        memmove(dst->data + destinationOffset, src->data + sourceOffset, size);
+    }
+    _mtlm.blit_encoder_state.num_buffer_copies++;
+}
+
+// args: [0] src buffer, [1] src offset, [2] src bytes per row,
+// [3] src bytes per image, [4..6] size w/h/d, [7] dst texture,
+// [8] dst slice, [9] dst level, [10..12] dst origin x/y/z
+- (void)copyFromBuffer:(id<MTLBuffer>)sourceBuffer
+          sourceOffset:(NSUInteger)sourceOffset
+     sourceBytesPerRow:(NSUInteger)sourceBytesPerRow
+   sourceBytesPerImage:(NSUInteger)sourceBytesPerImage
+            sourceSize:(MTLSize)sourceSize
+             toTexture:(id<MTLTexture>)destinationTexture
+      destinationSlice:(NSUInteger)destinationSlice
+      destinationLevel:(NSUInteger)destinationLevel
+     destinationOrigin:(MTLOrigin)destinationOrigin
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_copyFromBufferToTexture, self);
+    c->num_args = 13;
+    c->args[0].p = sourceBuffer;
+    c->args[1].u = sourceOffset;
+    c->args[2].u = sourceBytesPerRow;
+    c->args[3].u = sourceBytesPerImage;
+    c->args[4].u = sourceSize.width;
+    c->args[5].u = sourceSize.height;
+    c->args[6].u = sourceSize.depth;
+    c->args[7].p = destinationTexture;
+    c->args[8].u = destinationSlice;
+    c->args[9].u = destinationLevel;
+    c->args[10].u = destinationOrigin.x;
+    c->args[11].u = destinationOrigin.y;
+    c->args[12].u = destinationOrigin.z;
+    _MTLM_ASSERT(!_mtlm.blit_encoder_state.ended);
+    _MTLM_ASSERT(_mtlm_is_obj(sourceBuffer, METAL_MOCK_OBJ_BUFFER));
+    _MTLM_ASSERT(_mtlm_is_obj(destinationTexture, METAL_MOCK_OBJ_TEXTURE));
+    _mtlm_texture* dst = (_mtlm_texture*)destinationTexture;
+    dst->info.num_copy_from_buffer++;
+    _mtlm.blit_encoder_state.num_texture_copies++;
+}
+@end
+
 //== command buffer and queue ==================================================
 
 // copy one MTLRenderPassAttachmentDescriptor into the snapshot struct
@@ -1177,6 +1272,16 @@ static void _mtlm_snapshot_pass(MTLRenderPassDescriptor* desc) {
     }
     memset(&_mtlm.compute_encoder_state, 0, sizeof(_mtlm.compute_encoder_state));
     _mtlm_compute_encoder* enc = [[_mtlm_compute_encoder alloc] initWithKind:METAL_MOCK_OBJ_COMPUTE_ENCODER];
+    return [enc autorelease];
+}
+
+- (id<MTLBlitCommandEncoder>)blitCommandEncoder {
+    _mtlm_log(METAL_MOCK_FUNC_blitCommandEncoder, self);
+    if (_mtlm_fail(METAL_MOCK_OBJ_BLIT_ENCODER)) {
+        return nil;
+    }
+    memset(&_mtlm.blit_encoder_state, 0, sizeof(_mtlm.blit_encoder_state));
+    _mtlm_blit_encoder* enc = [[_mtlm_blit_encoder alloc] initWithKind:METAL_MOCK_OBJ_BLIT_ENCODER];
     return [enc autorelease];
 }
 @end
@@ -1587,6 +1692,13 @@ bool metal_mock_buffer_info(const void* obj, metal_mock_buffer_info_t* out) {
     return true;
 }
 
+const void* metal_mock_buffer_data(const void* obj) {
+    if (!_mtlm_is_obj(obj, METAL_MOCK_OBJ_BUFFER)) {
+        return 0;
+    }
+    return ((_mtlm_buffer*)obj)->data;
+}
+
 bool metal_mock_texture_info(const void* obj, metal_mock_texture_info_t* out) {
     _MTLM_ASSERT(out);
     if (!_mtlm_is_obj(obj, METAL_MOCK_OBJ_TEXTURE) && !_mtlm_is_obj(obj, METAL_MOCK_OBJ_TEXTURE_VIEW)) {
@@ -1660,6 +1772,10 @@ const metal_mock_render_encoder_state_t* metal_mock_render_encoder_state(void) {
 
 const metal_mock_compute_encoder_state_t* metal_mock_compute_encoder_state(void) {
     return &_mtlm.compute_encoder_state;
+}
+
+const metal_mock_blit_encoder_state_t* metal_mock_blit_encoder_state(void) {
+    return &_mtlm.blit_encoder_state;
 }
 
 int metal_mock_num_calls(void) {

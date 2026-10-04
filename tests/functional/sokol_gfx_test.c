@@ -342,12 +342,12 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         T(bufptr->slot.id == buf[i].id);
         T(bufptr->slot.state == SG_RESOURCESTATE_VALID);
         T(bufptr->cmn.size == sizeof(data));
-        T(bufptr->cmn.append_pos == 0);
-        T(!bufptr->cmn.append_overflow);
         T(bufptr->cmn.usage.vertex_buffer);
-        T(bufptr->cmn.usage.immutable);
-        T(bufptr->cmn.update_frame_index == 0);
-        T(bufptr->cmn.append_frame_index == 0);
+        T(!bufptr->cmn.usage.write_transient);
+        T(!bufptr->cmn.usage.copy_dst);
+        T(bufptr->cmn.bind_frame_index == 0);
+        T(bufptr->cmn.copy_src_frame_index == 0);
+        T(bufptr->cmn.write_transient_frame_index == 0);
         T(bufptr->cmn.num_slots == 1);
         T(bufptr->cmn.active_slot == 0);
     }
@@ -588,10 +588,15 @@ UTEST(sokol_gfx, query_buffer_defaults) {
     sg_buffer_desc desc;
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){0});
     T(desc.usage.vertex_buffer);
-    T(desc.usage.immutable);
+    T(!desc.usage.write_transient);
+    T(!desc.usage.copy_dst);
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.index_buffer = true });
     T(desc.usage.index_buffer);
-    T(desc.usage.immutable);
+    T(!desc.usage.vertex_buffer);
+    desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true } });
+    T(desc.usage.staging_buffer);
+    T(desc.usage.copy_src);
+    T(!desc.usage.vertex_buffer);
     desc = sg_query_buffer_defaults(&(sg_buffer_desc){ .usage.write_transient = true });
     T(desc.usage.vertex_buffer);
     T(desc.usage.write_transient);
@@ -895,8 +900,8 @@ UTEST(sokol_gfx, query_buffer_desc) {
     T(b0_desc.usage.write_transient);
     T(b0_desc.data.ptr == 0);
     T(b0_desc.data.size == 0);
-    T(b0_desc.gl_buffers[0] == 0);
-    T(b0_desc.mtl_buffers[0] == 0);
+    T(b0_desc.gl_buffer == 0);
+    T(b0_desc.mtl_buffer == 0);
     T(b0_desc.d3d11_buffer == 0);
     T(b0_desc.wgpu_buffer == 0);
     T(sg_query_buffer_size(b0) == 32);
@@ -909,12 +914,13 @@ UTEST(sokol_gfx, query_buffer_desc) {
     const sg_buffer_desc b1_desc = sg_query_buffer_desc(b1);
     T(b1_desc.size == sizeof(vtx_data));
     T(b1_desc.usage.vertex_buffer);
-    T(b1_desc.usage.immutable);
+    T(!b1_desc.usage.write_transient);
+    T(!b1_desc.usage.copy_dst);
     T(b1_desc.data.ptr == 0);
     T(b1_desc.data.size == 0);
     T(sg_query_buffer_size(b1) == sizeof(vtx_data));
     T(sg_query_buffer_usage(b1).vertex_buffer);
-    T(sg_query_buffer_usage(b1).immutable);
+    T(!sg_query_buffer_usage(b1).write_transient);
 
     uint16_t idx_data[8];
     sg_buffer b2 = sg_make_buffer(&(sg_buffer_desc){
@@ -924,12 +930,13 @@ UTEST(sokol_gfx, query_buffer_desc) {
     const sg_buffer_desc b2_desc = sg_query_buffer_desc(b2);
     T(b2_desc.size == sizeof(idx_data));
     T(b2_desc.usage.index_buffer);
-    T(b2_desc.usage.immutable);
+    T(!b2_desc.usage.write_transient);
+    T(!b2_desc.usage.copy_dst);
     T(b2_desc.data.ptr == 0);
     T(b2_desc.data.size == 0);
     T(sg_query_buffer_size(b2) == sizeof(idx_data));
     T(sg_query_buffer_usage(b2).index_buffer);
-    T(sg_query_buffer_usage(b2).immutable);
+    T(!sg_query_buffer_usage(b2).write_transient);
 
     // invalid buffer (returns zeroed desc)
     sg_buffer b3 = sg_make_buffer(&(sg_buffer_desc){
@@ -953,14 +960,15 @@ UTEST(sokol_gfx, query_image_desc) {
         .width = 256,
         .height = 512,
         .pixel_format = SG_PIXELFORMAT_R8,
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
     });
     const sg_image_desc i0_desc = sg_query_image_desc(i0);
     T(i0_desc.type == SG_IMAGETYPE_2D);
     T(!i0_desc.usage.color_attachment);
     T(!i0_desc.usage.resolve_attachment);
     T(!i0_desc.usage.depth_stencil_attachment);
-    T(i0_desc.usage.dynamic_update);
+    T(i0_desc.usage.copy_dst);
+    T(!i0_desc.usage.immutable);
     T(i0_desc.width == 256);
     T(i0_desc.height == 512);
     T(i0_desc.num_slices == 1);
@@ -969,9 +977,9 @@ UTEST(sokol_gfx, query_image_desc) {
     T(i0_desc.sample_count == 1);
     T(i0_desc.data.mip_levels[0].ptr == 0);
     T(i0_desc.data.mip_levels[0].size == 0);
-    T(i0_desc.gl_textures[0] == 0);
+    T(i0_desc.gl_texture == 0);
     T(i0_desc.gl_texture_target == 0);
-    T(i0_desc.mtl_textures[0] == 0);
+    T(i0_desc.mtl_texture == 0);
     T(i0_desc.d3d11_texture == 0);
     T(i0_desc.wgpu_texture == 0);
     T(sg_query_image_type(i0) == SG_IMAGETYPE_2D);
@@ -987,7 +995,7 @@ UTEST(sokol_gfx, query_image_desc) {
     T(!i0_desc_x.usage.color_attachment);
     T(!i0_desc_x.usage.resolve_attachment);
     T(!i0_desc_x.usage.depth_stencil_attachment);
-    T(!i0_desc_x.usage.dynamic_update);
+    T(!i0_desc_x.usage.copy_dst);
     T(i0_desc_x.width == 0);
     T(i0_desc_x.height == 0);
     T(i0_desc_x.num_slices == 0);
@@ -1398,19 +1406,958 @@ UTEST(sokol_gfx, view_uninit_count) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, query_buffer_will_overflow) {
+static sg_buffer create_staging_buffer(size_t size) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .size = size,
+        .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true },
+    });
+}
+
+static sg_buffer create_copy_dst_buffer(size_t size) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .size = size,
+        .usage = { .vertex_buffer = true, .copy_dst = true },
+    });
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 16 },
+        .dst = { .buffer = dst, .offset = 32 },
+        .size = 32,
+    });
+    T(num_log_called == 0);
+    T(_sg_lookup_buffer(src.id)->cmn.copy_src_frame_index == _sg.frame_index);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_usage) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_buffer();
+    sg_buffer dst = create_buffer();
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src.buffer = src,
+        .dst.buffer = dst,
+        .size = 16,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_COPY_SRC);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_COPY_DST);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_same_buffer) {
     setup(&(sg_desc){0});
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .size = 64,
-        .usage.write_transient = true,
+        .usage = { .vertex_buffer = true, .copy_src = true, .copy_dst = true },
     });
-    T(!sg_query_buffer_will_overflow(buf, 32));
-    T(!sg_query_buffer_will_overflow(buf, 64));
-    T(sg_query_buffer_will_overflow(buf, 65));
-    static const uint8_t data[32] = {0};
-    sg_append_buffer(buf, &SG_RANGE(data));
-    T(!sg_query_buffer_will_overflow(buf, 32));
-    T(sg_query_buffer_will_overflow(buf, 33));
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = buf, .offset = 0 },
+        .dst = { .buffer = buf, .offset = 32 },
+        .size = 16,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_validate_size_and_offsets) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(32);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 2 },
+        .dst = { .buffer = dst, .offset = 1 },
+        .size = 0,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_ZERO_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OFFSET_ALIGNMENT);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_DST_OFFSET_ALIGNMENT);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 4);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 32 },
+        .dst = { .buffer = dst, .offset = 16 },
+        .size = 32,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){
+        .src = { .buffer = src, .offset = 48 },
+        .dst = { .buffer = dst, .offset = 0 },
+        .size = 32,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+static sg_buffer create_copy_src_buffer(sg_buffer_usage usage, size_t size) {
+    usage.copy_src = true;
+    usage.write_transient = true;
+    return sg_make_buffer(&(sg_buffer_desc){ .size = size, .usage = usage });
+}
+
+static sg_image create_copy_dst_image(int width, int height) {
+    return sg_make_image(&(sg_image_desc){
+        .width = width,
+        .height = height,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+}
+
+// override backend features after resource creation to test the validation rules in isolation
+static void set_copy_buffer_to_image_features(bool relaxed_buffer_type, bool relaxed_bytes_per_row, bool separate_buffer_types) {
+    _sg.features.copy_buffer_to_image_relaxed_buffer_type = relaxed_buffer_type;
+    _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = relaxed_bytes_per_row;
+    _sg.features.separate_buffer_types = separate_buffer_types;
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_ok) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    // staging source must pass with all restrictive features, 16x16 RGBA8 has a 64 byte row pitch
+    set_copy_buffer_to_image_features(false, false, true);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_src_staging_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_copy_src_buffer((sg_buffer_usage){ .staging_index_buffer = true }, 1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    // rejected independent of any backend feature
+    for (int i = 0; i < 2; i++) {
+        const bool relaxed = (i == 1);
+        set_copy_buffer_to_image_features(relaxed, relaxed, false);
+        reset_log_items();
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dst });
+        T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_INDEX_BUFFER);
+        if (relaxed) {
+            T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+            T(num_log_called == 2);
+        } else {
+            // additionally fails the staging-buffer-only and 256-byte-row checks
+            T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+            T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+            T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+            T(num_log_called == 4);
+        }
+    }
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_relaxed_buffer_type) {
+    setup(&(sg_desc){0});
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 1024);
+    sg_buffer idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // relaxed: any buffer type is accepted as source
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(num_log_called == 0);
+
+    // not relaxed (D3D11): only .staging_buffer is accepted
+    set_copy_buffer_to_image_features(false, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_STAGING_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_relaxed_bytes_per_row) {
+    setup(&(sg_desc){0});
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 8192);
+    sg_buffer stg = create_staging_buffer(4096);
+    sg_image small = create_copy_dst_image(16, 16);     // 64 byte row pitch
+    sg_image wide = create_copy_dst_image(64, 16);      // 256 byte row pitch
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(wide) == SG_RESOURCESTATE_VALID);
+
+    // relaxed: any row pitch is fine
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = small });
+    T(num_log_called == 0);
+
+    // not relaxed (WebGPU): non-staging source needs a 256 byte multiple row pitch
+    set_copy_buffer_to_image_features(true, false, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = small });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // explicit bytes_per_row which is a multiple of the pixel size but not of 256
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = vtx, .bytes_per_row = 320, .bytes_per_slice = 320 * 16 },
+        .dst.image = wide,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_256);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // 256 byte multiple row pitch passes
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = wide });
+    T(num_log_called == 0);
+    // staging source is exempt from the 256 byte rule
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stg, .dst.image = small });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_webgl2_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 1024);
+    sg_buffer vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 1024);
+    sg_buffer stg = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // separate buffer types (WebGL2): index buffers can't be a source
+    set_copy_buffer_to_image_features(true, true, true);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but vertex and staging buffers are fine
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = vtx, .dst.image = dst });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = stg, .dst.image = dst });
+    T(num_log_called == 0);
+
+    // without separate buffer types an index buffer source is fine
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = idx, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+static void copy_buffer_16_bytes(sg_buffer src, sg_buffer dst) {
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 16 });
+}
+
+// WebGL2 can only copy between two index buffers or two non-index buffers
+UTEST(sokol_gfx, copy_buffer_to_buffer_webgl2_index_buffer) {
+    setup(&(sg_desc){0});
+    sg_buffer src_stg = create_staging_buffer(64);
+    sg_buffer src_stg_idx = create_copy_src_buffer((sg_buffer_usage){ .staging_index_buffer = true }, 64);
+    sg_buffer src_vtx = create_copy_src_buffer((sg_buffer_usage){ .vertex_buffer = true }, 64);
+    sg_buffer src_idx = create_copy_src_buffer((sg_buffer_usage){ .index_buffer = true }, 64);
+    sg_buffer dst_vtx = create_copy_dst_buffer(64);
+    sg_buffer dst_idx = sg_make_buffer(&(sg_buffer_desc){
+        .size = 64,
+        .usage = { .index_buffer = true, .copy_dst = true },
+    });
+    T(sg_query_buffer_state(src_stg) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_stg_idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_idx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst_vtx) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst_idx) == SG_RESOURCESTATE_VALID);
+    const sg_buffer invalid_pairs[4][2] = {
+        { src_stg, dst_idx },
+        { src_vtx, dst_idx },
+        { src_stg_idx, dst_vtx },
+        { src_idx, dst_vtx },
+    };
+
+    // separate buffer types (WebGL2): index-to-index and non-index-to-non-index is fine...
+    _sg.features.separate_buffer_types = true;
+    reset_log_items();
+    copy_buffer_16_bytes(src_stg_idx, dst_idx);
+    copy_buffer_16_bytes(src_idx, dst_idx);
+    copy_buffer_16_bytes(src_stg, dst_vtx);
+    copy_buffer_16_bytes(src_vtx, dst_vtx);
+    T(num_log_called == 0);
+    // ...but mixing index and non-index buffers in either direction is not
+    for (int i = 0; i < 4; i++) {
+        reset_log_items();
+        copy_buffer_16_bytes(invalid_pairs[i][0], invalid_pairs[i][1]);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+    }
+
+    // without separate buffer types, mixing is fine
+    _sg.features.separate_buffer_types = false;
+    reset_log_items();
+    for (int i = 0; i < 4; i++) {
+        copy_buffer_16_bytes(invalid_pairs[i][0], invalid_pairs[i][1]);
+    }
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_src_overflow) {
+    setup(&(sg_desc){0});
+    sg_buffer full_ok = create_staging_buffer(1024);
+    sg_buffer full_small = create_staging_buffer(1020);
+    sg_buffer sub_ok = create_staging_buffer(144);
+    sg_buffer sub_small = create_staging_buffer(140);
+    sg_image dst = create_copy_dst_image(16, 16);   // 64 byte row pitch, 1024 byte slice pitch
+    T(sg_query_buffer_state(full_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(full_small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(sub_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(sub_small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // whole image with default pitches requires exactly 1024 bytes
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = full_ok, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = full_small, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // 4x2 sub-region with a one-row source offset: only the bytes actually
+    // read are required, e.g. no padding after the last row or slice:
+    //  64 (offset) + 64 (first row incl. padding) + 16 (last row) = 144
+    const sg_copy_buffer_to_image_desc sub_desc = {
+        .src = { .offset = 64, .bytes_per_row = 64, .bytes_per_slice = 128 },
+        .dst = { .image = dst, .x = 2, .y = 4 },
+        .size = { .width = 4, .height = 2 },
+    };
+    sg_copy_buffer_to_image_desc desc = sub_desc;
+    desc.src.buffer = sub_ok;
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.src.buffer = sub_small;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // a bigger offset pushes the same copy over the end
+    desc.src.buffer = sub_ok;
+    desc.src.offset = 68;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_src_overflow_array) {
+    setup(&(sg_desc){0});
+    sg_buffer src_ok = create_staging_buffer(1104);
+    sg_buffer src_small = create_staging_buffer(1100);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_ARRAY,
+        .width = 16,
+        .height = 16,
+        .num_slices = 3,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // 4x2 region into slices 1 and 2 with default pitches (64 and 1024 bytes):
+    //  1024 (first slice incl. padding) + 64 (first row of last slice) + 16 (last row) = 1104
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src_ok,
+        .dst = { .image = dst, .slice = 1 },
+        .size = { .width = 4, .height = 2, .num_slices = 2 },
+    });
+    T(num_log_called == 0);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src_small,
+        .dst = { .image = dst, .slice = 1 },
+        .size = { .width = 4, .height = 2, .num_slices = 2 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_bytes_per_row_too_small) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // 16 pixel wide copy needs at least 64 bytes per row
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = 32, .bytes_per_slice = 32 * 16 },
+        .dst.image = dst,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but a 32 byte row pitch is enough for an 8 pixel wide copy
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = 32, .bytes_per_slice = 32 * 16 },
+        .dst.image = dst,
+        .size = { .width = 8, .height = 16 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_bytes_per_slice_too_small) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // 16 rows with 64 bytes per row need at least 1024 bytes per slice
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = 64, .bytes_per_slice = 64 * 8 },
+        .dst.image = dst,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but 512 bytes per slice are enough for an 8 row copy
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = 64, .bytes_per_slice = 64 * 8 },
+        .dst.image = dst,
+        .size = { .width = 16, .height = 8 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_compressed_sizes) {
+    setup(&(sg_desc){0});
+    // 16x16 BC1: 4x4 blocks of 8 bytes, 32 byte row pitch, 128 byte slice pitch
+    sg_buffer src_ok = create_staging_buffer(48);
+    sg_buffer src_small = create_staging_buffer(40);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // 8x8 pixel region is 2x2 blocks: 32 (first block-row incl. padding) + 16 (last block-row) = 48
+    sg_copy_buffer_to_image_desc desc = {
+        .src = { .buffer = src_ok, .bytes_per_row = 32, .bytes_per_slice = 128 },
+        .dst = { .image = dst, .x = 4, .y = 4 },
+        .size = { .width = 8, .height = 8 },
+    };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.src.buffer = src_small;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // one block (8 bytes) per row is too small for a 2 block wide copy
+    desc.src.buffer = src_ok;
+    desc.src.bytes_per_row = 8;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // a slice pitch of one block-row is too small for a 2 block-row copy
+    desc.src.bytes_per_row = 32;
+    desc.src.bytes_per_slice = 32;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // copy size must be a multiple of the block dimensions
+    desc.src.bytes_per_slice = 128;
+    desc.size.width = 6;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.size.width = 8;
+    desc.size.height = 6;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // source offset must be a multiple of the block size (single block copy)
+    desc.size.width = 4;
+    desc.size.height = 4;
+    desc.src.offset = 4;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OFFSET_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.src.offset = 8;
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_compressed_small_mips) {
+    setup(&(sg_desc){0});
+    // 24x24 BC1 with miplevels 24, 12, 6, 3, 1
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 24,
+        .height = 24,
+        .num_mipmaps = 5,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // default-sized copies into miplevels smaller than one block are allowed
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .mip_level = 3 } });
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .mip_level = 4 } });
+    T(num_log_called == 0);
+
+    // a non-block-multiple size is allowed when the copy reaches the miplevel edge (6x6 miplevel)
+    sg_copy_buffer_to_image_desc desc = {
+        .src.buffer = src,
+        .dst = { .image = dst, .mip_level = 2, .x = 4, .y = 4 },
+        .size = { .width = 2, .height = 2 },
+    };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.dst.x = 0;
+    desc.dst.y = 0;
+    desc.size = (sg_image_extent){ .width = 6, .height = 6 };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+
+    // ...but not when the copy ends inside the miplevel
+    desc.size = (sg_image_extent){ .width = 2, .height = 6 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.size = (sg_image_extent){ .width = 6, .height = 2 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // the same rules in the 3x3 miplevel
+    desc.dst.mip_level = 3;
+    desc.size = (sg_image_extent){ .width = 3, .height = 3 };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+    desc.size = (sg_image_extent){ .width = 2, .height = 2 };
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_compressed_dst_alignment) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // block-aligned destination offsets are fine
+    sg_copy_buffer_to_image_desc desc = {
+        .src.buffer = src,
+        .dst = { .image = dst, .x = 4, .y = 8 },
+        .size = { .width = 4, .height = 4 },
+    };
+    sg_copy_buffer_to_image(&desc);
+    T(num_log_called == 0);
+
+    // unaligned destination offsets are rejected, even when the copy reaches the miplevel edge
+    desc.dst.x = 2;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_X_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.dst.x = 4;
+    desc.dst.y = 6;
+    desc.size.height = 10;
+    sg_copy_buffer_to_image(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_Y_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_uncompressed_unaligned_ok) {
+    setup(&(sg_desc){0});
+    // the block alignment rules don't apply to uncompressed formats
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src.buffer = src,
+        .dst = { .image = dst, .x = 3, .y = 5 },
+        .size = { .width = 7, .height = 9 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_dst_range_with_default_size) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+
+    // a destination offset at the edge of the miplevel defaults the copy size to zero,
+    // this must only trigger the size and range checks (and not any of the source size checks)
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .x = 16 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .y = 16 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .slice = 1 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+
+    // a destination offset beyond the edge defaults to a negative copy size (must not assert)
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .x = 20 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_X_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .y = 20 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_Y_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .slice = 2 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_DST_SLICE_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+
+    // the default copy size covers the rest of the miplevel and the source is sized for that
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst = { .image = dst, .x = 15, .y = 15 } });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_stats) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_buffer src_small = create_staging_buffer(1020);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(src_small) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    sg_enable_stats();
+
+    // whole image with default pitches
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dst });
+    T(num_log_called == 0);
+    sg_stats stats = sg_query_stats();
+    T(stats.cur_frame.num_copy_buffer_to_image == 1);
+    T(stats.cur_frame.size_copy_buffer_to_image == 1024);
+
+    // 4x2 sub-region only counts the bytes actually read: 64 (first row incl. padding) + 16 (last row)
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = 64, .bytes_per_slice = 128 },
+        .dst = { .image = dst, .x = 2, .y = 4 },
+        .size = { .width = 4, .height = 2 },
+    });
+    T(num_log_called == 0);
+    stats = sg_query_stats();
+    T(stats.cur_frame.num_copy_buffer_to_image == 2);
+    T(stats.cur_frame.size_copy_buffer_to_image == 1104);
+
+    // a copy rejected by validation is counted, but doesn't add to the copied size
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src_small, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    stats = sg_query_stats();
+    T(stats.cur_frame.num_copy_buffer_to_image == 3);
+    T(stats.cur_frame.size_copy_buffer_to_image == 1104);
+    sg_shutdown();
+}
+
+// copy resources must be in VALID state, this is checked outside the validation layer,
+// and before the copy desc defaults are resolved (which require a valid image pixel format)
+static void test_copy_buffer_to_image_resource_state(int* utest_result) {
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_image alloc_img = sg_alloc_image();
+    sg_image failed_img = sg_alloc_image();
+    sg_fail_image(failed_img);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_image_state(alloc_img) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_image_state(failed_img) == SG_RESOURCESTATE_FAILED);
+    reset_log_items();
+
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = alloc_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = failed_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = alloc_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = failed_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // only the first error is reported
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = alloc_buf, .dst.image = failed_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // a rejected copy is counted, but doesn't add to the copied size
+    sg_enable_stats();
+    const sg_frame_stats stats_before = sg_query_stats().cur_frame;
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = failed_img });
+    T(num_log_called == 1);
+    const sg_frame_stats stats_after = sg_query_stats().cur_frame;
+    T(stats_after.num_copy_buffer_to_image == (stats_before.num_copy_buffer_to_image + 1));
+    T(stats_after.size_copy_buffer_to_image == stats_before.size_copy_buffer_to_image);
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_resource_state) {
+    setup(&(sg_desc){0});
+    test_copy_buffer_to_image_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, copy_buffer_to_image_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_copy_buffer_to_image_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// destroyed resources are reported as errors outside the validation layer
+UTEST(sokol_gfx, copy_buffer_to_image_resource_alive) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    sg_buffer dead_buf = create_staging_buffer(1024);
+    sg_image dead_img = create_copy_dst_image(16, 16);
+    sg_destroy_buffer(dead_buf);
+    sg_destroy_image(dead_img);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_image_state(dead_img) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = dead_buf, .dst.image = dst });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_SRC_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_IMAGE_DST_ALIVE);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_image_negative_bytes_per_row) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(1024);
+    sg_image dst = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    // must be rejected by validation, and not assert in the bytes-per-slice multiple check
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
+        .src = { .buffer = src, .bytes_per_row = -64, .bytes_per_slice = 1024 },
+        .dst.image = dst,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 4);
+    sg_shutdown();
+}
+
+// copy resources must be in VALID state, this is checked outside the validation layer
+static void test_copy_buffer_to_buffer_resource_state(int* utest_result) {
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    reset_log_items();
+
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = alloc_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = failed_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = alloc_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = failed_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // only the first error is reported
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = alloc_buf, .dst.buffer = failed_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_VALID);
+    T(num_log_called == 1);
+    reset_log_items();
+    // a rejected copy is counted, but doesn't add to the copied size
+    sg_enable_stats();
+    const sg_frame_stats stats_before = sg_query_stats().cur_frame;
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = failed_buf, .size = 32 });
+    T(num_log_called == 1);
+    const sg_frame_stats stats_after = sg_query_stats().cur_frame;
+    T(stats_after.num_copy_buffer_to_buffer == (stats_before.num_copy_buffer_to_buffer + 1));
+    T(stats_after.size_copy_buffer_to_buffer == stats_before.size_copy_buffer_to_buffer);
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_state) {
+    setup(&(sg_desc){0});
+    test_copy_buffer_to_buffer_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_copy_buffer_to_buffer_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// destroyed resources are reported as errors outside the validation layer
+UTEST(sokol_gfx, copy_buffer_to_buffer_resource_alive) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    sg_buffer dead_buf = create_staging_buffer(64);
+    sg_destroy_buffer(dead_buf);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = dead_buf, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_SRC_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dead_buf, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_COPY_BUFFER_TO_BUFFER_DST_ALIVE);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, copy_buffer_to_buffer_stats) {
+    setup(&(sg_desc){0});
+    sg_buffer src = create_staging_buffer(64);
+    sg_buffer dst = create_copy_dst_buffer(64);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    sg_enable_stats();
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 32 });
+    T(num_log_called == 0);
+    sg_stats stats = sg_query_stats();
+    T(stats.cur_frame.num_copy_buffer_to_buffer == 1);
+    T(stats.cur_frame.size_copy_buffer_to_buffer == 32);
+    // a copy rejected by validation is counted, but doesn't add to the copied size
+    sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src = { .buffer = src, .offset = 48 }, .dst.buffer = dst, .size = 32 });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    stats = sg_query_stats();
+    T(stats.cur_frame.num_copy_buffer_to_buffer == 2);
+    T(stats.cur_frame.size_copy_buffer_to_buffer == 32);
     sg_shutdown();
 }
 
@@ -1913,41 +2860,126 @@ UTEST(sokol_gfx, make_buffer_validate_no_data_ptr_but_data_size) {
     setup(&(sg_desc){0});
     const uint32_t data[16] = {0};
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.copy_dst = true,
         .size = sizeof(data),
         .data.size = sizeof(data),
     });
     T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_write_transient_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.write_transient = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_write_unsealed_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.write_unsealed = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_copy_dst_expect_no_data) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.copy_dst = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_usage_staging_validation) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .vertex_buffer = true, .copy_dst = true },
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_COPYDST);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_COPYSRC);
+    T(log_items[3] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA);
+    T(log_items[4] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
+    T(log_items[5] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_shutdown();
+}
+
+// buffers without initial data must be writable via write_unsealed, write_transient or copy_dst
+UTEST(sokol_gfx, make_buffer_validate_expect_data) {
+    setup(&(sg_desc){0});
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .size = 64 });
+    T(sg_query_buffer_state(vbuf) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .size = 64 });
+    T(sg_query_buffer_state(ibuf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // a staging buffer without write_transient can never be filled
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .copy_src = true }, .size = 64 });
+    T(sg_query_buffer_state(sbuf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_buffer_usage_dynamic_expect_no_data) {
+UTEST(sokol_gfx, make_buffer_no_data_writable_ok) {
     setup(&(sg_desc){0});
-    const uint32_t data[16] = {0};
-    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage.dynamic_update = true,
-        .data = SG_RANGE(data),
+    sg_buffer unsealed = sg_make_buffer(&(sg_buffer_desc){ .usage.write_unsealed = true, .size = 64 });
+    sg_buffer transient = sg_make_buffer(&(sg_buffer_desc){ .usage.write_transient = true, .size = 64 });
+    sg_buffer copy_dst = sg_make_buffer(&(sg_buffer_desc){ .usage.copy_dst = true, .size = 64 });
+    sg_buffer staging = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 64,
     });
-    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_buffer staging_index = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 64,
+    });
+    T(sg_query_buffer_state(unsealed) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_buffer_state(transient) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(copy_dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(staging) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(staging_index) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_buffer_usage_stream_expect_no_data) {
+// storage buffers can be initialized by compute shaders, so they don't need data
+// (the storage buffer feature itself is backend-specific, so only check for the absence of EXPECT_DATA)
+UTEST(sokol_gfx, make_buffer_storage_no_data_ok) {
     setup(&(sg_desc){0});
-    const uint32_t data[16] = {0};
-    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
-        .usage.dynamic_update = true,
-        .data = SG_RANGE(data),
-    });
-    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_NO_DATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    for (int i = 0; i < num_log_called; i++) {
+        T(log_items[i] != SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    }
     sg_shutdown();
 }
 
@@ -2078,23 +3110,23 @@ UTEST(sokol_gfx, make_image_validate_rt_immutable) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .usage = {
             .color_attachment = true,
-            .dynamic_update = true,
+            .copy_dst = true,
         },
         .width = 8,
         .height = 8,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_EXPECT_IMMUTABLE);
-    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_DYNAMIC_UPDATE_VS_ATTACHMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_COPYDST_VS_ATTACHMENT);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
+UTEST(sokol_gfx, make_image_validate_copy_dst_no_data) {
     setup(&(sg_desc){0});
     uint32_t pixels[8][8] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
         .data.mip_levels[0] = SG_RANGE(pixels),
@@ -2105,17 +3137,24 @@ UTEST(sokol_gfx, make_image_validate_dynamic_no_data) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_compressed_immutable) {
+UTEST(sokol_gfx, make_image_compressed_writable) {
     setup(&(sg_desc){0});
-    sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+    // compressed images don't need to be immutable
+    sg_image img0 = sg_make_image(&(sg_image_desc){
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
     });
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_COMPRESSED_IMMUTABLE);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    sg_image img1 = sg_make_image(&(sg_image_desc){
+        .usage.write_transient = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img0) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img1) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
@@ -2430,7 +3469,7 @@ UTEST(sokol_gfx, make_view_validate_3dslice) {
 UTEST(sokol_gfx, make_view_validate_image_no_usage) {
     setup(&(sg_desc){0});
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .usage.dynamic_update = true,
+        .usage.copy_dst = true,
         .width = 8,
         .height = 8,
     });
@@ -2981,5 +4020,605 @@ UTEST(sokol_gfx, draw_write_image_transient_ok) {
     T(num_log_called == 0);
     sg_end_pass();
     sg_commit();
+    sg_shutdown();
+}
+
+// multiple sg_write_buffer_transient() calls are allowed until the buffer is used for the first time in a frame
+UTEST(sokol_gfx, write_buffer_transient_multiple_before_bind) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    const float data[8] = {0};
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 0 } });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 32 } });
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 64 } });
+        T(num_log_called == 0);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+        sg_draw(0, 3, 1);
+        T(num_log_called == 0);
+        sg_end_pass();
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// sg_write_buffer_transient() after the buffer has been bound in the same frame is an error, but ok again in the next frame
+UTEST(sokol_gfx, write_buffer_transient_after_bind) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    const float data[8] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = buf };
+    sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+    sg_write_buffer_transient(&wr);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    reset_log_items();
+    sg_write_buffer_transient(&wr);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    reset_log_items();
+    sg_write_buffer_transient(&wr);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// multiple copies from a write-transient buffer are allowed, but not interleaved with sg_write_buffer_transient()
+UTEST(sokol_gfx, write_buffer_transient_vs_copy) {
+    setup(&(sg_desc){0});
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 1024,
+    });
+    sg_buffer dst = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .copy_dst = true }, .size = 1024 });
+    sg_image img = create_copy_dst_image(16, 16);
+    T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(dst) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    const uint8_t data[64] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = src };
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_write_buffer_transient(&wr);
+        sg_write_buffer_transient(&wr);
+        // any mix of copies to buffers and images
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 64 });
+        sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 32 });
+        T(num_log_called == 0);
+        // a write after the first copy is an error
+        sg_write_buffer_transient(&wr);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+        // ...and more copies are still ok
+        reset_log_items();
+        sg_copy_buffer_to_buffer(&(sg_copy_buffer_to_buffer_desc){ .src.buffer = src, .dst.buffer = dst, .size = 16 });
+        T(num_log_called == 0);
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// the copy-before-write rule also applies when the first copy goes to an image
+UTEST(sokol_gfx, write_buffer_transient_after_copy_to_image) {
+    setup(&(sg_desc){0});
+    set_copy_buffer_to_image_features(true, true, false);
+    sg_buffer src = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true },
+        .size = 1024,
+    });
+    sg_image img = create_copy_dst_image(16, 16);
+    const uint8_t data[64] = {0};
+    const sg_write_buffer_desc wr = { .src.data = SG_RANGE(data), .dst.buffer = src };
+    sg_write_buffer_transient(&wr);
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = src, .dst.image = img });
+    T(num_log_called == 0);
+    sg_write_buffer_transient(&wr);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+// same rules for write-transient images: multiple writes before first bind, none after
+UTEST(sokol_gfx, write_image_transient_multiple_before_bind) {
+    setup(&(sg_desc){0});
+    write_transient_image_setup_t s = create_write_transient_image_setup();
+    const uint32_t pixels[8*4] = {0};
+    // write the upper and lower half of the 8x8 image separately
+    const sg_write_image_desc wr_top = {
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 8 * 4, .bytes_per_slice = 8 * 4 * 4 },
+        .dst = { .image = s.img, .y = 0 },
+        .size = { .width = 8, .height = 4, .num_slices = 1 },
+    };
+    sg_write_image_desc wr_bottom = wr_top;
+    wr_bottom.dst.y = 4;
+    for (int frame = 0; frame < 2; frame++) {
+        reset_log_items();
+        sg_begin_pass(WRITE_TRANSIENT_TEST_PASS);
+        sg_write_image_transient(&wr_top);
+        sg_write_image_transient(&wr_bottom);
+        sg_write_image_transient(&wr_top);
+        T(num_log_called == 0);
+        sg_apply_pipeline(s.pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .views[0] = s.view, .samplers[0] = s.smp });
+        sg_draw(0, 3, 1);
+        T(num_log_called == 0);
+        // write after bind is an error
+        sg_write_image_transient(&wr_bottom);
+        T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+        T(num_log_called == 2);
+        sg_end_pass();
+        sg_commit();
+    }
+    sg_shutdown();
+}
+
+// multiple sg_write_buffer_unsealed() calls are allowed while the buffer is unsealed, but not after sg_seal_buffer()
+UTEST(sokol_gfx, write_buffer_unsealed_only_while_unsealed) {
+    setup(&(sg_desc){0});
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_unsealed = true }, .size = 128 });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t data[64] = {0};
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 0 } });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst = { .buffer = buf, .offset = 64 } });
+    T(num_log_called == 0);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_dst_range_with_default_size) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[8*8] = {0};
+
+    // a destination offset at the edge of the miplevel defaults the write size to zero
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst = { .image = img, .x = 8 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_WIDTH);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_X_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst = { .image = img, .y = 8 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_HEIGHT);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_Y_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst = { .image = img, .slice = 1 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_NUMSLICES);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_SLICE_RANGE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+
+    // negative bytes-per-row must be rejected by validation and not assert in the bytes-per-slice multiple check
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = -32, .bytes_per_slice = 256 },
+        .dst.image = img,
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERROW);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERSLICE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    reset_log_items();
+
+    // the default write size covers the rest of the miplevel
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst = { .image = img, .x = 4, .y = 4 } });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_bytes_per_row_too_small) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[16*16] = {0};
+
+    // 16 pixel wide write needs at least 64 bytes per row
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 32, .bytes_per_slice = 32 * 16 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERROW_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but a 32 byte row pitch is enough for an 8 pixel wide write
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 32, .bytes_per_slice = 32 * 16 },
+        .dst.image = img,
+        .size = { .width = 8, .height = 16 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_bytes_per_slice_too_small) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[16*16] = {0};
+
+    // 16 rows with 64 bytes per row need at least 1024 bytes per slice
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 64, .bytes_per_slice = 64 * 8 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERSLICE_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // ...but 512 bytes per slice are enough for an 8 row write
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 64, .bytes_per_slice = 64 * 8 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 8 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// tiny pitches must not slip through the read-overflow check and cause the
+// backend to read past the end of the source data
+UTEST(sokol_gfx, write_image_tiny_pitches_rejected) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_transient = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    const uint32_t pixel = 0;
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(pixel), .bytes_per_row = 4, .bytes_per_slice = 4 },
+        .dst.image = img,
+        .size = { .width = 8, .height = 8 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERROW_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERSLICE_TOO_SMALL);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_compressed_pitches) {
+    setup(&(sg_desc){0});
+    // 16x16 BC1: 4x4 blocks of 8 bytes, 32 byte row pitch, 128 byte slice pitch
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t blocks[128] = {0};
+
+    // a block-aligned row pitch smaller than 4 blocks is too small
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(blocks), .bytes_per_row = 16, .bytes_per_slice = 64 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERROW_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    // the slice pitch must cover 4 block-rows, not 16 pixel rows
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(blocks), .bytes_per_row = 32, .bytes_per_slice = 64 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERSLICE_TOO_SMALL);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src = { .data = SG_RANGE(blocks), .bytes_per_row = 32, .bytes_per_slice = 128 },
+        .dst.image = img,
+        .size = { .width = 16, .height = 16 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_compressed_small_mips) {
+    setup(&(sg_desc){0});
+    // 24x24 BC1 with miplevels 24, 12, 6, 3, 1
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 24,
+        .height = 24,
+        .num_mipmaps = 5,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t blocks[512] = {0};
+
+    // default-sized writes into miplevels smaller than one block are allowed
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(blocks), .dst = { .image = img, .mip_level = 3 } });
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(blocks), .dst = { .image = img, .mip_level = 4 } });
+    T(num_log_called == 0);
+
+    // a non-block-multiple size is allowed when the write reaches the miplevel edge (6x6 miplevel)
+    sg_write_image_desc desc = {
+        .src.data = SG_RANGE(blocks),
+        .dst = { .image = img, .mip_level = 2, .x = 4, .y = 4 },
+        .size = { .width = 2, .height = 2 },
+    };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+    desc.dst.x = 0;
+    desc.dst.y = 0;
+    desc.size = (sg_image_extent){ .width = 6, .height = 6 };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+
+    // ...but not when the write ends inside the miplevel
+    desc.size = (sg_image_extent){ .width = 2, .height = 6 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.size = (sg_image_extent){ .width = 6, .height = 2 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+
+    // the same rules in the 3x3 miplevel
+    desc.dst.mip_level = 3;
+    desc.size = (sg_image_extent){ .width = 3, .height = 3 };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+    desc.size = (sg_image_extent){ .width = 2, .height = 2 };
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_WIDTH_MULTIPLE);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_HEIGHT_MULTIPLE);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_compressed_dst_alignment) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint8_t blocks[128] = {0};
+
+    // block-aligned destination offsets are fine
+    sg_write_image_desc desc = {
+        .src.data = SG_RANGE(blocks),
+        .dst = { .image = img, .x = 4, .y = 8 },
+        .size = { .width = 4, .height = 4 },
+    };
+    sg_write_image_unsealed(&desc);
+    T(num_log_called == 0);
+
+    // unaligned destination offsets are rejected, even when the write reaches the miplevel edge
+    desc.dst.x = 2;
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_X_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    desc.dst.x = 4;
+    desc.dst.y = 6;
+    desc.size.height = 10;
+    sg_write_image_unsealed(&desc);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_DST_Y_ALIGNMENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, write_image_uncompressed_unaligned_ok) {
+    setup(&(sg_desc){0});
+    // the block alignment rules don't apply to uncompressed formats
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 16,
+        .height = 16,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[16 * 16] = {0};
+    sg_write_image_unsealed(&(sg_write_image_desc){
+        .src.data = SG_RANGE(pixels),
+        .dst = { .image = img, .x = 3, .y = 5 },
+        .size = { .width = 7, .height = 9 },
+    });
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// a buffer without usage.write_unsealed is never in UNSEALED state, so this is
+// rejected by the resource state check before the usage validation is reached
+UTEST(sokol_gfx, write_buffer_unsealed_wrong_usage) {
+    setup(&(sg_desc){0});
+    const uint8_t init_data[128] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .usage.vertex_buffer = true, .data = SG_RANGE(init_data) });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    const uint8_t data[64] = {0};
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+// same for images, writing is done per region
+UTEST(sokol_gfx, write_image_unsealed_only_while_unsealed) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.write_unsealed = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    const uint32_t pixels[8*4] = {0};
+    const sg_write_image_desc wr_top = {
+        .src = { .data = SG_RANGE(pixels), .bytes_per_row = 8 * 4, .bytes_per_slice = 8 * 4 * 4 },
+        .dst = { .image = img, .y = 0 },
+        .size = { .width = 8, .height = 4, .num_slices = 1 },
+    };
+    sg_write_image_desc wr_bottom = wr_top;
+    wr_bottom.dst.y = 4;
+    sg_write_image_unsealed(&wr_top);
+    sg_write_image_unsealed(&wr_bottom);
+    T(num_log_called == 0);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    sg_seal_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_write_image_unsealed(&wr_top);
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_UNSEALED);
+    T(num_log_called == 1);
+    sg_shutdown();
+}
+
+// write functions check the resource state outside the validation layer, and before
+// the write desc defaults are resolved (which require a valid image pixel format)
+static void test_write_resource_state(int* utest_result) {
+    const uint32_t data[8*8] = {0};
+    sg_buffer valid_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true }, .size = sizeof(data) });
+    sg_buffer unsealed_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_unsealed = true }, .size = sizeof(data) });
+    sg_buffer alloc_buf = sg_alloc_buffer();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_buffer dead_buf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true }, .size = sizeof(data) });
+    sg_destroy_buffer(dead_buf);
+    sg_image valid_img = sg_make_image(&(sg_image_desc){ .usage.write_transient = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_image unsealed_img = sg_make_image(&(sg_image_desc){ .usage.write_unsealed = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_image alloc_img = sg_alloc_image();
+    sg_image failed_img = sg_alloc_image();
+    sg_fail_image(failed_img);
+    sg_image dead_img = sg_make_image(&(sg_image_desc){ .usage.write_transient = true, .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8 });
+    sg_destroy_image(dead_img);
+    T(sg_query_buffer_state(valid_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(unsealed_buf) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_buffer_state(alloc_buf) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_buffer_state(failed_buf) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_buffer_state(dead_buf) == SG_RESOURCESTATE_INVALID);
+    T(sg_query_image_state(valid_img) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(unsealed_img) == SG_RESOURCESTATE_UNSEALED);
+    T(sg_query_image_state(alloc_img) == SG_RESOURCESTATE_ALLOC);
+    T(sg_query_image_state(failed_img) == SG_RESOURCESTATE_FAILED);
+    T(sg_query_image_state(dead_img) == SG_RESOURCESTATE_INVALID);
+    reset_log_items();
+
+    // sg_write_buffer_transient() requires VALID state
+    const sg_buffer wbt_bufs[3] = { unsealed_buf, alloc_buf, failed_buf };
+    for (int i = 0; i < 3; i++) {
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = wbt_bufs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_TRANSIENT_BUFFER_VALID);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = dead_buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_TRANSIENT_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_buffer_unsealed() requires UNSEALED state
+    const sg_buffer wbu_bufs[3] = { valid_buf, alloc_buf, failed_buf };
+    for (int i = 0; i < 3; i++) {
+        sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = wbu_bufs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_UNSEALED);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = dead_buf });
+    T(log_items[0] == SG_LOGITEM_WRITE_BUFFER_UNSEALED_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_image_transient() requires VALID state
+    const sg_image wit_imgs[3] = { unsealed_img, alloc_img, failed_img };
+    for (int i = 0; i < 3; i++) {
+        sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = wit_imgs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_TRANSIENT_IMAGE_VALID);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_TRANSIENT_IMAGE_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // sg_write_image_unsealed() requires UNSEALED state
+    const sg_image wiu_imgs[3] = { valid_img, alloc_img, failed_img };
+    for (int i = 0; i < 3; i++) {
+        sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = wiu_imgs[i] });
+        T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_UNSEALED);
+        T(num_log_called == 1);
+        reset_log_items();
+    }
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = dead_img });
+    T(log_items[0] == SG_LOGITEM_WRITE_IMAGE_UNSEALED_IMAGE_ALIVE);
+    T(num_log_called == 1);
+    reset_log_items();
+
+    // and the resources in the right state can be written
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = valid_buf });
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = unsealed_buf });
+    sg_write_image_transient(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = valid_img });
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(data), .dst.image = unsealed_img });
+    T(num_log_called == 0);
+}
+
+UTEST(sokol_gfx, write_resource_state) {
+    setup(&(sg_desc){0});
+    test_write_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// ...and the same must happen with validation disabled
+UTEST(sokol_gfx, write_resource_state_no_validation) {
+    setup(&(sg_desc){ .disable_validation = true });
+    test_write_resource_state(utest_result);
     sg_shutdown();
 }

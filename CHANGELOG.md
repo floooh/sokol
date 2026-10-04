@@ -1,5 +1,192 @@
 ## Updates
 
+### 04-Oct-2026
+
+This update implements the next step of the new sokol-gfx resource update API
+which now allows to copy data between buffers and from buffers into images.
+
+This is a breaking change if you have been using the old `sg_update_*` and
+`sg_append_*` functions with the remaining 'dynamic update usage', and
+it also required to slightly change the sokol_imgui.h API.
+
+The update touches the following headers:
+- public API changes in sokol_gfx.h and sokol_imgui.h
+- internal-only changes in sokol_fontstash.h, sokol_framebuffer.h, sokol_shape.h
+  and sokol_gfx_imgui.h
+
+The change recipe for sokol_imgui.h first because that's much smaller:
+
+The function `simgui_render()` had to be split into two functions `simgui_flush()`
+(which needs to be called outside a sokol-gfx pass), and `simgui_draw()`
+(which must be called inside a sokol-gfx render pass, like before `simgui_render()`).
+
+E.g. the old sokol_imgui.h rendering code:
+
+```c
+sg_begin_pass(...);
+// ...
+simgui_render();
+sg_end_pass();
+```
+
+...needs to be changed like this:
+
+```c
+simgui_flush();
+sg_begin_pass(...);
+// ...
+simgui_draw();
+sg_end_pass();
+```
+
+If possible, put the `simgui_flush()` call as late in a frame as possible
+(ideally right before the render pass, not right after the last Dear ImGui
+API call).
+
+Now on to the sokol_gfx.h changes:
+
+The main additions to sokol_gfx.h are two new functions and a new buffer
+type, together these replace all use cases of the old update API (which
+in turn has been removed):
+
+- `sg_copy_buffer_to_buffer()`: to copy data between buffers (must be called outside passes)
+- `sg_copy_buffer_to_image()`: to copy data from a buffer into an image (must
+also be called outside passes)
+- A new buffer usage flag `sg_buffer_usage.staging_buffer` (and a special
+flavour to workaround a WebGL2 restriction: `.staging_index_buffer`). Staging
+buffers cannot be used for render- or compute-operations (e.g. they cannot be
+bound via `sg_apply_bindings()`). The only valid operations on staging buffers
+are `sg_write_buffer_transient()` calls to write transient data into the staging
+buffers, and then copy that data out in the same frame into another buffer or
+image object to store that data persistently.
+
+This concept of uploading data persistently into GPU resources via an
+intermediate staging buffer is quite similar to SDL3's concept of transfer
+buffers, but the main reason why staging buffers had to be added were the
+surprising amount of feature gaps, driver bugs and other restrictions I stumbled
+over in the native 3D APIs, a few 'highlights':
+
+- D3D11 doesn't allow to copy data from GPU buffers into textures at all,
+  while all other 3D APIs (even GLES3.0 and WebGL2) support this operation
+  without problems.
+- The Apple GL driver has a bug which ignores a source offset when copying
+  texture data from a pixel unpack buffer.
+- On WebGPU, copying data from a buffer into a texture requires a row-pitch
+  of at least 256 bytes.
+- WebGL2 cannot copy data between index buffers and other buffer types
+  (and a buffer can not 'change roles' after it was first bound)
+
+The old sokol_gfx.h resource update API has been removed completely:
+
+- The functions `sg_update_buffer`, `sg_append_buffer`, `sg_update_image`,
+  `sg_query_buffer_overflow` and `sg_query_buffer_will_overflow`.
+- The usage flags `sg_buffer_usage.dynamic_update` and `sg_image_usage.dynamic_update`.
+
+The last remaining use case of those functions (uploading data persistently
+into buffers and images) is now performed with a combination of
+`sg_write_buffer_transient()` into a staging buffer followed by
+a call to `sg_copy_buffer_to_buffer()` or `sg_copy_buffer_to_image()`,
+but note that those calls cannot be interleaved. All write-transient
+operations on the same staging buffer *must* happen before the first
+call of `sg_copy_buffer_to_buffer()` or `sg_copy_buffer_to_image()`
+with that staging buffer as source.
+
+For many more details, caveats and code snippets see the updated header documentation
+in sokol_gfx.h:
+
+- the new doc section: `ON COPYING DATA BETWEEN RESOURCES`
+- the new doc section: `ON UPLOADING PERSISTENT DATA INTO RESOURCES`
+- the updated doc headers of the structs `sg_buffer_usage` and `sg_image_usage`
+- the doc headers of the new structs: `sg_copy_buffer_to_buffer_desc`
+  and `sg_copy_buffer_to_image_desc`
+
+For example code of the new staged upload process see:
+
+- the new sample [sapp-staging](https://floooh.github.io/sokol-html5/staging-sapp.html),
+  this uploads vertex- and index-chunks via small staging buffers into sections
+  of large vertex- and index-buffers.
+- for examples of how to manage a dynamic texture atlas, see the updated sokol_imgui.h
+  and sokol_fontstash.h headers (in sokol_imgui.h search for `_simgui_update_textures`,
+  and in sokol_fontstash.h search for `sfons_flush`)
+
+The sokol_gfx.h public API changes in detail:
+
+- a new runtime feature flag `sg_features.copy_buffer_to_image_relaxed_buffer_type`,
+  when this is false, `sg_copy_buffer_to_image()` only accepts staging buffers as source
+  (this is the case on D3D11)
+- a new runtime feature flag `sg_features.copy_buffer_to_image_relaxed_bytes_per_row`,
+  when this is false, the row-pitch of image data in non-staging(!) buffers must
+  be a multiple of 256 (this is the above mentioned WebGPU restriction)
+- changes in `sg_buffer_usage`:
+    - new flag `.staging_buffer`, discussed above
+    - new flag `.staging_index_buffer`, a special flavour of staging buffer
+      required for WebGL2 when uploading data into an index buffer
+    - `.dynamic_update` has been removed (remnant of the old update API)
+    - new flag `.copy_src`, this must be set for buffers used as
+      source in the `sg_copy_buffer_to_*()` functions
+    - new flag `.copy_dst`, this must be set for buffers used as
+      destination in `sg_copy_buffer_to_buffer()`
+    - `.immutable` has been removed, the immutable flag was actually redundant
+      and could be inferred from the other flags, and besides the concept of
+      special 'immutable' buffers only ever existed in D3D11
+- changed in `sg_image_usage`:
+    - `.dynamic_update` has been removed
+    - `.copy_src` and `.copy_dst` have been added (note that `.copy_src` currently
+      isn't used, because the associated `sg_copy_image_to_*()` are still missing
+      (those will be added in one of the next updates)
+    - the usage flag `.immutable` still exists but has been deprecated, it will
+      be removed with the update which adds the missing `sg_copy_image_to_*()`
+      functions
+- a new enum `sg_pass_state` and function `sg_query_pass_state()` has been added,
+  this can be used to check whether sokol_gfx.h is currently in a pass (and
+  what type of pass)
+- a struct `sg_buffer_image_location` has been added, this is similar to the
+  existing `sg_buffer_location`, but adds image data layout items `.bytes_per_row`
+  and `.bytes_per_slice`, used to define the source data in `sg_copy_buffer_to_image()`
+- a struct `sg_copy_buffer_to_buffer_desc` has been added, this is the parameter
+  to the function `sg_copy_buffer_to_buffer()`
+- a struct `sg_copy_buffer_to_image_desc` has been added, likewise, parameter
+  for `sg_copy_buffer_to_image()`
+
+
+And some more esoteric changes, which probably/hopefully affect nobody:
+
+- in the structs `sg_buffer_desc` and `sg_image_desc`, the slots for injecting
+  native 3D API resources are no longer arrays, this change was necessary because
+  staging resources may now not actually have a 3D API backing resource:
+    - `sg_buffer_desc.gl_buffers[SG_NUM_INFLIGHT_FRAMES]` => `sg_buffer_desc.gl_buffer`
+    - `sg_buffer_desc.mtl_buffers[SG_NUM_INFLIGHT_FRAMES]` => `sg_buffer_desc.mtl_buffer`
+    - `sg_image_desc.gl_textures[SG_NUM_INFLIGHT_FRAMES]` => `sg_image_desc.gl_texture`
+    - `sg_image_desc.mtl_textures[SG_NUM_INFLIGHT_FRAMES]` => `sg_image_desc.mtl_texture`
+- it is no longer legal to inject native resources into buffers and images
+  with `.write_transient` usage
+- `sg_buffer_info` and `sg_image_info`: struct items that no longer make sense have been removed
+- `sg_frame_stats` has been updated to reflect the new resource update API
+
+...also some minor unrelated 'drive-by' bugfixes in sokol_gfx.h
+
+- the Metal implementation of `sg_begin_pass` stencil attachment store action
+  was actually taken from the depth attachment
+- in the GL backend, creating a compressed texture without initial data is
+  now allowed (e.g. no longer asserts)
+- in the `sg_write_buffer_*` functions the default write size was computed
+  wrong in case of `.src.offset > 0`
+
+And finally a metric shitton of validation checks have been added, not only for
+the new `sg_copy_*` functions, but also for the existing `sg_write_*` functions.
+
+PR link: https://github.com/floooh/sokol/pull/1608
+
+Also, don't be scared by the 10k touched lines of code in the PR, the actual
+change is less than 2k of 'organic' lines of code touched in the sokol headers.
+The rest is LLM-maintained new testing code to dramatically increase test
+coverage in the D3D11, GL and Metal backends (coverage went from around 50% to
+around 90% on average). This is building on top of the recently created GL,
+D3D11 and Metal mock libraries, with WebGPU and Vulkan mocks to follow
+'soon-ish'.
+
+Over and out :)
+
 ### 14-Sep-2026
 
 - sokol_app.h x11: the mouse lock code has been rewritten to match the

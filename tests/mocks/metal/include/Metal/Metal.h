@@ -730,6 +730,25 @@ typedef struct {
 - (void)dispatchThreadgroups:(MTLSize)threadgroupsPerGrid threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup;
 @end
 
+//== MTLBlitCommandEncoder.h ===================================================
+
+@protocol MTLBlitCommandEncoder <MTLCommandEncoder>
+- (void)copyFromBuffer:(id<MTLBuffer> _Nonnull)sourceBuffer
+          sourceOffset:(NSUInteger)sourceOffset
+              toBuffer:(id<MTLBuffer> _Nonnull)destinationBuffer
+     destinationOffset:(NSUInteger)destinationOffset
+                  size:(NSUInteger)size;
+- (void)copyFromBuffer:(id<MTLBuffer> _Nonnull)sourceBuffer
+          sourceOffset:(NSUInteger)sourceOffset
+     sourceBytesPerRow:(NSUInteger)sourceBytesPerRow
+   sourceBytesPerImage:(NSUInteger)sourceBytesPerImage
+            sourceSize:(MTLSize)sourceSize
+             toTexture:(id<MTLTexture> _Nonnull)destinationTexture
+      destinationSlice:(NSUInteger)destinationSlice
+      destinationLevel:(NSUInteger)destinationLevel
+     destinationOrigin:(MTLOrigin)destinationOrigin;
+@end
+
 //== MTLDrawable.h =============================================================
 
 @protocol MTLDrawable <NSObject>
@@ -748,6 +767,7 @@ typedef void (^MTLCommandBufferHandler)(id<MTLCommandBuffer> _Nonnull);
 - (void)presentDrawable:(id<MTLDrawable> _Nonnull)drawable;
 - (id<MTLRenderCommandEncoder> _Nullable)renderCommandEncoderWithDescriptor:(MTLRenderPassDescriptor* _Nonnull)renderPassDescriptor;
 - (id<MTLComputeCommandEncoder> _Nullable)computeCommandEncoder;
+- (id<MTLBlitCommandEncoder> _Nullable)blitCommandEncoder;
 @end
 
 //== MTLCommandQueue.h =========================================================

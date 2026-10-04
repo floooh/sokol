@@ -270,12 +270,25 @@ static gl_mock_buffer_info_t* _glm_cur_buf(GLenum target) {
         case GL_ARRAY_BUFFER: name = _glm.bindings.array_buffer; break;
         case GL_ELEMENT_ARRAY_BUFFER: name = _glm.bindings.element_array_buffer; break;
         case GL_SHADER_STORAGE_BUFFER: name = _glm.bindings.shader_storage_buffer; break;
+        case GL_COPY_READ_BUFFER: name = _glm.bindings.copy_read_buffer; break;
+        case GL_COPY_WRITE_BUFFER: name = _glm.bindings.copy_write_buffer; break;
+        case GL_PIXEL_UNPACK_BUFFER: name = _glm.bindings.pixel_unpack_buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, name)) {
         return &_glm.buffer[_glm_idx(name)];
     }
     return 0;
+}
+
+// count a glTexSubImage* / glCompressedTexSubImage* call, and whether
+// the source was the buffer bound to GL_PIXEL_UNPACK_BUFFER
+static void _glm_count_subimage(gl_mock_texture_info_t* tex) {
+    tex->num_subimage++;
+    if (_glm.bindings.pixel_unpack_buffer != 0) {
+        tex->num_subimage_unpack_buffer++;
+        tex->last_unpack_buffer = _glm.bindings.pixel_unpack_buffer;
+    }
 }
 
 static gl_mock_framebuffer_info_t* _glm_fb_info(GLuint name) {
@@ -374,6 +387,9 @@ static void _glm_unbind_buffer(GLuint name) {
     if (_glm.bindings.array_buffer == name) { _glm.bindings.array_buffer = 0; }
     if (_glm.bindings.element_array_buffer == name) { _glm.bindings.element_array_buffer = 0; }
     if (_glm.bindings.shader_storage_buffer == name) { _glm.bindings.shader_storage_buffer = 0; }
+    if (_glm.bindings.copy_read_buffer == name) { _glm.bindings.copy_read_buffer = 0; }
+    if (_glm.bindings.copy_write_buffer == name) { _glm.bindings.copy_write_buffer = 0; }
+    if (_glm.bindings.pixel_unpack_buffer == name) { _glm.bindings.pixel_unpack_buffer = 0; }
     for (int i = 0; i < GL_MOCK_MAX_BUFFER_BINDINGS; i++) {
         if (_glm.sbuf_bindings[i].buffer == name) {
             memset(&_glm.sbuf_bindings[i], 0, sizeof(_glm.sbuf_bindings[i]));
@@ -718,6 +734,9 @@ void glBindBuffer(GLenum target, GLuint buffer) {
         case GL_ARRAY_BUFFER: _glm.bindings.array_buffer = buffer; break;
         case GL_ELEMENT_ARRAY_BUFFER: _glm.bindings.element_array_buffer = buffer; break;
         case GL_SHADER_STORAGE_BUFFER: _glm.bindings.shader_storage_buffer = buffer; break;
+        case GL_COPY_READ_BUFFER: _glm.bindings.copy_read_buffer = buffer; break;
+        case GL_COPY_WRITE_BUFFER: _glm.bindings.copy_write_buffer = buffer; break;
+        case GL_PIXEL_UNPACK_BUFFER: _glm.bindings.pixel_unpack_buffer = buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, buffer)) {
@@ -880,7 +899,7 @@ void glTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset, G
     _GLM_REC(glTexSubImage2D, _glm_ai(target), _glm_ai(level), _glm_ai(xoffset), _glm_ai(yoffset), _glm_ai(width), _glm_ai(height), _glm_ai(format), _glm_ai(type), _glm_ap(pixels));
     gl_mock_texture_info_t* tex = _glm_cur_tex(target);
     if (tex) {
-        tex->num_subimage++;
+        _glm_count_subimage(tex);
     }
 }
 
@@ -888,7 +907,7 @@ void glTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, G
     _GLM_REC(glTexSubImage3D, _glm_ai(target), _glm_ai(level), _glm_ai(xoffset), _glm_ai(yoffset), _glm_ai(zoffset), _glm_ai(width), _glm_ai(height), _glm_ai(depth), _glm_ai(format), _glm_ai(type), _glm_ap(pixels));
     gl_mock_texture_info_t* tex = _glm_cur_tex(target);
     if (tex) {
-        tex->num_subimage++;
+        _glm_count_subimage(tex);
     }
 }
 
@@ -924,7 +943,7 @@ void glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint 
     _GLM_REC(glCompressedTexSubImage2D, _glm_ai(target), _glm_ai(level), _glm_ai(xoffset), _glm_ai(yoffset), _glm_ai(width), _glm_ai(height), _glm_ai(format), _glm_ai(imageSize), _glm_ap(data));
     gl_mock_texture_info_t* tex = _glm_cur_tex(target);
     if (tex) {
-        tex->num_subimage++;
+        _glm_count_subimage(tex);
     }
 }
 
@@ -932,7 +951,7 @@ void glCompressedTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint 
     _GLM_REC(glCompressedTexSubImage3D, _glm_ai(target), _glm_ai(level), _glm_ai(xoffset), _glm_ai(yoffset), _glm_ai(zoffset), _glm_ai(width), _glm_ai(height), _glm_ai(depth), _glm_ai(format), _glm_ai(imageSize), _glm_ap(data));
     gl_mock_texture_info_t* tex = _glm_cur_tex(target);
     if (tex) {
-        tex->num_subimage++;
+        _glm_count_subimage(tex);
     }
 }
 
@@ -1715,4 +1734,21 @@ void glDispatchCompute(GLuint num_groups_x, GLuint num_groups_y, GLuint num_grou
 
 void glMemoryBarrier(GLbitfield barriers) {
     _GLM_REC(glMemoryBarrier, _glm_ai(barriers));
+}
+
+void glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) {
+    _GLM_REC(glCopyBufferSubData, _glm_ai(readTarget), _glm_ai(writeTarget), _glm_ai(readOffset), _glm_ai(writeOffset), _glm_ai(size));
+    gl_mock_buffer_info_t* src = _glm_cur_buf(readTarget);
+    gl_mock_buffer_info_t* dst = _glm_cur_buf(writeTarget);
+    // a real GL raises GL_INVALID_VALUE for these, the mock asserts
+    assert(src && dst && (src != dst));
+    assert((readOffset >= 0) && (writeOffset >= 0) && (size >= 0));
+    assert((readOffset + size) <= src->size);
+    assert((writeOffset + size) <= dst->size);
+    if (src) {
+        src->num_copy_read++;
+    }
+    if (dst) {
+        dst->num_copy_write++;
+    }
 }

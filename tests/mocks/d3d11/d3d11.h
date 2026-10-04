@@ -832,6 +832,7 @@ typedef struct ID3D11DeviceContextVtbl {
     void    (STDMETHODCALLTYPE *ResolveSubresource)(ID3D11DeviceContext* self, ID3D11Resource* pDst, UINT DstSubres, ID3D11Resource* pSrc, UINT SrcSubres, DXGI_FORMAT Format);
     void    (STDMETHODCALLTYPE *IASetPrimitiveTopology)(ID3D11DeviceContext* self, D3D11_PRIMITIVE_TOPOLOGY Topology);
     void    (STDMETHODCALLTYPE *UpdateSubresource)(ID3D11DeviceContext* self, ID3D11Resource* pDst, UINT DstSubres, const D3D11_BOX* pDstBox, const void* pSrcData, UINT SrcRowPitch, UINT SrcDepthPitch);
+    void    (STDMETHODCALLTYPE *CopySubresourceRegion)(ID3D11DeviceContext* self, ID3D11Resource* pDstResource, UINT DstSubresource, UINT DstX, UINT DstY, UINT DstZ, ID3D11Resource* pSrcResource, UINT SrcSubresource, const D3D11_BOX* pSrcBox);
     void    (STDMETHODCALLTYPE *DrawIndexed)(ID3D11DeviceContext* self, UINT IndexCount, UINT StartIndexLocation, INT BaseVertexLocation);
     void    (STDMETHODCALLTYPE *DrawIndexedInstanced)(ID3D11DeviceContext* self, UINT IndexCountPerInstance, UINT InstanceCount, UINT StartIndexLocation, INT BaseVertexLocation, UINT StartInstanceLocation);
     void    (STDMETHODCALLTYPE *Draw)(ID3D11DeviceContext* self, UINT VertexCount, UINT StartVertexLocation);
