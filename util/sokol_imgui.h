@@ -2313,6 +2313,40 @@ static ImDrawData* _simgui_imgui_get_draw_data(void) {
     #endif
 }
 
+typedef struct { int x, y, w, h; } _simgui_rect_t;
+
+static bool _simgui_texture_needs_upload(const ImTextureData* tex) {
+    return (tex->Status == ImTextureStatus_WantCreate) || (tex->Status == ImTextureStatus_WantUpdates);
+}
+
+static bool _simgui_texture_wants_create(const ImTextureData* tex) {
+    return tex->Status == ImTextureStatus_WantCreate;
+}
+
+static bool _simgui_texture_wants_destroy(const ImTextureData* tex) {
+    return (tex->Status == ImTextureStatus_WantDestroy) && (tex->UnusedFrames > 0);
+}
+
+static _simgui_rect_t _simgui_texture_upload_rect(const ImTextureData* tex) {
+    _simgui_rect_t res;
+    _simgui_clear(&res, sizeof(res));
+    if (tex->Status == ImTextureStatus_WantCreate) {
+        res.w = tex->Width;
+        res.h = tex->Height;
+    } else {
+        res.x = tex->UpdateRect.x;
+        res.y = tex->UpdateRect.y;
+        res.w = tex->UpdateRect.w;
+        res.h = tex->UpdateRect.h;
+    }
+    return res;
+}
+
+// NOTE: staging happens in entire rows
+static int _simgui_texture_staging_size(const ImTextureData* tex) {
+    return _simgui_texture_upload_rect(tex).h * tex->Width * tex->BytesPerPixel;
+}
+
 static void _simgui_destroy_texture(ImTextureData* tex) {
     SOKOL_ASSERT(tex);
     const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
@@ -2326,104 +2360,128 @@ static void _simgui_destroy_texture(ImTextureData* tex) {
     _simgui_imtexturedata_setstatus(tex, ImTextureStatus_Destroyed);
 }
 
-/*
-    Use same texture update strategy as the Dear ImGui SDL3 backend:
-    An intermediate staging buffer is created and destroyed on demand
-    in the WantUpdates path, and the font atlas update goes through
-    the staging buffer via sg_write_buffer_transient() + sg_copy_buffer_to_image()
-*/
-static void _simgui_update_texture(ImTextureData* tex) {
-    SOKOL_ASSERT(tex);
-    SOKOL_ASSERT(tex->Format == ImTextureFormat_RGBA32);
-    if (tex->Status == ImTextureStatus_WantCreate) {
-        // create new sokol-gfx image, view and sampler
-        SOKOL_ASSERT(tex->TexID == 0);
-        sg_image_desc img_desc;
-        _simgui_clear(&img_desc, sizeof(img_desc));
-        img_desc.usage.copy_dst = true;
-        img_desc.width = tex->Width;
-        img_desc.height = tex->Height;
-        img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-        img_desc.label = "sokol-imgui-texture";
-        sg_image img = sg_make_image(&img_desc);
+// NOTE: staging (via sg_write_buffer_transient()) and copying (via sg_copy_buffer_to_image())
+// cannot be interleaved, so those two phases need to happen in separate loops (prepare => update)
+static void _simgui_update_textures(const ImDrawData* draw_data) {
+    SOKOL_ASSERT(draw_data && draw_data->Textures);
 
-        sg_view_desc view_desc;
-        _simgui_clear(&view_desc, sizeof(view_desc));
-        view_desc.texture.image = img;
-        view_desc.label = "sokol-imgui-texture-view";
-        sg_view view = sg_make_view(&view_desc);
+    // the prepare loop creates and destroys textures and accumulates required staging size
+    int required_staging_size = 0;
+    for (int i = 0; i < draw_data->Textures->Size; i++) {
+        ImTextureData* tex = draw_data->Textures->Data[i];
+        SOKOL_ASSERT(tex);
+        SOKOL_ASSERT(tex->Format == ImTextureFormat_RGBA32);
 
-        sg_sampler_desc smp_desc;
-        _simgui_clear(&smp_desc, sizeof(smp_desc));
-        smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
-        smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-        smp_desc.min_filter = SG_FILTER_LINEAR;
-        smp_desc.mag_filter = SG_FILTER_LINEAR;
-        smp_desc.label = "sokol-imgui-font-sampler";
-        sg_sampler smp = sg_make_sampler(&smp_desc);
+        // create new texture...
+        if (_simgui_texture_wants_create(tex)) {
+            // create new sokol-gfx image, view and sampler
+            SOKOL_ASSERT(tex->TexID == 0);
+            sg_image_desc img_desc;
+            _simgui_clear(&img_desc, sizeof(img_desc));
+            img_desc.usage.copy_dst = true;
+            img_desc.width = tex->Width;
+            img_desc.height = tex->Height;
+            img_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+            img_desc.label = "sokol-imgui-texture";
+            sg_image img = sg_make_image(&img_desc);
 
-        _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(view, smp));
-    }
-    if ((tex->Status == ImTextureStatus_WantCreate) || (tex->Status == ImTextureStatus_WantUpdates)) {
-        SOKOL_ASSERT(tex->TexID != 0);
-        const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
-        const sg_image img = sg_query_view_image(view);
-        SOKOL_ASSERT(img.id != SG_INVALID_ID);
+            sg_view_desc view_desc;
+            _simgui_clear(&view_desc, sizeof(view_desc));
+            view_desc.texture.image = img;
+            view_desc.label = "sokol-imgui-texture-view";
+            sg_view view = sg_make_view(&view_desc);
 
-        // Update full texture or selected blocks. We only ever write to textures regions which have never been used before!
-        // This backend choose to use tex->UpdateRect but you can use tex->Updates[] to upload individual regions.
-        // We could use the smaller rect on _WantCreate but using the full rect allows us to clear the texture.
-        const int upload_y = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.y;
-        const int upload_h = (tex->Status == ImTextureStatus_WantCreate) ? tex->Height : tex->UpdateRect.h;
-        const int staging_pitch = tex->Width * tex->BytesPerPixel;
-        const int staging_size = upload_h * staging_pitch;
+            sg_sampler_desc smp_desc;
+            _simgui_clear(&smp_desc, sizeof(smp_desc));
+            smp_desc.wrap_u = SG_WRAP_CLAMP_TO_EDGE;
+            smp_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+            smp_desc.min_filter = SG_FILTER_LINEAR;
+            smp_desc.mag_filter = SG_FILTER_LINEAR;
+            smp_desc.label = "sokol-imgui-font-sampler";
+            sg_sampler smp = sg_make_sampler(&smp_desc);
 
-        // staging happens for entire font texture rows
-        // one line extra 'wiggle room' in the staging buffer
-        const int staging_buf_size = staging_size + staging_pitch;
-        if (_simgui.staging_buf_size < staging_buf_size) {
-            sg_destroy_buffer(_simgui.staging_buf);
-            sg_buffer_desc buf_desc;
-            _simgui_clear(&buf_desc, sizeof(buf_desc));
-            buf_desc.usage.staging_buffer = true;
-            buf_desc.usage.write_transient = true;
-            buf_desc.usage.copy_src = true;
-            buf_desc.size = (size_t)staging_buf_size;
-            buf_desc.label = "sokol-imgui-staging-buffer";
-            _simgui.staging_buf = sg_make_buffer(&buf_desc);
-            _simgui.staging_buf_size = staging_buf_size;
+            _simgui_imtexturedata_settexid(tex, simgui_imtextureid_with_sampler(view, smp));
+        } else if (_simgui_texture_wants_destroy(tex)) {
+            SOKOL_ASSERT(tex->TexID != 0);
+            _simgui_destroy_texture(tex);
         }
 
-        // write to staging buffer (entire font texture rows)
+        // track required staging size for texture updates
+        if (_simgui_texture_needs_upload(tex)) {
+            required_staging_size += _simgui_texture_staging_size(tex);
+        }
+    }
+
+    // can exit early here when no uploads are needed
+    if (0 == required_staging_size) {
+        return;
+    }
+
+    // create or grow staging buffer if needed
+    if (_simgui.staging_buf_size < required_staging_size) {
+        // ...destroy funcs can be called with invalid handle
+        sg_destroy_buffer(_simgui.staging_buf);
+        sg_buffer_desc buf_desc;
+        _simgui_clear(&buf_desc, sizeof(buf_desc));
+        buf_desc.usage.staging_buffer = true;
+        buf_desc.usage.write_transient = true;
+        buf_desc.usage.copy_src = true;
+        buf_desc.size = (size_t)required_staging_size;
+        buf_desc.label = "sokol-imgui-staging-buffer";
+        _simgui.staging_buf = sg_make_buffer(&buf_desc);
+        _simgui.staging_buf_size = required_staging_size;
+    }
+
+    // next a loop with all writes into the staging buffer (these need to be separate
+    // from the copies), staging happens in entire font texture rows
+    size_t staging_offset = 0;
+    for (int i = 0; i < draw_data->Textures->Size; i++) {
+        ImTextureData* tex = draw_data->Textures->Data[i];
+        if (!_simgui_texture_needs_upload(tex)) {
+            continue;
+        }
+        const size_t staging_size = (size_t)_simgui_texture_staging_size(tex);
+        const _simgui_rect_t upload_rect = _simgui_texture_upload_rect(tex);
         sg_write_buffer_desc write_desc;
         _simgui_clear(&write_desc, sizeof(write_desc));
         write_desc.src.data.ptr = _simgui_imtexturedata_getpixels(tex);
         write_desc.src.data.size = (size_t)_simgui_imtexturedata_getsizeinbytes(tex);
-        write_desc.src.offset = (size_t)(upload_y * staging_pitch);
+        write_desc.src.offset = (size_t)(upload_rect.y * tex->Width * tex->BytesPerPixel);
         write_desc.dst.buffer = _simgui.staging_buf;
-        write_desc.size = (size_t)staging_size;
+        write_desc.dst.offset = staging_offset;
+        write_desc.size = staging_size;
         sg_write_buffer_transient(&write_desc);
+        staging_offset += staging_size;
+    }
 
-        // copy actual update area into font texture
-        // (also as entire font texture rows to workaround a GL driver bug on macOS)
+    // and finally the separate copy-loop
+    staging_offset = 0;
+    for (int i = 0; i < draw_data->Textures->Size; i++) {
+        ImTextureData* tex = draw_data->Textures->Data[i];
+        if (!_simgui_texture_needs_upload(tex)) {
+            continue;
+        }
+        SOKOL_ASSERT(tex->TexID != 0);
+        const sg_view view = simgui_texture_view_from_imtextureid(_simgui_imtexturedata_gettexid(tex));
+        const sg_image img = sg_query_view_image(view);
+        SOKOL_ASSERT(img.id != SG_INVALID_ID);
+        const size_t staging_size = (size_t)_simgui_texture_staging_size(tex);
+        const _simgui_rect_t upload_rect = _simgui_texture_upload_rect(tex);
+
         sg_copy_buffer_to_image_desc copy_desc;
         _simgui_clear(&copy_desc, sizeof(copy_desc));
         copy_desc.src.buffer = _simgui.staging_buf;
-        copy_desc.src.bytes_per_row = staging_pitch;
-        copy_desc.src.bytes_per_slice = staging_size;
-        copy_desc.src.offset = 0;
+        copy_desc.src.bytes_per_row = tex->Width * tex->BytesPerPixel;
+        copy_desc.src.bytes_per_slice = upload_rect.h * copy_desc.src.bytes_per_row;
+        copy_desc.src.offset = staging_offset + (size_t)(upload_rect.x * tex->BytesPerPixel);
         copy_desc.dst.image = img;
-        copy_desc.dst.x = 0;
-        copy_desc.dst.y = upload_y;
-        copy_desc.size.width = tex->Width;
-        copy_desc.size.height = upload_h;
+        copy_desc.dst.x = upload_rect.x;
+        copy_desc.dst.y = upload_rect.y;
+        copy_desc.size.width = upload_rect.w;
+        copy_desc.size.height = upload_rect.h;
         sg_copy_buffer_to_image(&copy_desc);
-
+        staging_offset += staging_size;
         _simgui_imtexturedata_setstatus(tex, ImTextureStatus_OK);
-    }
-    if ((tex->Status == ImTextureStatus_WantDestroy) && (tex->UnusedFrames > 0)) {
-        SOKOL_ASSERT(tex->TexID != 0);
-        _simgui_destroy_texture(tex);
     }
 }
 
@@ -2762,13 +2820,9 @@ SOKOL_API_IMPL void simgui_flush(void) {
     // checking the CmdLists.Size, otherwise textures might get stuck in
     // 'WantCreate' state)
     if (draw_data->Textures) {
-        for (size_t i = 0; i < (size_t)draw_data->Textures->Size; i++) {
-            ImTextureData* tex = draw_data->Textures->Data[i];
-            if (tex->Status != ImTextureStatus_OK) {
-                _simgui_update_texture(tex);
-            }
-        }
+        _simgui_update_textures(draw_data);
     }
+
     size_t vb_offset = 0;
     size_t ib_offset = 0;
     sg_write_buffer_desc write_desc;
