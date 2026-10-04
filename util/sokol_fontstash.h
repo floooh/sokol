@@ -1955,6 +1955,7 @@ static void _sfons_render_draw(void* user_ptr, const float* verts, const float* 
 static void _sfons_render_delete(void* user_ptr) {
     SOKOL_ASSERT(user_ptr);
     _sfons_t* sfons = (_sfons_t*) user_ptr;
+    sfons->staging_buf_size = 0;
     if (sfons->staging_buf.id != SG_INVALID_ID) {
         sg_destroy_buffer(sfons->staging_buf);
         sfons->staging_buf.id = SG_INVALID_ID;
