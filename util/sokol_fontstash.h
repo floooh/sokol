@@ -125,7 +125,7 @@
 
     sfons_flush(FONScontext* ctx):
         - if the font texture atlas is dirty (new glyphs had been added since
-          the last frame), this will peform a data upload into the font texture
+          the last frame), this will perform a data upload into the font texture
           via a write-transient staging buffer (sg_write_buffer_transient +
           sg_copy_buffer_to_image)
 
