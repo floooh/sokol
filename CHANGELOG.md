@@ -158,6 +158,8 @@ And some more esoteric changes, which probably/hopefully affect nobody:
     - `sg_buffer_desc.mtl_buffers[SG_NUM_INFLIGHT_FRAMES]` => `sg_buffer_desc.mtl_buffer`
     - `sg_image_desc.gl_textures[SG_NUM_INFLIGHT_FRAMES]` => `sg_image_desc.gl_texture`
     - `sg_image_desc.mtl_textures[SG_NUM_INFLIGHT_FRAMES]` => `sg_image_desc.mtl_texture`
+- it is no longer legal to inject native resources into buffers and images
+  with `.write_transient` usage
 - `sg_buffer_info` and `sg_image_info`: struct items that no longer make sense have been removed
 - `sg_frame_stats` has been updated to reflect the new resource update API
 
