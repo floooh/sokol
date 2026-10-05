@@ -61,6 +61,8 @@ Aras Pranckevičius, PC/web port via sokol ([source](https://github.com/aras-p/d
 - [How to build without a build system](https://github.com/floooh/sokol-samples#how-to-build-without-a-build-system):
 useful details for integrating the Sokol headers into your own project with your favourite C/C++ build system
 
+- [Slopa](https://slopa.io) - performant 3D MMORPG, uses sokol realtime rendering
+
 ## Core libraries
 
 - [**sokol\_gfx.h**](https://github.com/floooh/sokol/blob/master/sokol_gfx.h): 3D-API wrapper (GL/GLES3/WebGL2 + Metal + D3D11 + WebGPU + Vulkan (experimental))
