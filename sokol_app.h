@@ -12791,7 +12791,7 @@ _SOKOL_PRIVATE void _sapp_glx_init(void) {
     _sapp.glx.ARB_multisample = _sapp_glx_extsupported("GLX_ARB_multisample", exts);
     _sapp.glx.ARB_framebuffer_srgb = _sapp_glx_extsupported("GLX_ARB_framebuffer_sRGB", exts);
     if (!_sapp.glx.ARB_framebuffer_srgb) {
-        // also check EXT just to be sure (for instane the NVIDIA Windows GL driver only supports EXT_framebuffer_sRGB)
+        // also check EXT just to be sure (for instance the NVIDIA Windows GL driver only supports EXT_framebuffer_sRGB)
         _sapp.glx.ARB_framebuffer_srgb = _sapp_glx_extsupported("GLX_EXT_framebuffer_sRGB", exts);
     }
     if (_sapp_glx_extsupported("GLX_ARB_create_context", exts)) {
