@@ -8450,10 +8450,6 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
     if (desired->doublebuffer != current->doublebuffer) {
         return false;
     }
-    if (desired->srgb_capable != current->srgb_capable) {
-        return false;
-    }
-
     if ((desired->alpha_bits > 0) && (current->alpha_bits == 0)) {
         missing++;
     }
@@ -8461,6 +8457,9 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
         missing++;
     }
     if ((desired->stencil_bits > 0) && (current->stencil_bits == 0)) {
+        missing++;
+    }
+    if (desired->srgb_capable && !current->srgb_capable) {
         missing++;
     }
     if ((desired->samples > 0) && (current->samples == 0)) {
@@ -8496,6 +8495,11 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
     }
     if (desired->stencil_bits != -1) {
         extra_diff += (desired->stencil_bits - current->stencil_bits) * (desired->stencil_bits - current->stencil_bits);
+    }
+    // if srgb is not requested, still accept srgb-formats, some GL drivers
+    // report only SRGB pixel formats
+    if (!desired->srgb_capable && current->srgb_capable) {
+        extra_diff++;
     }
     if (desired->samples != -1) {
         extra_diff += (desired->samples - current->samples) * (desired->samples - current->samples);
@@ -8536,9 +8540,6 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
         if (desired->doublebuffer != current->doublebuffer) {
             continue;
         }
-        if (desired->srgb_capable != current->srgb_capable) {
-            continue;
-        }
         missing = 0;
         if (desired->alpha_bits > 0 && current->alpha_bits == 0) {
             missing++;
@@ -8547,6 +8548,9 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
             missing++;
         }
         if (desired->stencil_bits > 0 && current->stencil_bits == 0) {
+            missing++;
+        }
+        if (desired->srgb_capable && !current->srgb_capable) {
             missing++;
         }
         if (desired->samples > 0 && current->samples == 0) {
@@ -8582,6 +8586,9 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
         }
         if (desired->stencil_bits != -1) {
             extra_diff += (desired->stencil_bits - current->stencil_bits) * (desired->stencil_bits - current->stencil_bits);
+        }
+        if (!desired->srgb_capable && current->srgb_capable) {
+            extra_diff++;
         }
         if (desired->samples != -1) {
             extra_diff += (desired->samples - current->samples) * (desired->samples - current->samples);
@@ -9228,7 +9235,7 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     _sapp.wgl.arb_create_context_profile = _sapp_wgl_ext_supported("WGL_ARB_create_context_profile");
     _sapp.wgl.ext_swap_control = _sapp_wgl_ext_supported("WGL_EXT_swap_control");
     _sapp.wgl.arb_pixel_format = _sapp_wgl_ext_supported("WGL_ARB_pixel_format");
-    _sapp.wgl.arb_framebuffer_srgb = _sapp_wgl_ext_supported("WGL_ARB_framebuffer_sRGB");
+    _sapp.wgl.arb_framebuffer_srgb = _sapp_wgl_ext_supported("WGL_ARB_framebuffer_sRGB") || _sapp_wgl_ext_supported("WGL_EXT_framebuffer_sRGB");
     _sapp.wgl.MakeCurrent(_sapp.wgl.msg_dc, 0);
     _sapp.wgl.DeleteContext(rc);
 }
@@ -12783,6 +12790,10 @@ _SOKOL_PRIVATE void _sapp_glx_init(void) {
     }
     _sapp.glx.ARB_multisample = _sapp_glx_extsupported("GLX_ARB_multisample", exts);
     _sapp.glx.ARB_framebuffer_srgb = _sapp_glx_extsupported("GLX_ARB_framebuffer_sRGB", exts);
+    if (!_sapp.glx.ARB_framebuffer_srgb) {
+        // also check EXT just to be sure (for instance the NVIDIA Windows GL driver only supports EXT_framebuffer_sRGB)
+        _sapp.glx.ARB_framebuffer_srgb = _sapp_glx_extsupported("GLX_EXT_framebuffer_sRGB", exts);
+    }
     if (_sapp_glx_extsupported("GLX_ARB_create_context", exts)) {
         _sapp.glx.CreateContextAttribsARB = (PFNGLXCREATECONTEXTATTRIBSARBPROC) _sapp_glx_getprocaddr("glXCreateContextAttribsARB");
         _sapp.glx.ARB_create_context = 0 != _sapp.glx.CreateContextAttribsARB;
