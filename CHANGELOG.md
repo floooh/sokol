@@ -1,5 +1,34 @@
 ## Updates
 
+### 05-Oct-2026
+
+Critical regression bugfix for the GL backend on Windows with AMD GPUs:
+apparently AMD's Windows GL driver doesn't advertise any non-SRGB capable
+framebuffer formats. This caused the framebuffer format selection code in
+sokol_app.h to fail when a non-SRGB framebuffer was selected. The same fix
+also has been applied to the GLX code path (Linux).
+
+This behaviour existed since SRGB support was added in https://github.com/floooh/sokol/pull/1520
+(02-Jul-2026).
+
+...and a less critical fix: the NVIDIA Windows GL driver only advertises
+support for `WGL_EXT_framebuffer_sRGB`, while sokol_app.h only checked for
+`WGL_ARB_framebuffer_sRGB`. This didn't seem to have any negative effect though
+(I guess that the non-sRGB capable framebuffer formats are silently also SRGB
+capable). sokol_app.h now checks for both `WGL_ARB_framebuffer_sRGB` and
+`WGL_EXT_framebuffer_sRGB` (and also on Linux with the `GLX` variants).
+
+Many thanks to @aamorous for raising the issue (https://github.com/floooh/sokol/issues/1616).
+
+Fix is in PR: https://github.com/floooh/sokol/pull/1617.
+
+Also note: in the unlikely case that a GL driver only exposes *non-sRGB*
+formats, rendering will now be silently incorrect when the application requests
+an SRGB format (formerly the code would panic with an error though) because
+sokol_gfx.h still assumes that the framebuffer is SRGB and will enable
+`GL_FRAMEBUFFER_SRGB` (tbh I couldn't be arsed to complicate the already complex
+GLX/WGL initialization code path even more for such an esoteric situation).
+
 ### 04-Oct-2026
 
 This update implements the next step of the new sokol-gfx resource update API
