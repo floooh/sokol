@@ -9235,7 +9235,7 @@ _SOKOL_PRIVATE void _sapp_wgl_load_extensions(void) {
     _sapp.wgl.arb_create_context_profile = _sapp_wgl_ext_supported("WGL_ARB_create_context_profile");
     _sapp.wgl.ext_swap_control = _sapp_wgl_ext_supported("WGL_EXT_swap_control");
     _sapp.wgl.arb_pixel_format = _sapp_wgl_ext_supported("WGL_ARB_pixel_format");
-    _sapp.wgl.arb_framebuffer_srgb = _sapp_wgl_ext_supported("WGL_ARB_framebuffer_sRGB");
+    _sapp.wgl.arb_framebuffer_srgb = _sapp_wgl_ext_supported("WGL_ARB_framebuffer_sRGB") || _sapp_wgl_ext_supported("WGL_EXT_framebuffer_sRGB");
     _sapp.wgl.MakeCurrent(_sapp.wgl.msg_dc, 0);
     _sapp.wgl.DeleteContext(rc);
 }
