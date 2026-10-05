@@ -8450,8 +8450,15 @@ _SOKOL_PRIVATE bool _sapp_gl_select_fbconfig(_sapp_gl_fbselect* fbselect, const 
     if (desired->doublebuffer != current->doublebuffer) {
         return false;
     }
-    if (desired->srgb_capable != current->srgb_capable) {
+    // only reject a format that can't do sRGB when sRGB is requested; some
+    // drivers (AMD on Windows) report every pixel format as sRGB-capable,
+    // and sokol_gfx disables GL_FRAMEBUFFER_SRGB for a non-sRGB swapchain,
+    // so such a format is fine otherwise (but a plain one is preferred)
+    if (desired->srgb_capable && !current->srgb_capable) {
         return false;
+    }
+    if (!desired->srgb_capable && current->srgb_capable) {
+        missing++;
     }
 
     if ((desired->alpha_bits > 0) && (current->alpha_bits == 0)) {
