@@ -1404,6 +1404,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     SAPP_EVENTTYPE_FILES_DROPPED,
+    SAPP_EVENTTYPE_MAGNIFY,              // macOS only
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_event_type;
@@ -1619,7 +1620,7 @@ typedef struct sapp_event {
     sapp_keycode key_code;              // the virtual key code, only valid in KEY_UP, KEY_DOWN
     uint32_t char_code;                 // the UTF-32 character code, only valid in CHAR events
     bool key_repeat;                    // true if this is a key-repeat event, valid in KEY_UP, KEY_DOWN and CHAR
-    uint32_t modifiers;                 // current modifier keys, valid in all key-, char- and mouse-events
+    uint32_t modifiers;                 // current modifier keys, valid in all key-, char-, mouse- and MAGNIFY events
     sapp_mousebutton mouse_button;      // mouse button that was pressed or released, valid in MOUSE_DOWN, MOUSE_UP
     float mouse_x;                      // current horizontal mouse position in pixels, always valid except during mouse lock
     float mouse_y;                      // current vertical mouse position in pixels, always valid except during mouse lock
@@ -1633,6 +1634,7 @@ typedef struct sapp_event {
     int window_height;
     int framebuffer_width;              // = window_width * dpi_scale
     int framebuffer_height;             // = window_height * dpi_scale
+    float magnification;               // pinch scale delta, valid in MAGNIFY events (macOS only)
 } sapp_event;
 
 /*
@@ -6603,6 +6605,16 @@ static void _sapp_gl_make_current(void) {
             _sapp.event.scroll_y = dy;
             _sapp_call_event(&_sapp.event);
         }
+    }
+}
+- (void)magnifyWithEvent:(NSEvent*)event {
+    _sapp_gl_make_current();
+    _sapp_macos_mouse_update_from_nsevent(event, true);
+    if (_sapp_events_enabled()) {
+        _sapp_init_event(SAPP_EVENTTYPE_MAGNIFY);
+        _sapp.event.modifiers = _sapp_macos_mods(event);
+        _sapp.event.magnification = (float) event.magnification;
+        _sapp_call_event(&_sapp.event);
     }
 }
 - (void)keyDown:(NSEvent*)event {
