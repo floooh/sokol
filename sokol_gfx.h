@@ -8129,7 +8129,6 @@ typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
     uint32_t frame_index;
-    uint32_t pass_index;
     struct {
         bool valid;
         bool in_pass;
@@ -8149,6 +8148,7 @@ typedef struct {
     bool use_indexed_draw;
     bool use_instanced_draw;
     struct {
+        uint32_t pass_index;    // running count of passes (keeps counting across frames)
         uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
         uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
         bool write_buffer_transient_missing;        // used for 'deferred validation' in draw/dispatch when sg_write_buffer_transient() hasn't been called in current frame
@@ -25460,6 +25460,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         if (_sg.desc.disable_validation) {
             return true;
         }
+        _sg.validate.pass_index += 1;
         const bool is_invalid_swapchain_pass = pass->swapchain.invalid;
         const bool is_compute_pass = pass->compute;
         const bool is_swapchain_pass = !is_compute_pass && _sg_attachments_empty(&pass->attachments);
@@ -25855,9 +25856,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                         // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                             buf->cmn.validate.bind_frame_index = _sg.frame_index;
-                            buf->cmn.validate.read_render_pass_index = _sg.pass_index;
+                            buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
-                            _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.pass_index, VALIDATE_ABND_VBUF_VS_SBVIEW_READWRITE);
+                            _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index, VALIDATE_ABND_VBUF_VS_SBVIEW_READWRITE);
                             if (buf->cmn.usage.write_transient) {
                                 _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                             }
@@ -25885,9 +25886,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
                     buf->cmn.validate.bind_frame_index = _sg.frame_index;
-                    buf->cmn.validate.read_render_pass_index = _sg.pass_index;
+                    buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
-                    _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.pass_index, VALIDATE_ABND_IBUF_VS_SBVIEW_READWRITE);
+                    _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index, VALIDATE_ABND_IBUF_VS_SBVIEW_READWRITE);
                     if (buf->cmn.usage.write_transient) {
                         _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                     }
@@ -25942,11 +25943,11 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                     _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                                     buf->cmn.validate.bind_frame_index = _sg.frame_index;
                                     if (shd->cmn.views[i].sbuf_readonly) {
-                                        buf->cmn.validate.read_render_pass_index = _sg.pass_index;
-                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.write_render_pass_index != _sg.pass_index), VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
+                                        buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
+                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
                                     } else {
-                                        buf->cmn.validate.write_render_pass_index = _sg.pass_index;
-                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.read_render_pass_index != _sg.pass_index), VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
+                                        buf->cmn.validate.write_render_pass_index = _sg.validate.pass_index;
+                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.read_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
                                         _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
                                     }
                                     if (buf->cmn.usage.write_transient) {
@@ -28014,7 +28015,6 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     _sg.cur_pass.in_pass = true;
-    _sg.pass_index += 1;
     const sg_pass pass_def = _sg_pass_defaults(pass);
     _SG_TRACE_ARGS(begin_pass, &pass_def);
     if (!_sg_validate_pass_attachment_limits(&pass_def)) {
