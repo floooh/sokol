@@ -345,8 +345,8 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         T(bufptr->cmn.usage.vertex_buffer);
         T(!bufptr->cmn.usage.write_transient);
         T(!bufptr->cmn.usage.copy_dst);
-        T(bufptr->cmn.bind_frame_index == 0);
-        T(bufptr->cmn.copy_src_frame_index == 0);
+        T(bufptr->cmn.validate.bind_frame_index == 0);
+        T(bufptr->cmn.validate.copy_src_frame_index == 0);
         T(bufptr->cmn.write_transient_frame_index == 0);
         T(bufptr->cmn.num_slots == 1);
         T(bufptr->cmn.active_slot == 0);
@@ -1433,7 +1433,7 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_ok) {
         .size = 32,
     });
     T(num_log_called == 0);
-    T(_sg_lookup_buffer(src.id)->cmn.copy_src_frame_index == _sg.frame_index);
+    T(_sg_lookup_buffer(src.id)->cmn.validate.copy_src_frame_index == _sg.frame_index);
     sg_shutdown();
 }
 
@@ -3672,6 +3672,7 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_VERTEX;
+        desc.views[i].storage_buffer.readonly = true;
     }
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
