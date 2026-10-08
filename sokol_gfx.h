@@ -7044,17 +7044,23 @@ typedef struct {
     int size;
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index the buffer was bound
-    uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
     uint32_t write_transient_frame_index; // last frame index when written to
+    struct {
+        uint32_t bind_frame_index;  // last frame index the buffer was bound
+        uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
+        uint32_t read_render_pass_index;    // last pass index the buffer was read in a render pass
+        uint32_t write_render_pass_index;   // last pass index the buffer was written in a render pass
+    } validate;
     sg_buffer_usage usage;
 } _sg_buffer_common_t;
 
 typedef struct {
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index the image was bound
     uint32_t write_transient_frame_index; // last frame index when written to
+    struct {
+        uint32_t bind_frame_index;  // last frame index the image was bound
+    } validate;
     sg_image_type type;
     int width;
     int height;
@@ -8119,6 +8125,7 @@ typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
     uint32_t frame_index;
+    uint32_t pass_index;
     struct {
         bool valid;
         bool in_pass;
@@ -8996,17 +9003,19 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->size = (int)desc->size;
     cmn->num_slots = desc->usage.write_transient ? SG_NUM_INFLIGHT_FRAMES : 1;
     cmn->active_slot = 0;
-    cmn->bind_frame_index = 0;
-    cmn->copy_src_frame_index = 0;
     cmn->write_transient_frame_index = 0;
+    cmn->validate.bind_frame_index = 0;
+    cmn->validate.copy_src_frame_index = 0;
+    cmn->validate.read_render_pass_index = 0;
+    cmn->validate.write_render_pass_index = 0;
     cmn->usage = desc->usage;
 }
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
     cmn->num_slots = desc->usage.write_transient ? SG_NUM_INFLIGHT_FRAMES : 1;
     cmn->active_slot = 0;
-    cmn->bind_frame_index = 0;
     cmn->write_transient_frame_index = 0;
+    cmn->validate.bind_frame_index = 0;
     cmn->type = desc->type;
     cmn->width = desc->width;
     cmn->height = desc->height;
@@ -25837,10 +25846,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (pip->cmn.vertex_buffer_layout_active[i]) {
                     _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBUF);
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                        const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
+                        _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                         _SG_VALIDATE(buf != 0, VALIDATE_ABND_VBUF_ALIVE);
                         // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                            buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                            buf->cmn.validate.read_render_pass_index = _sg.pass_index;
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
                             if (buf->cmn.usage.write_transient) {
                                 _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
@@ -25864,10 +25875,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
             if (bindings->index_buffer.id != SG_INVALID_ID) {
                 // buffer in index-buffer-slot must have index buffer usage
-                const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
+                _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_IBUF_ALIVE);
                 // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                    buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                    buf->cmn.validate.read_render_pass_index = _sg.pass_index;
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
                     if (buf->cmn.usage.write_transient) {
                         _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
@@ -25892,7 +25905,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_EXPECT_TEXVIEW);
                                 // NOTE: an invalid image ref is allowed and skips rendering
                                 if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    img->cmn.validate.bind_frame_index = _sg.frame_index;
                                     _SG_VALIDATE(img->cmn.type == shd->cmn.views[i].image_type, VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH);
                                     if (shd->cmn.views[i].multisampled) {
                                         _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE);
@@ -25919,8 +25933,12 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_EXPECT_SBVIEW);
                                 // NOTE: an invalid buffer ref is allowed and skips rendering
                                 if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                                    const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                                    if (!shd->cmn.views[i].sbuf_readonly) {
+                                    _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                                    buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                                    if (shd->cmn.views[i].sbuf_readonly) {
+                                        buf->cmn.validate.read_render_pass_index = _sg.pass_index;
+                                    } else {
+                                        buf->cmn.validate.write_render_pass_index = _sg.pass_index;
                                         _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
                                     }
                                     if (buf->cmn.usage.write_transient) {
@@ -25934,7 +25952,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_ABND_SIMGVIEW_COMPUTE_PASS_EXPECTED);
                                 // NOTE: an invalid image ref is allowed and skips rendering
                                 if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    img->cmn.validate.bind_frame_index = _sg.frame_index;
                                     _SG_VALIDATE(img->cmn.type == shd->cmn.views[i].image_type, VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH);
                                     _SG_VALIDATE(img->cmn.pixel_format == shd->cmn.views[i].access_format, VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT);
                                     if (img->cmn.usage.write_transient) {
@@ -26159,8 +26178,8 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         _sg_validate_begin();
         _SG_VALIDATE(buf->cmn.usage.write_transient, VALIDATE_WRITEBUFFERTRANSIENT_USAGE);
         // write-transient is only allowed before resource is 'used' in current frame
-        _SG_VALIDATE(buf->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
-        _SG_VALIDATE(buf->cmn.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        _SG_VALIDATE(buf->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(buf->cmn.validate.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
         // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);
@@ -26241,7 +26260,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, c
         _sg_validate_begin();
         _SG_VALIDATE(!img->cmn.usage.immutable && img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
         // write-transient is only allowed before resource is bound in current frame
-        _SG_VALIDATE(img->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(img->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
         _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
@@ -26295,7 +26314,7 @@ _SOKOL_PRIVATE bool _sg_validate_seal_image(const _sg_image_t* img) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_buf, const _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(_sg_buffer_t* src_buf, const _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(src_buf && dst_buf && desc);
         return true;
@@ -26306,6 +26325,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         SOKOL_ASSERT(src_buf && dst_buf && desc);
         SOKOL_ASSERT(src_buf->slot.state == SG_RESOURCESTATE_VALID);
         SOKOL_ASSERT(dst_buf->slot.state == SG_RESOURCESTATE_VALID);
+        src_buf->cmn.validate.copy_src_frame_index = _sg.frame_index;
         _sg_validate_begin();
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS);
         _SG_VALIDATE(desc->src.buffer.id != desc->dst.buffer.id, VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER);
@@ -26325,7 +26345,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_buf, const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(_sg_buffer_t* src_buf, const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(src_buf && dst_img && desc);
         return true;
@@ -26336,6 +26356,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         SOKOL_ASSERT(src_buf && dst_img && desc);
         SOKOL_ASSERT(src_buf->slot.state == SG_RESOURCESTATE_VALID);
         SOKOL_ASSERT(dst_img->slot.state == SG_RESOURCESTATE_VALID);
+        src_buf->cmn.validate.copy_src_frame_index = _sg.frame_index;
         _sg_validate_begin();
         const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
@@ -27985,6 +28006,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     _sg.cur_pass.in_pass = true;
+    _sg.pass_index += 1;
     const sg_pass pass_def = _sg_pass_defaults(pass);
     _SG_TRACE_ARGS(begin_pass, &pass_def);
     if (!_sg_validate_pass_attachment_limits(&pass_def)) {
@@ -28112,7 +28134,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
                 SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
                 _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                 if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
-                    buf->cmn.bind_frame_index = _sg.frame_index;
                     bnd.vbs[i] = buf;
                     bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
                 } else {
@@ -28123,7 +28144,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (bindings->index_buffer.id) {
             _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
             if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
-                buf->cmn.bind_frame_index = _sg.frame_index;
                 bnd.ib = buf;
                 bnd.ib_offset = bindings->index_buffer_offset;
             } else {
@@ -28139,15 +28159,12 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             bnd.views[i] = view;
             if (view) {
                 if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                    if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                        view->cmn.buf.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
-                    } else {
+                    // NOTE: _sg_buffer_ref_valid also checks for resource state VALID!
+                    if (!_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
                         _sg.next_draw_valid = false;
                     }
                 } else {
-                    if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                        view->cmn.img.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
-                    } else {
+                    if (!_sg_image_ref_valid(&view->cmn.img.ref)) {
                         _sg.next_draw_valid = false;
                     }
                 }
@@ -28439,7 +28456,6 @@ SOKOL_API_IMPL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc
     }
     if (_sg_validate_copy_buffer_to_buffer(src_buf, dst_buf, desc)) {
         _sg_stats_add(size_copy_buffer_to_buffer, (uint32_t)desc->size);
-        src_buf->cmn.copy_src_frame_index = _sg.frame_index;
         _sg_copy_buffer_to_buffer(src_buf, dst_buf, desc);
     }
     _SG_TRACE_ARGS(copy_buffer_to_buffer, desc);
@@ -28476,7 +28492,6 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
             desc_def.size.height,
             desc_def.size.num_slices);
         _sg_stats_add(size_copy_buffer_to_image, (uint32_t)stats_copy_size);
-        src_buf->cmn.copy_src_frame_index = _sg.frame_index;
         _sg_copy_buffer_to_image(src_buf, dst_img, &desc_def);
     }
     _SG_TRACE_ARGS(copy_buffer_to_image, desc);
