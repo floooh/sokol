@@ -7891,15 +7891,16 @@ typedef enum {
     _SG_VK_ACCESS_VERTEXBUFFER = (1<<2),
     _SG_VK_ACCESS_INDEXBUFFER = (1<<3),
     _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
-    _SG_VK_ACCESS_STORAGEBUFFER_RW = (1<<5),
-    _SG_VK_ACCESS_TEXTURE = (1<<6),
-    _SG_VK_ACCESS_STORAGEIMAGE = (1<<7),
-    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<8),
-    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<9),
-    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<11),
-    _SG_VK_ACCESS_DISCARD = (1<<12),    // in combination with attachments
-    _SG_VK_ACCESS_PRESENT = (1<<13),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE = (1<<5),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT = (1<<6),
+    _SG_VK_ACCESS_TEXTURE = (1<<7),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<8),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<9),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<11),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<12),
+    _SG_VK_ACCESS_DISCARD = (1<<13),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<14),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -20733,8 +20734,11 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
              VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
              VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     }
-    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE) {
         f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT) {
+        f |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
         f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -20792,7 +20796,7 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
     if (access & _SG_VK_ACCESS_COPY_SRC) {
         f |= VK_ACCESS_2_TRANSFER_READ_BIT;
     }
-    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+    if (access & (_SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE | _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT)) {
         f |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
@@ -20980,12 +20984,32 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     buf->vk.cur_access = new_access;
 }
 
+// needed because r/w storage buffers may be written in fragment shaders
+_SOKOL_PRIVATE void _sg_vk_render_pass_storage_barrier(VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(cmd_buf);
+    _SG_STRUCT(VkMemoryBarrier2, barrier);
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+        VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    _SG_STRUCT(VkDependencyInfo, dep_info);
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.memoryBarrierCount = 1;
+    dep_info.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const sg_pass* pass, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
     if (is_compute_pass) {
         SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
         SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
     } else {
+        _sg_vk_render_pass_storage_barrier(cmd_buf);
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
             const sg_vulkan_swapchain* vk_swapchain = &pass->swapchain.vulkan;
@@ -21055,7 +21079,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
                 _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                 _sg_vk_access_t new_access = shd->cmn.views[i].sbuf_readonly
                     ? _SG_VK_ACCESS_STORAGEBUFFER_RO
-                    : _SG_VK_ACCESS_STORAGEBUFFER_RW;
+                    : _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE;
                 _sg_vk_buffer_barrier(cmd_buf, buf, new_access);
                 _sg_track_add(&_sg.vk.track.buffers, buf->slot.id);
             } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
