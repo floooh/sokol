@@ -4936,6 +4936,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_ps_set_samplers);
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_samplers);
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_unordered_access_views);
+                _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_om_set_rts_and_uavs);
                 _sgimgui_frame_stats(prev_frame.d3d11.uniforms.num_update_subresource);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed_instanced);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed);
