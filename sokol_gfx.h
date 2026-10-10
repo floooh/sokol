@@ -5370,6 +5370,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: read/write storage buffer bindings are not allowed in vertex shaders") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT, "sg_pipeline_desc.shader: on D3D11, fragment stage read/write storage buffer UAV register slots (register(uN)) must not overlap with the color attachment slots, e.g. N must be >= sg_pipeline_desc.color_count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_LIMIT, "sg_pipeline_desc.shader: on D3D11, fragment stage read/write storage buffer UAV register slots (register(uN)) must be < sg_limits.d3d11_max_unordered_access_views)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED, "sg_pipeline_desc.depth.write_enabled cannot be true when sg_pipeline_desc.depth.pixel_format is SG_PIXELFORMAT_NONE") \
@@ -13491,6 +13493,14 @@ static inline void _sg_d3d11_OMSetRenderTargets(ID3D11DeviceContext* self, UINT 
         self->OMSetRenderTargets(NumViews, ppRenderTargetViews, pDepthStencilView);
     #else
         self->lpVtbl->OMSetRenderTargets(self, NumViews, ppRenderTargetViews, pDepthStencilView);
+    #endif
+}
+
+static inline void _sg_d3d11_OMSetRenderTargetsAndUnorderedAccessViews(ID3D11DeviceContext* self, UINT NumViews, ID3D11RenderTargetView* const *ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView* const* ppUnorderedAccessViews, const UINT* pUAVInitialCounts) {
+    #if defined(__cplusplus)
+        self->OMSetRenderTargetsAndUnorderedAccessViews(NumViews, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
+    #else
+        self->lpVtbl->OMSetRenderTargetsAndUnorderedAccessViews(self, NumViews, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
     #endif
 }
 
@@ -25255,10 +25265,19 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                     #endif
                 }
-                // read/write storage buffers in render passes are only allowed in fragment shaders
                 for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
-                    if ((shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) && (shd->cmn.views[i].stage == SG_SHADERSTAGE_VERTEX)) {
-                        _SG_VALIDATE(shd->cmn.views[i].sbuf_readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                    if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
+                        const sg_shader_stage stage = shd->cmn.views[i].stage;
+                        if (!shd->cmn.views[i].sbuf_readonly) {
+                            // read/write storage buffer bindings are not allowed in vertex shaders
+                            _SG_VALIDATE(stage != SG_SHADERSTAGE_VERTEX, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                            // on D3D11, fragment shader read/write storage buffer UAV slots must not collide
+                            // with color render target slots
+                            #if defined(SOKOL_D3D11)
+                            _SG_VALIDATE(shd->d3d11.view_register_u_n[i] >= desc->color_count, VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT);
+                            _SG_VALIDATE(shd->d3d11.view_register_u_n[i] < _sg.limits.d3d11_max_unordered_access_views, VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_LIMIT);
+                            #endif
+                        }
                     }
                 }
                 for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
