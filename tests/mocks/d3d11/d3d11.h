@@ -273,6 +273,9 @@ typedef enum D3D11_MAP {
 } D3D11_MAP;
 
 /* D3D11_CLEAR_FLAG bitmask */
+/* OMSetRenderTargetsAndUnorderedAccessViews: keep the bound RTVs and DSV */
+#define D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL 0xffffffffu
+
 #define D3D11_CLEAR_DEPTH   0x1u
 #define D3D11_CLEAR_STENCIL 0x2u
 
@@ -806,6 +809,7 @@ struct ID3D11Device { const ID3D11DeviceVtbl* lpVtbl; };
 typedef struct ID3D11DeviceContextVtbl {
     void    (STDMETHODCALLTYPE *ClearState)(ID3D11DeviceContext* self);
     void    (STDMETHODCALLTYPE *OMSetRenderTargets)(ID3D11DeviceContext* self, UINT NumViews, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView);
+    void    (STDMETHODCALLTYPE *OMSetRenderTargetsAndUnorderedAccessViews)(ID3D11DeviceContext* self, UINT NumRTVs, ID3D11RenderTargetView* const* ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView* const* ppUnorderedAccessViews, const UINT* pUAVInitialCounts);
     void    (STDMETHODCALLTYPE *RSSetState)(ID3D11DeviceContext* self, ID3D11RasterizerState* pRS);
     void    (STDMETHODCALLTYPE *OMSetDepthStencilState)(ID3D11DeviceContext* self, ID3D11DepthStencilState* pDSS, UINT StencilRef);
     void    (STDMETHODCALLTYPE *OMSetBlendState)(ID3D11DeviceContext* self, ID3D11BlendState* pBS, const FLOAT BlendFactor[4], UINT SampleMask);
