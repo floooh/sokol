@@ -4861,6 +4861,7 @@ typedef struct sg_frame_stats_d3d11_bindings {
     uint32_t num_cs_set_shader_resources;
     uint32_t num_cs_set_samplers;
     uint32_t num_cs_set_unordered_access_views;
+    uint32_t num_om_set_rts_and_uavs;
 } sg_frame_stats_d3d11_bindings;
 
 typedef struct sg_frame_stats_d3d11_uniforms {
@@ -7502,6 +7503,7 @@ typedef struct {
         ID3D11ShaderResourceView* vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
         ID3D11ShaderResourceView* fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
         ID3D11ShaderResourceView* cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
+        ID3D11UnorderedAccessView* fs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS];
         ID3D11UnorderedAccessView* cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS];
         ID3D11SamplerState* vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
         ID3D11SamplerState* fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
@@ -15547,6 +15549,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_clear(&_sg.d3d11.bnd.vb_offsets, sizeof(_sg.d3d11.bnd.vb_offsets));
         _sg_clear(&_sg.d3d11.bnd.vs_srvs, sizeof(_sg.d3d11.bnd.vs_srvs));
         _sg_clear(&_sg.d3d11.bnd.fs_srvs, sizeof(_sg.d3d11.bnd.fs_srvs));
+        _sg_clear(&_sg.d3d11.bnd.fs_uavs, sizeof(_sg.d3d11.bnd.fs_uavs));
         _sg_clear(&_sg.d3d11.bnd.vs_smps, sizeof(_sg.d3d11.bnd.vs_smps));
         _sg_clear(&_sg.d3d11.bnd.fs_smps, sizeof(_sg.d3d11.bnd.fs_smps));
     }
@@ -15570,6 +15573,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             _sg.d3d11.bnd.vb_offsets[i] = (UINT)bnd->vb_offsets[i];
         }
     }
+    bool has_fs_uavs = false;
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         const _sg_view_t* view = bnd->views[i];
         if (0 == view) {
@@ -15607,12 +15611,17 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     default: SOKOL_UNREACHABLE;
                 }
             } else {
-                SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
                 const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
                 SOKOL_ASSERT(d3d11_slot < _sg.limits.d3d11_max_unordered_access_views);
                 ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
                 SOKOL_ASSERT(d3d11_uav);
-                _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
+                SOKOL_ASSERT(stage != SG_SHADERSTAGE_VERTEX);
+                if (stage == SG_SHADERSTAGE_COMPUTE) {
+                    _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
+                } else {
+                    _sg.d3d11.bnd.fs_uavs[d3d11_slot] = d3d11_uav;
+                    has_fs_uavs = true;
+                }
             }
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
             SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
@@ -15656,6 +15665,14 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.fs_srvs);
         _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.vs_smps);
         _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.fs_smps);
+        if (has_fs_uavs) {
+            const UINT uav_start_slot = (UINT)bnd->pip->cmn.color_count;
+            const UINT num_uavs = (UINT)_sg.limits.d3d11_max_unordered_access_views - uav_start_slot;
+            _sg_d3d11_OMSetRenderTargetsAndUnorderedAccessViews(_sg.d3d11.ctx,
+                D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, 0, 0,
+                uav_start_slot, num_uavs, &_sg.d3d11.bnd.fs_uavs[uav_start_slot], 0);
+            _sg_stats_inc(d3d11.bindings.num_om_set_rts_and_uavs);
+        }
         _sg_stats_inc(d3d11.bindings.num_ia_set_vertex_buffers);
         _sg_stats_inc(d3d11.bindings.num_ia_set_index_buffer);
         _sg_stats_inc(d3d11.bindings.num_vs_set_shader_resources);
