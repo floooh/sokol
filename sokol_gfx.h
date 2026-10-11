@@ -22892,7 +22892,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     VkResult res;
     // FIXME: inject external buffer
 
-    buf->vk.cur_access = _SG_VK_ACCESS_NONE;
+    // NOTE: unlike images, the initial access mask for buffers is their
+    // default access, this is because buffers are immediately ready for
+    // any read type (unless images, which have an UNDEFINED initial image layout)
+    buf->vk.cur_access = _sg_vk_default_buffer_access_mask(buf);
 
     _SG_STRUCT(VkBufferCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -22953,6 +22956,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkResult res;
     // FIXME: injected images
 
+    // NOTE: initial access mask different from buffers, see the comment in
+    // _sg_vk_create_buffer for explanation
     img->vk.cur_access = _SG_VK_ACCESS_NONE;
 
     _SG_STRUCT(VkImageCreateInfo, create_info);
