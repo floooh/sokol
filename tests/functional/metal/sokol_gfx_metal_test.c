@@ -1566,6 +1566,33 @@ UTEST(sokol_gfx_metal, create_pipeline_dss_failed) {
     teardown();
 }
 
+UTEST(sokol_gfx_metal, create_render_pipeline_storage_buffer_mutability) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs_source",
+        .fragment_func.source = "fs_source",
+        .views[0].storage_buffer = {
+            .stage = SG_SHADERSTAGE_VERTEX, .readonly = true, .msl_buffer_n = 8,
+        },
+        .views[1].storage_buffer = {
+            .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true, .msl_buffer_n = 9,
+        },
+        .views[2].storage_buffer = {
+            .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = false, .msl_buffer_n = 10,
+        },
+    });
+    sg_pipeline pip = make_pipeline(shd);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    metal_mock_render_pipeline_info_t info = {0};
+    T(metal_mock_render_pipeline_info(sg_mtl_query_pipeline_info(pip).rps, &info));
+    T(info.vertex_buffer_mutability[MTL_VB_SLOT(0)] == MTLMutabilityImmutable);
+    T(info.vertex_buffer_mutability[8] == MTLMutabilityImmutable);
+    T(info.fragment_buffer_mutability[9] == MTLMutabilityImmutable);
+    // read/write storage buffers in the fragment stage must stay mutable
+    T(info.fragment_buffer_mutability[10] == MTLMutabilityDefault);
+    teardown();
+}
+
 UTEST(sokol_gfx_metal, create_compute_pipeline) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
