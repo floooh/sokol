@@ -21117,10 +21117,11 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
             }
             else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
                 _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                if (!buf->cmn.usage.write_transient) {
-                    SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
-                }
-                if (!shd->cmn.views[i].sbuf_readonly) {
+                if (shd->cmn.views[i].sbuf_readonly) {
+                    if (!buf->cmn.usage.write_transient) {
+                        SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                    }
+                } else {
                     SOKOL_ASSERT((buf->vk.cur_access == _sg_vk_default_buffer_access_mask(buf)) || (buf->vk.cur_access == _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT));
                     // only record new rw-access, the actual barrier will be deferred to sg_end_pass
                     buf->vk.cur_access = _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT;
