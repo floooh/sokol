@@ -8013,6 +8013,11 @@ typedef struct {
     VkQueue queue;
     uint32_t queue_family_index;
     sg_vulkan_swapchain swapchain;
+    // NOTE: once the Vulkan backend supports multiple swapchains, this will become an array:
+    struct {
+        uint32_t frame_index;
+        VkImage render_image;
+    } swapchain_track;
     VkSemaphore present_complete_sem;
     VkSemaphore render_finished_sem;
 
@@ -20858,13 +20863,13 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access) {
+_SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access, VkImageLayout vk_old_layout) {
     SOKOL_ASSERT(cmd_buf);
     _SG_STRUCT(VkImageMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.oldLayout = vk_old_layout;
     barrier.dstStageMask = _sg_vk_dst_stage_mask(pass_access);
     barrier.dstAccessMask = _sg_vk_dst_access_mask(pass_access);
     barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
@@ -20896,7 +20901,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, Vk
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
     barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrier.dstAccessMask = VK_ACCESS_2_NONE;
     if (present) {
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -21013,12 +21018,24 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
         if (is_swapchain_pass) {
             const sg_vulkan_swapchain* vk_swapchain = &pass->swapchain.vulkan;
             SOKOL_ASSERT(vk_swapchain->render_image);
-            VkImage vk_color_image = (VkImage)vk_swapchain->render_image;
-            _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_color_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
-            if (_sg.cur_pass.swapchain.sample_count > 1) {
+            VkImage vk_render_image = (VkImage)vk_swapchain->render_image;
+            const bool first_in_frame = (_sg.vk.swapchain_track.frame_index != _sg.frame_index)
+                || (_sg.vk.swapchain_track.render_image != vk_render_image);
+            _sg.vk.swapchain_track.frame_index = _sg.frame_index;
+            _sg.vk.swapchain_track.render_image = vk_render_image;
+            const bool is_msaa = _sg.cur_pass.swapchain.sample_count > 1;
+
+            // render_image: keep content only if an earlier pass in this frame rendered
+            // to it and this pass has load-action LOAD:
+            VkImageLayout render_image_old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (!first_in_frame && (pass->action.colors[0].load_action == SG_LOADACTION_LOAD)) {
+                render_image_old_layout = is_msaa ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            }
+            _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_render_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, render_image_old_layout);
+            if (is_msaa) {
                 VkImage vk_resolve_image = (VkImage)vk_swapchain->resolve_image;
                 SOKOL_ASSERT(vk_resolve_image);
-                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT, VK_IMAGE_LAYOUT_UNDEFINED);
             }
             if (vk_swapchain->depth_stencil_image) {
                 VkImage vk_ds_image = (VkImage)vk_swapchain->depth_stencil_image;
@@ -21027,7 +21044,13 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
                 if (has_stencil) {
                     access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
                 }
-                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, access);
+                VkImageLayout ds_old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+                const bool is_load_action = (pass->action.depth.load_action == SG_LOADACTION_LOAD)
+                    || (pass->action.stencil.load_action == SG_LOADACTION_LOAD);
+                if (!first_in_frame && is_load_action) {
+                    ds_old_layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                }
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, access, ds_old_layout);
             }
         } else {
             SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
