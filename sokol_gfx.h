@@ -21067,9 +21067,9 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
     SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
     const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     if (is_compute_pass) {
-        SOKOL_ASSERT(bnd->pip);
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
             const _sg_view_t* view = bnd->views[i];
             if (0 == view) {
@@ -21095,7 +21095,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
         }
     } else {
         // No transitions allowed in render passes, but fragment-writable-storage buffer
-        // need to be tracked for transitioning in sg_end_pass. Other then that we're
+        // need to be tracked for transitioning in sg_end_pass. Other than that we're
         // only checking here if the cur_access flag has expected bits set
         //
         // NOTE: the write-transient exception is necessary because of
