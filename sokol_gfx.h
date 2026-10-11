@@ -21005,10 +21005,9 @@ _SOKOL_PRIVATE void _sg_vk_render_pass_storage_barrier(VkCommandBuffer cmd_buf) 
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const sg_pass* pass, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
-    if (is_compute_pass) {
-        SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
-        SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
-    } else {
+    SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
+    SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
+    if (!is_compute_pass) {
         _sg_vk_render_pass_storage_barrier(cmd_buf);
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
@@ -21068,6 +21067,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
     SOKOL_ASSERT(bnd);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     if (is_compute_pass) {
         SOKOL_ASSERT(bnd->pip);
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
@@ -21075,7 +21075,6 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
             if (0 == view) {
                 continue;
             } else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
                 _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                 _sg_vk_access_t new_access = shd->cmn.views[i].sbuf_readonly
                     ? _SG_VK_ACCESS_STORAGEBUFFER_RO
@@ -21095,9 +21094,11 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
             }
         }
     } else {
-        // no transitions allowed in render passes, but check if resources are in
-        // correct access state
-        // NOTE: the write-transient check is necessary because of
+        // No transitions allowed in render passes, but fragment-writable-storage buffer
+        // need to be tracked for transitioning in sg_end_pass. Other then that we're
+        // only checking here if the cur_access flag has expected bits set
+        //
+        // NOTE: the write-transient exception is necessary because of
         //  https://github.com/floooh/sokol/issues/1598
         //
         // Technically this check should go into the validation layer!
@@ -21115,9 +21116,15 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
                 continue;
             }
             else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                 if (!buf->cmn.usage.write_transient) {
                     SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                }
+                if (!shd->cmn.views[i].sbuf_readonly) {
+                    SOKOL_ASSERT((buf->vk.cur_access == _sg_vk_default_buffer_access_mask(buf)) || (buf->vk.cur_access == _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT));
+                    // only record new rw-access, the actual barrier will be deferred to sg_end_pass
+                    buf->vk.cur_access = _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT;
+                    _sg_track_add(&_sg.vk.track.buffers, buf->slot.id);
                 }
             } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -21133,17 +21140,19 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
-    if (is_compute_pass) {
-        // transition all tracked buffers into vertex+index+sbuf-ro access
-        for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
-            const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
-            _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
-            if (buf) {
-                _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
-            }
-        }
-        _sg_track_reset(&_sg.vk.track.buffers);
 
+    // transition all tracked buffers into their default access, in render
+    // passes these are only storage buffers written in fragment shaders
+    for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
+        const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
+        _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
+        if (buf) {
+            _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
+        }
+    }
+    _sg_track_reset(&_sg.vk.track.buffers);
+
+    if (is_compute_pass) {
         // transition all tracked images into texture access
         for (int i = 0; i < _sg.vk.track.images.cur_slot; i++) {
             const uint32_t img_id = _sg.vk.track.images.slots[i];
@@ -21154,6 +21163,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
         }
         _sg_track_reset(&_sg.vk.track.images);
     } else {
+        // transition all render targets into their default-access
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
             SOKOL_ASSERT(_sg.vk.swapchain.render_image);
