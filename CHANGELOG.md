@@ -1,5 +1,41 @@
 ## Updates
 
+### 12-Oct-2026
+
+In sokol_gfx.h, fragment shaders can now write into storage buffers (previously
+writing to storage resources was only allowed in compute passes). This update
+didn't require any public API changes, but you'll need to update `sokol-shdc`
+because trying to use a read/write storage buffer in a fragment shader was a
+compile error before. When using Vulkan you'll also need to update sokol_app.h,
+because the Vulkan device is now created with the required feature
+`fragmentStoresAndAtomics`.
+
+The following restrictions apply:
+
+- only works on backends with compute support (i.e. `sg_features.compute` is
+  true: D3D11, Metal, WebGPU, Vulkan, GL4.3 and GLES3.1)
+- a read/write storage buffer cannot be used with any other access in the
+  same render pass (e.g. you cannot write to a storage buffer in a fragment
+  shader and then bind the same buffer as vertex-, index- or readonly-storage-
+  buffer in the same render pass - you need to start a new pass for this)
+- storage images are still only writable in compute shaders (this might be
+  added at a later time if there is demand)
+- vertex shaders still only support reading from storage buffers (this is
+  unlikely to change since WebGPU also doesn't allow this)
+
+When using the D3D11 backend without `sokol-shdc` you need to be aware of a
+special rule for how sokol bindslots map to HLSL UAV slots (`register(uN)`): those
+must not collide with 'render target slots'. More details are in the updated
+sokol_gfx.h documentation in the section `ON STORAGE BUFFERS` and the doc header
+of the struct `sg_shader_desc`.
+
+When using `sokol-shdc`, the whole thing is quite straightforward. See the new
+sample `histogram-sapp` as an example (requires a WebGPU capable browser):
+
+- [histogram-sapp](https://floooh.github.io/sokol-webgpu/histogram-sapp-ui.html)
+- [C source](https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.c)
+- [GLSL source](https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.glsl)
+
 ### 05-Oct-2026
 
 Critical regression bugfix for the GL backend on Windows with AMD GPUs:
