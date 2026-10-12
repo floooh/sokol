@@ -12,16 +12,19 @@ because the Vulkan device is now created with the required feature
 
 The following restrictions apply:
 
-- only works on backends with compute support (i.e. `sg_features.compute` is
+- Only works on backends with compute support (i.e. `sg_features.compute` is
   true: D3D11, Metal, WebGPU, Vulkan, GL4.3 and GLES3.1)
-- a read/write storage buffer cannot be used with any other access in the
+- A read/write storage buffer cannot be used with any other access in the
   same render pass (e.g. you cannot write to a storage buffer in a fragment
   shader and then bind the same buffer as vertex-, index- or readonly-storage-
-  buffer in the same render pass - you need to start a new pass for this)
-- storage images are still only writable in compute shaders (this might be
+  buffer in the same render pass - you need to start a new pass for this).
+  Note that this restriction only applies to render passes, mixing readonly
+  and read/write storage access in the same *compute* pass is fine.
+- Storage images are still only writable in compute shaders (this might be
   added at a later time if there is demand)
-- vertex shaders still only support reading from storage buffers (this is
-  unlikely to change since WebGPU also doesn't allow this)
+- Vertex shaders still only support reading from storage buffers (this is
+  unlikely to change since WebGPU also doesn't allow storage buffer writes
+  in vertex shaders)
 
 When using the D3D11 backend without `sokol-shdc` you need to be aware of a
 special rule for how sokol bindslots map to HLSL UAV slots (`register(uN)`): those
