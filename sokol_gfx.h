@@ -171,8 +171,8 @@
 
         To start an 'offscreen render pass' into sokol-gfx image objects, populate
         the sg_pass.attachments nested struct with attachment view objects
-        (1..4 color-attachment-views for to render into, a depth-stencil-attachment-view
-        to provide the depth-stencil-buffer, and optionally 1..4 resolve-attachment-views
+        (1..N color-attachment-views to render into, a depth-stencil-attachment-view
+        to provide the depth-stencil-buffer, and optionally 1..N resolve-attachment-views
         for an MSAA-resolve operation:
 
             sg_begin_pass(&(sg_pass){
@@ -184,7 +184,7 @@
                 },
             });
 
-        To start a compute-pass, just set the .compute item to true:
+        To start a compute-pass, just set the .compute field to true:
 
             sg_begin_pass(&(sg_pass){ .compute = true });
 
@@ -219,9 +219,8 @@
         indices in the currently bound index buffer. In case of non-indexed rendering
         base_element and num_elements specify vertices in the currently bound
         vertex-buffer(s). To perform instanced rendering, the rendering pipeline
-        must be setup for instancing (see sg_pipeline_desc below), a separate vertex buffer
-        containing per-instance data must be bound, and the num_instances parameter
-        must be > 1.
+        must be setup for instancing (see sg_pipeline_desc below) and the num_instances
+        parameter must be > 1.
 
         Alternatively, call:
 
@@ -229,7 +228,7 @@
 
         to provide a base-vertex and/or base-instance which allows to render
         from different sections of a vertex buffer without rebinding the
-        vertex buffer with a different offset. Note that the `sg_draw_ex()`
+        vertex buffer with a different offset. Note that `sg_draw_ex()`
         only has limited portability on OpenGL, check the sg_limits struct
         members .draw_base_vertex and .draw_base_instance for runtime support,
         those are generally true on non-GL-backends, and on GL the feature
@@ -323,11 +322,12 @@
         the next frame.
 
         Expect that data written with the write-transient functions will not
-        survive into the next frame, e.g. all data written by the CPU is expected
-        to be 'consumed' by the GPU in the same frame. Trying to bind a write-transient
-        buffer or image that hasn't been written to in the same frame is a validation
-        layer error. Calling a write-transient function on a resource that isn't
-        used for rendering in the same frame is allowed but pointless.
+        survive into the next frame, e.g. all data written by the CPU is
+        expected to be 'consumed' by the GPU in the same frame. Trying to bind a
+        write-transient buffer or image that hasn't been written to in the same
+        frame is a validation layer error. Calling a write-transient function on
+        a resource that isn't used for rendering or compute in the same frame is
+        allowed but pointless (because the written data will not persist).
 
     --- to copy data between resources, call one of the `sg_copy_*` funcs:
 
@@ -363,7 +363,7 @@
 
     --- you can inspect the original sg_desc structure handed to sg_setup()
         by calling sg_query_desc(). This will return an sg_desc struct with
-        the default values patched in instead of any zero-initialized values
+        the default values patched in for any zero-initialized values
 
     --- you can get a desc struct matching the creation attributes of a
         specific resource object via:
@@ -430,6 +430,11 @@
 
             sg_backend sg_query_backend(void)
 
+    --- you can check if sokol_gfx.h is currently inside a pass, and what
+        pass type via:
+
+            sg_pass_state sg_query_pass_state(void)
+
     --- call the following helper functions to compute the number of
         bytes in a texture row or surface for a specific pixel format.
         These functions might be helpful when preparing image data for consumption
@@ -438,9 +443,9 @@
             int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes);
             int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
 
-        Width and height are generally in number pixels, but note that 'row' has different meaning
+        Width and height are generally in number of pixels, but note that 'row' has different meaning
         for uncompressed vs compressed pixel formats: for uncompressed formats, a row is identical
-        with a single line if pixels, while in compressed formats, one row is a line of *compression blocks*.
+        with a single line of pixels, while in compressed formats, one row is a line of *compression blocks*.
 
         This is why calling sg_query_surface_pitch() for a compressed pixel format and height
         N, N+1, N+2, ... may return the same result.
@@ -925,7 +930,7 @@
           '#version 310 es' syntax (version 310 is required for storage buffer and
           compute shader support, but note that this is not supported on WebGL2)
         - for the D3D11 backend, shaders can be provided as source or binary
-          blobs, the source code should be in HLSL4.0 (for compatibility with old
+          blobs, the source code can be in HLSL4.0 (for compatibility with old
           low-end GPUs) or preferably in HLSL5.0 syntax, note that when
           shader source code is provided for the D3D11 backend, sokol-gfx will
           dynamically load 'd3dcompiler_47.dll'
@@ -1016,19 +1021,22 @@
         2. Storage buffer bindings with the following properties:
             - the shader stage of the storage buffer
             - a boolean 'readonly' flag, this is used for validation and hazard
-            tracking in some 3D backends. Note that in render passes, only
-            readonly storage buffer bindings are allowed. In compute passes, any
-            read/write storage buffer binding is assumed to be written to by the
-            compute shader.
+            tracking in some 3D backends. Note that in render passes, read/write
+            storage buffer bindings are only allowed in fragment shaders. Only
+            use read/write storage buffer bindings when actually writing to the
+            storage buffer in shaders, otherwise use readonly bindings.
             - a backend-specific bind slot:
                 - D3D11/HLSL:
                     - for readonly storage buffer bindings: the texture register N
                     (`register(tN)`) where N is 0..31 (in HLSL, readonly storage
                     buffers and textures share the same bind space for
                     'shader resource views')
-                    - for read/write storage buffer buffer bindings: the UAV register N
-                    (`register(uN)`) where N is 0..31 (in HLSL, readwrite storage
-                    buffers use their own bind space for 'unordered access views')
+                    - for read/write storage buffer bindings in compute shaders:
+                    the UAV register N (`register(uN)`) where N is 0..31
+                    - for read/write storage buffer bindings in fragment shaders:
+                    the UAV register N (`register(uN)`) where N must be offset
+                    by the number of color attachments (e.g. for the normal
+                    case of 1 color attachment, N must be 1..31)
                 - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..23
                 - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
                 - GL/GLSL: the buffer binding N in `layout(binding=N)`
@@ -1095,8 +1103,11 @@
         - D3D11/HLSL:
             - separate bindslot space per shader stage
             - uniform block bindings (as cbuffer): `register(b0..b7)`
-            - texture- and readonly storage buffer bindings: `register(t0..t31)`
-            - read/write storage buffer and storage image bindings: `register(u0..u31)`
+            - texture- and readonly storage-buffer-bindings: `register(t0..t31)`
+            - read/write storage-buffer- and storage-image-bindings in
+              compute shaders: `register(u0..u31)`
+            - read/write storage-buffer-bindings in fragment shaders: `register(uN..u31)`
+              where N is >= the number of color attachments
             - samplers: `register(s0..s11)`
         - Metal/MSL:
             - separate bindslot space per shader stage
@@ -1687,15 +1698,16 @@
 
     ON STORAGE BUFFERS
     ==================
-    The two main purpose of storage buffers are:
+    The two main purposes of storage buffers are:
 
-        - to be populated by compute shaders with dynamically generated data
+        - to be populated by compute or fragment shaders with dynamically
+          generated data
         - for providing random-access data to all shader stages
 
-    Storage buffers can be used to pass large amounts of random access structured
+    Storage buffers can be used to pass large amounts of random-access structured
     data from the CPU side to the shaders. They are similar to data textures, but are
     more convenient to use both on the CPU and shader side since they can be accessed
-    in shaders as as a 1-dimensional array of struct items.
+    in shaders as a 1-dimensional array of struct items.
 
     Storage buffers are *NOT* supported on the following platform/backend combos:
 
@@ -1704,9 +1716,9 @@
 
     To use storage buffers, the following steps are required:
 
-        - write a shader which uses storage buffers (vertex- and fragment-shaders
-          can only read from storage buffers, while compute-shaders can both read
-          and write storage buffers)
+        - write a shader which uses storage buffers (vertex-shaders can only
+          read from storage buffers, while compute- and fragment-shaders can both
+          read and write storage buffers)
         - create one or more storage buffers via sg_make_buffer() with the
           `.usage.storage_buffer = true`
         - when creating a shader via sg_make_shader(), populate the sg_shader_desc
@@ -1715,7 +1727,7 @@
             - which storage buffer bind slots on the vertex-, fragment- or compute-stage
               are occupied
             - whether the storage buffer on that bind slot is readonly (readonly
-              bindings are required for vertex- and fragment-shaders, and in compute
+              bindings are required for vertex-shaders, and in fragment- and compute-
               shaders the readonly flag is used to control hazard tracking in some
               3D backends)
 
@@ -1743,6 +1755,9 @@
     - the Compute Boids sample ported to sokol-gfx:
         - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.c
         - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.glsl
+    - writing to a storage buffer from a fragment shader:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.glsl
 
     ...also see the following backend-specific vertex pulling samples (those also don't use sokol-shdc):
 
@@ -1787,9 +1802,9 @@
         @end
         ```
 
-    In a compute shader you can read and write the same item in the same
+    In a compute (or fragment) shader you can read and write the same item in the same
     storage buffer (but you'll have to be careful for random access since
-    many threads of the same compute function run in parallel):
+    many threads of the same shader function run in parallel):
 
         @cs
         struct sb_item {
@@ -1808,6 +1823,17 @@
         }
         @end
 
+    When writing to storage buffers in fragment shaders, the following additional
+    restrictions apply:
+
+    A storage buffer that's written to in a fragment shader cannot be used
+    in another role in the same render pass, e.g. as vertex- or index-buffer,
+    or bound as a readonly storage buffer. This means that writing to a storage
+    buffer in one draw call, and then reading the results back in another draw
+    call must happen in separate render passes (in compute passes this restriction
+    does not apply, you can mix read/write and readonly access to the same resource
+    in compute passes, but not in render passes).
+
     Backend-specific storage-buffer caveats (not relevant when using sokol-shdc):
 
         D3D11:
@@ -1818,9 +1844,14 @@
             - ...or RWByteAddressBuffer for read/write access:
               (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-rwbyteaddressbuffer)
             - readonly-storage buffers and textures are both bound as 'shader-resource-view' and
-              share the same bind slots (declared as `register(tN)` in HLSL), where N must be in the range 0..23)
-            - read/write storage buffers and storage images are bound as 'unordered-access-view'
-              (declared as `register(uN)` in HLSL where N is in the range 0..11)
+              share the same bind slots (declared as `register(tN)` in HLSL, where N must be in the range 0..31)
+            - read/write storage buffers and storage images in compute shaders are bound as 'unordered-access-view'
+              (declared as `register(uN)` in HLSL where N is in the range 0..31 on Feature Level 11.1
+              devices and 0..7 on Feature Level 11.0 devices)
+            - read/write storage buffers in fragment shaders are also bound as 'unordered-access-view'
+              (declared as `register(uN)` in HLSL where N must not collide with color attachment
+              'bind slots', e.g. when the fragment shader uses 4 color attachments, the UAV bind slots
+              must start at 4: `register(u4..u32)`)
 
         Metal:
             - in Metal there is no internal difference between vertex-, uniform- and
@@ -4232,11 +4263,14 @@ typedef struct sg_sampler_desc {
 
     - storage-buffer bindings must provide the following information:
         - the shader stage the storage buffer appears in (SG_SHADERSTAGE_*)
-        - whether the storage buffer is readonly
+        - whether the storage buffer is readonly (must be true in vertex shaders)
         - backend specific bindslots:
             - HLSL:
-                - for storage buffer bindings: `register(t0..31)`
+                - for readonly storage buffer bindings: `register(t0..31)`
                 - for read/write storage buffer bindings: `register(u0..31)`
+                  in compute shaders, and `register(uN..32)` in fragment shaders
+                  where N must be >= the number of color attachments used
+                  in the fragment shader
             - MSL: the buffer attribute `[[buffer(8..23)]]`
             - WGSL: the binding in `@group(1) @binding(0..127)`
             - GL: the binding in `layout(binding=0..sg_limits.max_storage_buffer_bindings_per_stage)`
@@ -5522,7 +5556,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VIEW_ALIVE, "sg_apply_bindings: view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_TEXVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a texture view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SBVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage buffer view)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffers bound as read/write cannot have usage.write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffer bound as read/write cannot have usage.write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE, "sg_apply_bindings: same buffer cannot be bound as readonly and read/write storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_READ, "sg_apply_bindings: same buffer cannot be bound as read/write storage buffer and vertex, index or readonly storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SIMGVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage image view)") \
