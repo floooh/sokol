@@ -100,7 +100,7 @@ static void mock_snapshot(d3d11_mock_call_t* call, const void* data, size_t size
 
 /* record a Set*(StartSlot, NumViews, ppViews) style call, keeping the first
    D3D11_MOCK_MAX_RECORDED_PTRS pointers */
-static void mock_record_ptrs(d3d11_mock_call_kind_t kind, UINT start, UINT num, const void* const* ptrs) {
+static d3d11_mock_call_t* mock_record_ptrs(d3d11_mock_call_kind_t kind, UINT start, UINT num, const void* const* ptrs) {
     d3d11_mock_call_t* call = mock_record(kind);
     call->args[0] = start;
     call->args[1] = num;
@@ -110,6 +110,7 @@ static void mock_record_ptrs(d3d11_mock_call_kind_t kind, UINT start, UINT num, 
             call->ptrs[i] = ptrs[i];
         }
     }
+    return call;
 }
 
 /* Consume one Create* fault slot; returns true if this call should fail. */
@@ -446,6 +447,11 @@ static void ctx_OMSetRenderTargets(ID3D11DeviceContext* self, UINT n, ID3D11Rend
     call->src = dsv;
     call->args[0] = n;
 }
+static void ctx_OMSetRenderTargetsAndUnorderedAccessViews(ID3D11DeviceContext* self, UINT num_rtvs, ID3D11RenderTargetView* const* rtvs, ID3D11DepthStencilView* dsv, UINT uav_start, UINT num_uavs, ID3D11UnorderedAccessView* const* uavs, const UINT* counts) {
+    (void)self; (void)rtvs; (void)dsv; (void)counts;
+    d3d11_mock_call_t* call = mock_record_ptrs(D3D11_MOCK_CALL_OM_SET_RENDER_TARGETS_AND_UNORDERED_ACCESS_VIEWS, uav_start, num_uavs, (const void* const*)uavs);
+    call->args[2] = num_rtvs;
+}
 static void ctx_RSSetState(ID3D11DeviceContext* self, ID3D11RasterizerState* rs)                                                                                                              { (void)self; (void)rs; }
 static void ctx_OMSetDepthStencilState(ID3D11DeviceContext* self, ID3D11DepthStencilState* dss, UINT ref)                                                                                     { (void)self; (void)dss; (void)ref; }
 static void ctx_OMSetBlendState(ID3D11DeviceContext* self, ID3D11BlendState* bs, const FLOAT bf[4], UINT mask)                                                                                { (void)self; (void)bs; (void)bf; (void)mask; }
@@ -662,6 +668,7 @@ static const struct ID3D11DeviceVtbl device_vtbl = {
 static const struct ID3D11DeviceContextVtbl context_vtbl = {
     ctx_ClearState,
     ctx_OMSetRenderTargets,
+    ctx_OMSetRenderTargetsAndUnorderedAccessViews,
     ctx_RSSetState,
     ctx_OMSetDepthStencilState,
     ctx_OMSetBlendState,

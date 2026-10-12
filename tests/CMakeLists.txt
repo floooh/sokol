@@ -71,8 +71,9 @@ else()
         # FIXME: consider using clang-tidy via CMAKE_CXX_CLANG_TIDY: https://ortogonal.github.io/cmake-clang-tidy/
         # with the default settings this spams the output with irrelevant C++ coding style warnings in 3rd party libs though
         message(">> Configuring for static code analysis")
-        set(c_flags ${c_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers)
-        set(cxx_flags ${cxx_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers)
+        # newer clang versions warn that '-c' is unused with '--analyze'
+        set(c_flags ${c_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers -Wno-unused-command-line-argument)
+        set(cxx_flags ${cxx_flags} --analyze -Xanalyzer -analyzer-opt-analyze-headers -Wno-unused-command-line-argument)
         set(link_flags ${link_flags} --analyze -Wno-unused-command-line-argument)
     endif()
 endif()

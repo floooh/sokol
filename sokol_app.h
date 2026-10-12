@@ -4697,6 +4697,7 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     required.pNext = &vk13_features;
     required.features.samplerAnisotropy = VK_TRUE;
     required.features.dualSrcBlend = VK_TRUE;
+    required.features.fragmentStoresAndAtomics = VK_TRUE;
     if (supports.features.textureCompressionBC) {
         required.features.textureCompressionBC = VK_TRUE;
     }

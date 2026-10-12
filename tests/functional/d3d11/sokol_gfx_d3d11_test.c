@@ -17,6 +17,7 @@
 //    - View creation (SRV / UAV / RTV / DSV)       _sg_d3d11_create_view
 //    - Pass begin/end (swapchain, offscreen, MSAA) _sg_d3d11_begin_pass / _sg_d3d11_end_pass
 //    - Draw / dispatch                             _sg_d3d11_draw / _sg_d3d11_dispatch
+//    - Fragment UAVs (register checks, binding)    _sg_validate_pipeline_desc / _sg_d3d11_apply_bindings
 //    - Resource updates (Map / UpdateSubresource)  _sg_d3d11_update_* / _sg_d3d11_write_*
 //    - Injected native handles                     sg_*_desc.d3d11_buffer / .d3d11_texture
 //    - Error paths                                 CreateBuffer / CreateTexture / D3DCompile / DLL
@@ -2419,6 +2420,123 @@ UTEST(sokol_gfx_d3d11, apply_bindings_compute_uavs_and_srvs) {
     sg_destroy_buffer(rw_buf); sg_destroy_buffer(ro_buf); sg_destroy_image(simg);
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  fragment shader read/write storage buffers (UAVs after the RTV slots)
+//------------------------------------------------------------------------------
+static sg_shader make_fs_rw_sbuf_shader(int hlsl_register_u_n) {
+    return sg_make_shader(&(sg_shader_desc){
+        .vertex_func = { .source = "vs", .d3d11_target = "vs_5_0" },
+        .fragment_func = { .source = "ps", .d3d11_target = "ps_5_0" },
+        .views[0] = { .storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = false, .hlsl_register_u_n = (uint8_t)hlsl_register_u_n } },
+    });
+}
+
+static sg_pipeline make_fs_rw_sbuf_pipeline(sg_shader shd, int color_count) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .color_count = color_count,
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+    });
+}
+
+// the UAV register must not overlap the color attachment slots
+UTEST(sokol_gfx_d3d11, pipeline_fs_rw_sbuf_register_u_vs_color_count) {
+    setup();
+    sg_shader shd_u0 = make_fs_rw_sbuf_shader(0);
+    sg_shader shd_u1 = make_fs_rw_sbuf_shader(1);
+    T(sg_query_shader_state(shd_u0) == SG_RESOURCESTATE_VALID);
+    T(sg_query_shader_state(shd_u1) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    sg_pipeline pip = make_fs_rw_sbuf_pipeline(shd_u0, 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT));
+    reset_log();
+    pip = make_fs_rw_sbuf_pipeline(shd_u1, 2);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT));
+    reset_log();
+    pip = make_fs_rw_sbuf_pipeline(shd_u1, 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(no_errors());
+    teardown();
+}
+
+// the UAV register must be below the feature level UAV limit (8 on FL 11.0)
+UTEST(sokol_gfx_d3d11, pipeline_fs_rw_sbuf_register_u_limit) {
+    setup();
+    // the mock device is FL 11.1, simulate the FL 11.0 limit
+    _sg.limits.d3d11_max_unordered_access_views = 8;
+    sg_shader shd_u7 = make_fs_rw_sbuf_shader(7);
+    sg_shader shd_u8 = make_fs_rw_sbuf_shader(8);
+    T(sg_query_shader_state(shd_u7) == SG_RESOURCESTATE_VALID);
+    T(sg_query_shader_state(shd_u8) == SG_RESOURCESTATE_VALID);
+    reset_log();
+    sg_pipeline pip = make_fs_rw_sbuf_pipeline(shd_u8, 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_LIMIT));
+    T(!logged(SG_LOGITEM_VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT));
+    reset_log();
+    pip = make_fs_rw_sbuf_pipeline(shd_u7, 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(no_errors());
+    teardown();
+}
+
+// fragment UAVs are bound with OMSetRenderTargetsAndUnorderedAccessViews(),
+// starting after the color attachments and keeping the RTVs and DSV
+UTEST(sokol_gfx_d3d11, apply_bindings_fs_uavs) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_shader shd = make_fs_rw_sbuf_shader(2);
+    sg_pipeline pip = make_fs_rw_sbuf_pipeline(shd, 1);
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_pipeline plain_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .vertex_func = { .source = "vs", .d3d11_target = "vs_5_0" },
+            .fragment_func = { .source = "ps", .d3d11_target = "ps_5_0" },
+            .views[0] = { .storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true, .hlsl_register_t_n = 0 } },
+        }),
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+    });
+    T(sg_query_pipeline_state(plain_pip) == SG_RESOURCESTATE_VALID);
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){ .size = 256, .usage.storage_buffer = true });
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    sg_buffer ro_buf = sg_make_buffer(&(sg_buffer_desc){ .size = 256, .usage.storage_buffer = true });
+    sg_view ro_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = ro_buf });
+    sg_enable_stats();
+    d3d11_mock_clear_calls();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+    sg_draw(0, 3, 1);
+    // a pipeline without fragment UAVs doesn't call OMSetRenderTargetsAndUnorderedAccessViews()
+    sg_apply_pipeline(plain_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = ro_view });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    T(COUNT(OM_SET_RENDER_TARGETS_AND_UNORDERED_ACCESS_VIEWS) == 1);
+    const d3d11_mock_call_t* c = LAST(OM_SET_RENDER_TARGETS_AND_UNORDERED_ACCESS_VIEWS);
+    const UINT max_uavs = (UINT)sg_query_limits().d3d11_max_unordered_access_views;
+    T(c && (c->args[0] == 1) && (c->args[1] == (max_uavs - 1)));
+    T(c && (c->args[2] == D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL));
+    // ptrs[] start at the UAV start slot, so register u2 is at ptrs[1]
+    T(c && (c->ptrs[0] == NULL) && (c->ptrs[1] == nuav(view)) && (c->ptrs[2] == NULL));
+    T(COUNT(CS_SET_UNORDERED_ACCESS_VIEWS) == 0);
+    T(sg_query_stats().prev_frame.d3d11.bindings.num_om_set_rts_and_uavs == 1);
+    sg_disable_stats();
+    sg_destroy_view(ro_view);
+    sg_destroy_view(view);
+    sg_destroy_buffer(ro_buf);
+    sg_destroy_buffer(buf);
+    sg_destroy_pipeline(plain_pip);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    rtv->lpVtbl->Release(rtv);
     teardown();
 }
 

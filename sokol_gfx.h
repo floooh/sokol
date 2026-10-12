@@ -171,8 +171,8 @@
 
         To start an 'offscreen render pass' into sokol-gfx image objects, populate
         the sg_pass.attachments nested struct with attachment view objects
-        (1..4 color-attachment-views for to render into, a depth-stencil-attachment-view
-        to provide the depth-stencil-buffer, and optionally 1..4 resolve-attachment-views
+        (1..N color-attachment-views to render into, a depth-stencil-attachment-view
+        to provide the depth-stencil-buffer, and optionally 1..N resolve-attachment-views
         for an MSAA-resolve operation:
 
             sg_begin_pass(&(sg_pass){
@@ -184,7 +184,7 @@
                 },
             });
 
-        To start a compute-pass, just set the .compute item to true:
+        To start a compute-pass, just set the .compute field to true:
 
             sg_begin_pass(&(sg_pass){ .compute = true });
 
@@ -219,9 +219,8 @@
         indices in the currently bound index buffer. In case of non-indexed rendering
         base_element and num_elements specify vertices in the currently bound
         vertex-buffer(s). To perform instanced rendering, the rendering pipeline
-        must be setup for instancing (see sg_pipeline_desc below), a separate vertex buffer
-        containing per-instance data must be bound, and the num_instances parameter
-        must be > 1.
+        must be setup for instancing (see sg_pipeline_desc below) and the num_instances
+        parameter must be > 1.
 
         Alternatively, call:
 
@@ -229,7 +228,7 @@
 
         to provide a base-vertex and/or base-instance which allows to render
         from different sections of a vertex buffer without rebinding the
-        vertex buffer with a different offset. Note that the `sg_draw_ex()`
+        vertex buffer with a different offset. Note that `sg_draw_ex()`
         only has limited portability on OpenGL, check the sg_limits struct
         members .draw_base_vertex and .draw_base_instance for runtime support,
         those are generally true on non-GL-backends, and on GL the feature
@@ -323,11 +322,12 @@
         the next frame.
 
         Expect that data written with the write-transient functions will not
-        survive into the next frame, e.g. all data written by the CPU is expected
-        to be 'consumed' by the GPU in the same frame. Trying to bind a write-transient
-        buffer or image that hasn't been written to in the same frame is a validation
-        layer error. Calling a write-transient function on a resource that isn't
-        used for rendering in the same frame is allowed but pointless.
+        survive into the next frame, e.g. all data written by the CPU is
+        expected to be 'consumed' by the GPU in the same frame. Trying to bind a
+        write-transient buffer or image that hasn't been written to in the same
+        frame is a validation layer error. Calling a write-transient function on
+        a resource that isn't used for rendering or compute in the same frame is
+        allowed but pointless (because the written data will not persist).
 
     --- to copy data between resources, call one of the `sg_copy_*` funcs:
 
@@ -363,7 +363,7 @@
 
     --- you can inspect the original sg_desc structure handed to sg_setup()
         by calling sg_query_desc(). This will return an sg_desc struct with
-        the default values patched in instead of any zero-initialized values
+        the default values patched in for any zero-initialized values
 
     --- you can get a desc struct matching the creation attributes of a
         specific resource object via:
@@ -430,6 +430,11 @@
 
             sg_backend sg_query_backend(void)
 
+    --- you can check if sokol_gfx.h is currently inside a pass, and what
+        pass type via:
+
+            sg_pass_state sg_query_pass_state(void)
+
     --- call the following helper functions to compute the number of
         bytes in a texture row or surface for a specific pixel format.
         These functions might be helpful when preparing image data for consumption
@@ -438,9 +443,9 @@
             int sg_query_row_pitch(sg_pixel_format fmt, int width, int row_align_bytes);
             int sg_query_surface_pitch(sg_pixel_format fmt, int width, int height, int row_align_bytes);
 
-        Width and height are generally in number pixels, but note that 'row' has different meaning
+        Width and height are generally in number of pixels, but note that 'row' has different meaning
         for uncompressed vs compressed pixel formats: for uncompressed formats, a row is identical
-        with a single line if pixels, while in compressed formats, one row is a line of *compression blocks*.
+        with a single line of pixels, while in compressed formats, one row is a line of *compression blocks*.
 
         This is why calling sg_query_surface_pitch() for a compressed pixel format and height
         N, N+1, N+2, ... may return the same result.
@@ -925,7 +930,7 @@
           '#version 310 es' syntax (version 310 is required for storage buffer and
           compute shader support, but note that this is not supported on WebGL2)
         - for the D3D11 backend, shaders can be provided as source or binary
-          blobs, the source code should be in HLSL4.0 (for compatibility with old
+          blobs, the source code can be in HLSL4.0 (for compatibility with old
           low-end GPUs) or preferably in HLSL5.0 syntax, note that when
           shader source code is provided for the D3D11 backend, sokol-gfx will
           dynamically load 'd3dcompiler_47.dll'
@@ -1016,19 +1021,22 @@
         2. Storage buffer bindings with the following properties:
             - the shader stage of the storage buffer
             - a boolean 'readonly' flag, this is used for validation and hazard
-            tracking in some 3D backends. Note that in render passes, only
-            readonly storage buffer bindings are allowed. In compute passes, any
-            read/write storage buffer binding is assumed to be written to by the
-            compute shader.
+            tracking in some 3D backends. Note that in render passes, read/write
+            storage buffer bindings are only allowed in fragment shaders. Only
+            use read/write storage buffer bindings when actually writing to the
+            storage buffer in shaders, otherwise use readonly bindings.
             - a backend-specific bind slot:
                 - D3D11/HLSL:
                     - for readonly storage buffer bindings: the texture register N
                     (`register(tN)`) where N is 0..31 (in HLSL, readonly storage
                     buffers and textures share the same bind space for
                     'shader resource views')
-                    - for read/write storage buffer buffer bindings: the UAV register N
-                    (`register(uN)`) where N is 0..31 (in HLSL, readwrite storage
-                    buffers use their own bind space for 'unordered access views')
+                    - for read/write storage buffer bindings in compute shaders:
+                    the UAV register N (`register(uN)`) where N is 0..31
+                    - for read/write storage buffer bindings in fragment shaders:
+                    the UAV register N (`register(uN)`) where N must be offset
+                    by the number of color attachments (e.g. for the normal
+                    case of 1 color attachment, N must be 1..31)
                 - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..23
                 - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
                 - GL/GLSL: the buffer binding N in `layout(binding=N)`
@@ -1095,8 +1103,11 @@
         - D3D11/HLSL:
             - separate bindslot space per shader stage
             - uniform block bindings (as cbuffer): `register(b0..b7)`
-            - texture- and readonly storage buffer bindings: `register(t0..t31)`
-            - read/write storage buffer and storage image bindings: `register(u0..u31)`
+            - texture- and readonly storage-buffer-bindings: `register(t0..t31)`
+            - read/write storage-buffer- and storage-image-bindings in
+              compute shaders: `register(u0..u31)`
+            - read/write storage-buffer-bindings in fragment shaders: `register(uN..u31)`
+              where N is >= the number of color attachments
             - samplers: `register(s0..s11)`
         - Metal/MSL:
             - separate bindslot space per shader stage
@@ -1687,15 +1698,16 @@
 
     ON STORAGE BUFFERS
     ==================
-    The two main purpose of storage buffers are:
+    The two main purposes of storage buffers are:
 
-        - to be populated by compute shaders with dynamically generated data
+        - to be populated by compute or fragment shaders with dynamically
+          generated data
         - for providing random-access data to all shader stages
 
-    Storage buffers can be used to pass large amounts of random access structured
+    Storage buffers can be used to pass large amounts of random-access structured
     data from the CPU side to the shaders. They are similar to data textures, but are
     more convenient to use both on the CPU and shader side since they can be accessed
-    in shaders as as a 1-dimensional array of struct items.
+    in shaders as a 1-dimensional array of struct items.
 
     Storage buffers are *NOT* supported on the following platform/backend combos:
 
@@ -1704,9 +1716,9 @@
 
     To use storage buffers, the following steps are required:
 
-        - write a shader which uses storage buffers (vertex- and fragment-shaders
-          can only read from storage buffers, while compute-shaders can both read
-          and write storage buffers)
+        - write a shader which uses storage buffers (vertex-shaders can only
+          read from storage buffers, while compute- and fragment-shaders can both
+          read and write storage buffers)
         - create one or more storage buffers via sg_make_buffer() with the
           `.usage.storage_buffer = true`
         - when creating a shader via sg_make_shader(), populate the sg_shader_desc
@@ -1715,7 +1727,7 @@
             - which storage buffer bind slots on the vertex-, fragment- or compute-stage
               are occupied
             - whether the storage buffer on that bind slot is readonly (readonly
-              bindings are required for vertex- and fragment-shaders, and in compute
+              bindings are required for vertex-shaders, and in fragment- and compute-
               shaders the readonly flag is used to control hazard tracking in some
               3D backends)
 
@@ -1743,6 +1755,9 @@
     - the Compute Boids sample ported to sokol-gfx:
         - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.c
         - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/computeboids-sapp.glsl
+    - writing to a storage buffer from a fragment shader:
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.glsl
 
     ...also see the following backend-specific vertex pulling samples (those also don't use sokol-shdc):
 
@@ -1787,9 +1802,9 @@
         @end
         ```
 
-    In a compute shader you can read and write the same item in the same
+    In a compute (or fragment) shader you can read and write the same item in the same
     storage buffer (but you'll have to be careful for random access since
-    many threads of the same compute function run in parallel):
+    many threads of the same shader function run in parallel):
 
         @cs
         struct sb_item {
@@ -1808,6 +1823,17 @@
         }
         @end
 
+    When writing to storage buffers in fragment shaders, the following additional
+    restrictions apply:
+
+    A storage buffer that's written to in a fragment shader cannot be used
+    in another role in the same render pass, e.g. as vertex- or index-buffer,
+    or bound as a readonly storage buffer. This means that writing to a storage
+    buffer in one draw call, and then reading the results back in another draw
+    call must happen in separate render passes (in compute passes this restriction
+    does not apply, you can mix read/write and readonly access to the same resource
+    in compute passes, but not in render passes).
+
     Backend-specific storage-buffer caveats (not relevant when using sokol-shdc):
 
         D3D11:
@@ -1818,9 +1844,14 @@
             - ...or RWByteAddressBuffer for read/write access:
               (https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/sm5-object-rwbyteaddressbuffer)
             - readonly-storage buffers and textures are both bound as 'shader-resource-view' and
-              share the same bind slots (declared as `register(tN)` in HLSL), where N must be in the range 0..23)
-            - read/write storage buffers and storage images are bound as 'unordered-access-view'
-              (declared as `register(uN)` in HLSL where N is in the range 0..11)
+              share the same bind slots (declared as `register(tN)` in HLSL, where N must be in the range 0..31)
+            - read/write storage buffers and storage images in compute shaders are bound as 'unordered-access-view'
+              (declared as `register(uN)` in HLSL where N is in the range 0..31 on Feature Level 11.1
+              devices and 0..7 on Feature Level 11.0 devices)
+            - read/write storage buffers in fragment shaders are also bound as 'unordered-access-view'
+              (declared as `register(uN)` in HLSL where N must not collide with color attachment
+              'bind slots', e.g. when the fragment shader uses 4 color attachments, the UAV bind slots
+              must start at 4: `register(u4..u31)`)
 
         Metal:
             - in Metal there is no internal difference between vertex-, uniform- and
@@ -4232,11 +4263,14 @@ typedef struct sg_sampler_desc {
 
     - storage-buffer bindings must provide the following information:
         - the shader stage the storage buffer appears in (SG_SHADERSTAGE_*)
-        - whether the storage buffer is readonly
+        - whether the storage buffer is readonly (must be true in vertex shaders)
         - backend specific bindslots:
             - HLSL:
-                - for storage buffer bindings: `register(t0..31)`
+                - for readonly storage buffer bindings: `register(t0..31)`
                 - for read/write storage buffer bindings: `register(u0..31)`
+                  in compute shaders, and `register(uN..31)` in fragment shaders
+                  where N must be >= the number of color attachments used
+                  in the fragment shader
             - MSL: the buffer attribute `[[buffer(8..23)]]`
             - WGSL: the binding in `@group(1) @binding(0..127)`
             - GL: the binding in `layout(binding=0..sg_limits.max_storage_buffer_bindings_per_stage)`
@@ -4861,6 +4895,7 @@ typedef struct sg_frame_stats_d3d11_bindings {
     uint32_t num_cs_set_shader_resources;
     uint32_t num_cs_set_samplers;
     uint32_t num_cs_set_unordered_access_views;
+    uint32_t num_om_set_rts_and_uavs;
 } sg_frame_stats_d3d11_bindings;
 
 typedef struct sg_frame_stats_d3d11_uniforms {
@@ -5328,6 +5363,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_SIZE_MISMATCH, "sg_shader_desc.uniform_blocks[].glsl_uniforms[]: size of uniform block members doesn't match uniform block size") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_ARRAY_COUNT, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].array_count must be >= 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_UNIFORMBLOCK_STD140_ARRAY_TYPE, "sg_shader_desc.uniform_blocks[].glsl_uniforms[].type: uniform arrays only allowed for FLOAT4, INT4, MAT4 in std140 layout") \
+    _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_VERTEXSHADER_READWRITE, "sg_shader_desc.views[].storage_buffer.stage vs .readonly: vertex shaders cannot write to storage buffers") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION, "sg_shader_desc.views[].storage_buffer.msl_buffer_n must be unique across uniform blocks and storage buffer in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_T_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_t_n must be unique across read-only storage buffers and images in same shader stage") \
     _SG_LOGITEM_XMACRO(VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_HLSL_REGISTER_U_COLLISION, "sg_shader_desc.views[].storage_buffer.hlsl_register_u_n must be unique across read/write storage buffers and storage images in same shader stage") \
@@ -5368,7 +5404,9 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_VERTEXFORMAT_INT10_N2_NOT_SUPPORTED, "sg_pipeline_desc.layout.attrs[].format: SG_VERTEXFORMAT_INT10_N2 not supported on this platform") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_LAYOUT_STRIDE4, "sg_pipeline_desc.layout.buffers[].stride must be multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_ATTR_SEMANTICS, "D3D11 missing vertex attribute semantics in shader") \
-    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: only readonly storage buffer bindings allowed in render pipelines") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS, "sg_pipeline_desc.shader: read/write storage buffer bindings are not allowed in vertex shaders") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT, "sg_pipeline_desc.shader: on D3D11, fragment stage read/write storage buffer UAV register slots (register(uN)) must not overlap with the color attachment slots, i.e. N must be >= sg_pipeline_desc.color_count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_LIMIT, "sg_pipeline_desc.shader: on D3D11, fragment stage read/write storage buffer UAV register slots (register(uN)) must be < sg_limits.d3d11_max_unordered_access_views") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_BLENDOP_MINMAX_REQUIRES_BLENDFACTOR_ONE, "SG_BLENDOP_MIN/MAX requires all blend factors to be SG_BLENDFACTOR_ONE") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DUAL_SOURCE_BLENDING_NOT_SUPPORTED, "dual source blending not supported (sg_features.dual_source_blending)") \
     _SG_LOGITEM_XMACRO(VALIDATE_PIPELINEDESC_DEPTH_FORMAT_NONE_BUT_DEPTH_WRITE_ENABLED, "sg_pipeline_desc.depth.write_enabled cannot be true when sg_pipeline_desc.depth.pixel_format is SG_PIXELFORMAT_NONE") \
@@ -5508,15 +5546,19 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VBUF, "sg_apply_bindings: vertex buffer binding is missing or buffer handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_ALIVE, "sg_apply_bindings: vertex buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_USAGE, "sg_apply_bindings: buffer in vertex buffer bind slot must have usage.vertex_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_VBUF_VS_SBVIEW_READWRITE, "sg_apply_bindings: same buffer cannot be bound as vertex buffer and read/write storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_NO_IBUF, "sg_apply_bindings: pipeline object defines non-indexed rendering, but index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_IBUF, "sg_apply_bindings: pipeline object defines indexed rendering, but no index buffer binding provided") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_ALIVE, "sg_apply_bindings: index buffer no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_USAGE, "sg_apply_bindings: buffer in index buffer bind slot must have usage.index_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_IBUF_VS_SBVIEW_READWRITE, "sg_apply_bindings: same buffer cannot be bound as index buffer and read/write storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECTED_VIEW_BINDING, "sg_apply_bindings: view binding is missing or the view handle is invalid") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_VIEW_ALIVE, "sg_apply_bindings: view no longer alive") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_TEXVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a texture view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SBVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage buffer view)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffers bound as read/write cannot have usage.write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffer bound as read/write cannot have usage.write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE, "sg_apply_bindings: same buffer cannot be bound as readonly and read/write storage buffer in one render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_READ, "sg_apply_bindings: same buffer cannot be bound as read/write storage buffer and vertex, index or readonly storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SIMGVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage image view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
@@ -7043,17 +7085,23 @@ typedef struct {
     int size;
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index the buffer was bound
-    uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
     uint32_t write_transient_frame_index; // last frame index when written to
+    struct {
+        uint32_t bind_frame_index;  // last frame index the buffer was bound
+        uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
+        uint32_t read_render_pass_index;    // last pass index the buffer was read in a render pass
+        uint32_t write_render_pass_index;   // last pass index the buffer was written in a render pass
+    } validate;
     sg_buffer_usage usage;
 } _sg_buffer_common_t;
 
 typedef struct {
     int num_slots;
     int active_slot;
-    uint32_t bind_frame_index;  // last frame index the image was bound
     uint32_t write_transient_frame_index; // last frame index when written to
+    struct {
+        uint32_t bind_frame_index;  // last frame index the image was bound
+    } validate;
     sg_image_type type;
     int width;
     int height;
@@ -7489,6 +7537,7 @@ typedef struct {
         ID3D11ShaderResourceView* vs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
         ID3D11ShaderResourceView* fs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
         ID3D11ShaderResourceView* cs_srvs[_SG_D3D11_MAX_STAGE_SRV_BINDINGS];
+        ID3D11UnorderedAccessView* fs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS];
         ID3D11UnorderedAccessView* cs_uavs[_SG_D3D11_MAX_STAGE_UAV_BINDINGS];
         ID3D11SamplerState* vs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
         ID3D11SamplerState* fs_smps[_SG_D3D11_MAX_STAGE_SMP_BINDINGS];
@@ -7876,15 +7925,16 @@ typedef enum {
     _SG_VK_ACCESS_VERTEXBUFFER = (1<<2),
     _SG_VK_ACCESS_INDEXBUFFER = (1<<3),
     _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
-    _SG_VK_ACCESS_STORAGEBUFFER_RW = (1<<5),
-    _SG_VK_ACCESS_TEXTURE = (1<<6),
-    _SG_VK_ACCESS_STORAGEIMAGE = (1<<7),
-    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<8),
-    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<9),
-    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<11),
-    _SG_VK_ACCESS_DISCARD = (1<<12),    // in combination with attachments
-    _SG_VK_ACCESS_PRESENT = (1<<13),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE = (1<<5),
+    _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT = (1<<6),
+    _SG_VK_ACCESS_TEXTURE = (1<<7),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<8),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<9),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<11),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<12),
+    _SG_VK_ACCESS_DISCARD = (1<<13),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<14),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -7997,6 +8047,11 @@ typedef struct {
     VkQueue queue;
     uint32_t queue_family_index;
     sg_vulkan_swapchain swapchain;
+    // NOTE: once the Vulkan backend supports multiple swapchains, this will become an array:
+    struct {
+        uint32_t frame_index;
+        VkImage render_image;
+    } swapchain_track;
     VkSemaphore present_complete_sem;
     VkSemaphore render_finished_sem;
 
@@ -8137,6 +8192,7 @@ typedef struct {
     bool use_indexed_draw;
     bool use_instanced_draw;
     struct {
+        uint32_t pass_index;    // running count of passes (keeps counting across frames)
         uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
         uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
         bool write_buffer_transient_missing;        // used for 'deferred validation' in draw/dispatch when sg_write_buffer_transient() hasn't been called in current frame
@@ -8995,17 +9051,19 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->size = (int)desc->size;
     cmn->num_slots = desc->usage.write_transient ? SG_NUM_INFLIGHT_FRAMES : 1;
     cmn->active_slot = 0;
-    cmn->bind_frame_index = 0;
-    cmn->copy_src_frame_index = 0;
     cmn->write_transient_frame_index = 0;
+    cmn->validate.bind_frame_index = 0;
+    cmn->validate.copy_src_frame_index = 0;
+    cmn->validate.read_render_pass_index = 0;
+    cmn->validate.write_render_pass_index = 0;
     cmn->usage = desc->usage;
 }
 
 _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_image_desc* desc) {
     cmn->num_slots = desc->usage.write_transient ? SG_NUM_INFLIGHT_FRAMES : 1;
     cmn->active_slot = 0;
-    cmn->bind_frame_index = 0;
     cmn->write_transient_frame_index = 0;
+    cmn->validate.bind_frame_index = 0;
     cmn->type = desc->type;
     cmn->width = desc->width;
     cmn->height = desc->height;
@@ -13480,6 +13538,14 @@ static inline void _sg_d3d11_OMSetRenderTargets(ID3D11DeviceContext* self, UINT 
     #endif
 }
 
+static inline void _sg_d3d11_OMSetRenderTargetsAndUnorderedAccessViews(ID3D11DeviceContext* self, UINT NumViews, ID3D11RenderTargetView* const *ppRenderTargetViews, ID3D11DepthStencilView* pDepthStencilView, UINT UAVStartSlot, UINT NumUAVs, ID3D11UnorderedAccessView* const* ppUnorderedAccessViews, const UINT* pUAVInitialCounts) {
+    #if defined(__cplusplus)
+        self->OMSetRenderTargetsAndUnorderedAccessViews(NumViews, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
+    #else
+        self->lpVtbl->OMSetRenderTargetsAndUnorderedAccessViews(self, NumViews, ppRenderTargetViews, pDepthStencilView, UAVStartSlot, NumUAVs, ppUnorderedAccessViews, pUAVInitialCounts);
+    #endif
+}
+
 static inline void _sg_d3d11_RSSetState(ID3D11DeviceContext* self, ID3D11RasterizerState* pRasterizerState) {
     #if defined(__cplusplus)
         self->RSSetState(pRasterizerState);
@@ -15523,6 +15589,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_clear(&_sg.d3d11.bnd.vb_offsets, sizeof(_sg.d3d11.bnd.vb_offsets));
         _sg_clear(&_sg.d3d11.bnd.vs_srvs, sizeof(_sg.d3d11.bnd.vs_srvs));
         _sg_clear(&_sg.d3d11.bnd.fs_srvs, sizeof(_sg.d3d11.bnd.fs_srvs));
+        _sg_clear(&_sg.d3d11.bnd.fs_uavs, sizeof(_sg.d3d11.bnd.fs_uavs));
         _sg_clear(&_sg.d3d11.bnd.vs_smps, sizeof(_sg.d3d11.bnd.vs_smps));
         _sg_clear(&_sg.d3d11.bnd.fs_smps, sizeof(_sg.d3d11.bnd.fs_smps));
     }
@@ -15546,6 +15613,7 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
             _sg.d3d11.bnd.vb_offsets[i] = (UINT)bnd->vb_offsets[i];
         }
     }
+    bool has_fs_uavs = false;
     for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         const _sg_view_t* view = bnd->views[i];
         if (0 == view) {
@@ -15583,12 +15651,17 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
                     default: SOKOL_UNREACHABLE;
                 }
             } else {
-                SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
                 const uint8_t d3d11_slot = shd->d3d11.view_register_u_n[i];
                 SOKOL_ASSERT(d3d11_slot < _sg.limits.d3d11_max_unordered_access_views);
                 ID3D11UnorderedAccessView* d3d11_uav = view->d3d11.uav;
                 SOKOL_ASSERT(d3d11_uav);
-                _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
+                SOKOL_ASSERT(stage != SG_SHADERSTAGE_VERTEX);
+                if (stage == SG_SHADERSTAGE_COMPUTE) {
+                    _sg.d3d11.bnd.cs_uavs[d3d11_slot] = d3d11_uav;
+                } else {
+                    _sg.d3d11.bnd.fs_uavs[d3d11_slot] = d3d11_uav;
+                    has_fs_uavs = true;
+                }
             }
         } else if (shd_view->view_type == SG_VIEWTYPE_STORAGEIMAGE) {
             SOKOL_ASSERT(stage == SG_SHADERSTAGE_COMPUTE);
@@ -15632,6 +15705,14 @@ _SOKOL_PRIVATE bool _sg_d3d11_apply_bindings(_sg_bindings_ptrs_t* bnd) {
         _sg_d3d11_PSSetShaderResources(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SRV_BINDINGS, _sg.d3d11.bnd.fs_srvs);
         _sg_d3d11_VSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.vs_smps);
         _sg_d3d11_PSSetSamplers(_sg.d3d11.ctx, 0, _SG_D3D11_MAX_STAGE_SMP_BINDINGS, _sg.d3d11.bnd.fs_smps);
+        if (has_fs_uavs) {
+            const UINT uav_start_slot = (UINT)bnd->pip->cmn.color_count;
+            const UINT num_uavs = (UINT)_sg.limits.d3d11_max_unordered_access_views - uav_start_slot;
+            _sg_d3d11_OMSetRenderTargetsAndUnorderedAccessViews(_sg.d3d11.ctx,
+                D3D11_KEEP_RENDER_TARGETS_AND_DEPTH_STENCIL, 0, 0,
+                uav_start_slot, num_uavs, &_sg.d3d11.bnd.fs_uavs[uav_start_slot], 0);
+            _sg_stats_inc(d3d11.bindings.num_om_set_rts_and_uavs);
+        }
         _sg_stats_inc(d3d11.bindings.num_ia_set_vertex_buffers);
         _sg_stats_inc(d3d11.bindings.num_ia_set_index_buffer);
         _sg_stats_inc(d3d11.bindings.num_vs_set_shader_resources);
@@ -17308,8 +17389,9 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
         // For vertex buffer it is guaranteed that neither the GPU nor CPU will update their content
         // as long as it is in flight (since dynamic buffers are double-buffered, and vertex-buffers
         // are not updated by the GPU).
-        // For storage buffer the same double-buffering applies, and if they are applied
-        // to the vertex- or fragment-stage must be declared as readonly in the shader.
+        // For storage buffers the same double-buffering applies, and if they are applied
+        // to the vertex-stage they must be declared as readonly in the shader (writing
+        // to storage buffers in fragment shaders is allowed)
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (pip->cmn.vertex_buffer_layout_active[i]) {
                 const NSUInteger mtl_slot = _sg_mtl_vertexbuffer_bindslot(i);
@@ -17323,13 +17405,14 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
             }
             const sg_shader_stage stage = view->stage;
             SOKOL_ASSERT(view->stage != SG_SHADERSTAGE_COMPUTE);
-            SOKOL_ASSERT(view->sbuf_readonly);
             const NSUInteger mtl_slot = shd->mtl.view_buffer_texture_n[i];
             SOKOL_ASSERT(mtl_slot < _SG_MTL_MAX_STAGE_BUFFER_BINDINGS);
             if (stage == SG_SHADERSTAGE_VERTEX) {
                 rp_desc.vertexBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
             } else if (stage == SG_SHADERSTAGE_FRAGMENT) {
-                rp_desc.fragmentBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
+                if (view->sbuf_readonly) {
+                    rp_desc.fragmentBuffers[mtl_slot].mutability = MTLMutabilityImmutable;
+                }
             }
         }
         #if defined(SOKOL_DEBUG)
@@ -20690,8 +20773,11 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
              VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
              VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     }
-    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE) {
         f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    }
+    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT) {
+        f |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
         f |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -20749,7 +20835,7 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
     if (access & _SG_VK_ACCESS_COPY_SRC) {
         f |= VK_ACCESS_2_TRANSFER_READ_BIT;
     }
-    if (access & _SG_VK_ACCESS_STORAGEBUFFER_RW) {
+    if (access & (_SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE | _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT)) {
         f |= VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
     }
     if (access & _SG_VK_ACCESS_STORAGEIMAGE) {
@@ -20811,13 +20897,13 @@ _SOKOL_PRIVATE VkImageLayout _sg_vk_image_layout(_sg_vk_access_t access) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access) {
+_SOKOL_PRIVATE void _sg_vk_swapchain_beginpass_barrier(VkCommandBuffer cmd_buf, VkImage vkimg, _sg_vk_access_t pass_access, VkImageLayout vk_old_layout) {
     SOKOL_ASSERT(cmd_buf);
     _SG_STRUCT(VkImageMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.oldLayout = vk_old_layout;
     barrier.dstStageMask = _sg_vk_dst_stage_mask(pass_access);
     barrier.dstAccessMask = _sg_vk_dst_access_mask(pass_access);
     barrier.newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
@@ -20849,7 +20935,7 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, Vk
     barrier.srcStageMask = _sg_vk_src_stage_mask(pass_access);
     barrier.srcAccessMask = _sg_vk_src_access_mask(pass_access);
     barrier.oldLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     barrier.dstAccessMask = VK_ACCESS_2_NONE;
     if (present) {
         barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -20937,22 +21023,53 @@ _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t*
     buf->vk.cur_access = new_access;
 }
 
+// needed because r/w storage buffers may be written in fragment shaders
+_SOKOL_PRIVATE void _sg_vk_render_pass_storage_barrier(VkCommandBuffer cmd_buf) {
+    SOKOL_ASSERT(cmd_buf);
+    _SG_STRUCT(VkMemoryBarrier2, barrier);
+    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+        VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT |
+        VK_PIPELINE_STAGE_2_COPY_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_NONE;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_NONE;
+    _SG_STRUCT(VkDependencyInfo, dep_info);
+    dep_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dep_info.memoryBarrierCount = 1;
+    dep_info.pMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(cmd_buf, &dep_info);
+    _sg_stats_inc(vk.num_cmd_pipeline_barrier);
+}
+
 _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const sg_pass* pass, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
-    if (is_compute_pass) {
-        SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
-        SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
-    } else {
+    SOKOL_ASSERT(0 == _sg.vk.track.buffers.cur_slot);
+    SOKOL_ASSERT(0 == _sg.vk.track.images.cur_slot);
+    if (!is_compute_pass) {
+        _sg_vk_render_pass_storage_barrier(cmd_buf);
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
             const sg_vulkan_swapchain* vk_swapchain = &pass->swapchain.vulkan;
             SOKOL_ASSERT(vk_swapchain->render_image);
-            VkImage vk_color_image = (VkImage)vk_swapchain->render_image;
-            _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_color_image, _SG_VK_ACCESS_COLOR_ATTACHMENT);
-            if (_sg.cur_pass.swapchain.sample_count > 1) {
+            VkImage vk_render_image = (VkImage)vk_swapchain->render_image;
+            const bool first_in_frame = (_sg.vk.swapchain_track.frame_index != _sg.frame_index)
+                || (_sg.vk.swapchain_track.render_image != vk_render_image);
+            _sg.vk.swapchain_track.frame_index = _sg.frame_index;
+            _sg.vk.swapchain_track.render_image = vk_render_image;
+            const bool is_msaa = _sg.cur_pass.swapchain.sample_count > 1;
+
+            // render_image: keep content only if an earlier pass in this frame rendered
+            // to it and this pass has load-action LOAD:
+            VkImageLayout render_image_old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (!first_in_frame && (pass->action.colors[0].load_action == SG_LOADACTION_LOAD)) {
+                render_image_old_layout = is_msaa ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            }
+            _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_render_image, _SG_VK_ACCESS_COLOR_ATTACHMENT, render_image_old_layout);
+            if (is_msaa) {
                 VkImage vk_resolve_image = (VkImage)vk_swapchain->resolve_image;
                 SOKOL_ASSERT(vk_resolve_image);
-                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT);
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_resolve_image, _SG_VK_ACCESS_RESOLVE_ATTACHMENT, VK_IMAGE_LAYOUT_UNDEFINED);
             }
             if (vk_swapchain->depth_stencil_image) {
                 VkImage vk_ds_image = (VkImage)vk_swapchain->depth_stencil_image;
@@ -20961,7 +21078,13 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
                 if (has_stencil) {
                     access |= _SG_VK_ACCESS_STENCIL_ATTACHMENT;
                 }
-                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, access);
+                VkImageLayout ds_old_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+                const bool is_load_action = (pass->action.depth.load_action == SG_LOADACTION_LOAD)
+                    || (pass->action.stencil.load_action == SG_LOADACTION_LOAD);
+                if (!first_in_frame && is_load_action) {
+                    ds_old_layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+                }
+                _sg_vk_swapchain_beginpass_barrier(cmd_buf, vk_ds_image, access, ds_old_layout);
             }
         } else {
             SOKOL_ASSERT(atts->num_color_views <= SG_MAX_COLOR_ATTACHMENTS);
@@ -21001,18 +21124,18 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_begin_pass(VkCommandBuffer cmd_buf, const 
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, const _sg_bindings_ptrs_t* bnd, bool is_compute_pass) {
     SOKOL_ASSERT(bnd);
+    SOKOL_ASSERT(bnd->pip);
+    const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
     if (is_compute_pass) {
-        SOKOL_ASSERT(bnd->pip);
         for (size_t i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
             const _sg_view_t* view = bnd->views[i];
             if (0 == view) {
                 continue;
             } else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                const _sg_shader_t* shd = _sg_shader_ref_ptr(&bnd->pip->cmn.shader);
                 _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
                 _sg_vk_access_t new_access = shd->cmn.views[i].sbuf_readonly
                     ? _SG_VK_ACCESS_STORAGEBUFFER_RO
-                    : _SG_VK_ACCESS_STORAGEBUFFER_RW;
+                    : _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE;
                 _sg_vk_buffer_barrier(cmd_buf, buf, new_access);
                 _sg_track_add(&_sg.vk.track.buffers, buf->slot.id);
             } else if (view->cmn.type == SG_VIEWTYPE_STORAGEIMAGE) {
@@ -21028,9 +21151,11 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
             }
         }
     } else {
-        // no transitions allowed in render passes, but check if resources are in
-        // correct access state
-        // NOTE: the write-transient check is necessary because of
+        // No transitions allowed in render passes, but fragment-writable-storage buffer
+        // need to be tracked for transitioning in sg_end_pass. Other than that we're
+        // only checking here if the cur_access flag has expected bits set
+        //
+        // NOTE: the write-transient exception is necessary because of
         //  https://github.com/floooh/sokol/issues/1598
         //
         // Technically this check should go into the validation layer!
@@ -21048,9 +21173,16 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
                 continue;
             }
             else if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                if (!buf->cmn.usage.write_transient) {
-                    SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                if (shd->cmn.views[i].sbuf_readonly) {
+                    if (!buf->cmn.usage.write_transient) {
+                        SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_STORAGEBUFFER_RO));
+                    }
+                } else {
+                    SOKOL_ASSERT((buf->vk.cur_access == _sg_vk_default_buffer_access_mask(buf)) || (buf->vk.cur_access == _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT));
+                    // only record new rw-access, the actual barrier will be deferred to sg_end_pass
+                    buf->vk.cur_access = _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT;
+                    _sg_track_add(&_sg.vk.track.buffers, buf->slot.id);
                 }
             } else if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
                 const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
@@ -21066,17 +21198,19 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_apply_bindings(VkCommandBuffer cmd_buf, co
 
 _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _sg_attachments_ptrs_t* atts, bool is_compute_pass) {
     SOKOL_ASSERT(cmd_buf);
-    if (is_compute_pass) {
-        // transition all tracked buffers into vertex+index+sbuf-ro access
-        for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
-            const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
-            _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
-            if (buf) {
-                _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
-            }
-        }
-        _sg_track_reset(&_sg.vk.track.buffers);
 
+    // transition all tracked buffers into their default access, in render
+    // passes these are only storage buffers written in fragment shaders
+    for (int i = 0; i < _sg.vk.track.buffers.cur_slot; i++) {
+        const uint32_t buf_id = _sg.vk.track.buffers.slots[i];
+        _sg_buffer_t* buf = _sg_lookup_buffer(buf_id);
+        if (buf) {
+            _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
+        }
+    }
+    _sg_track_reset(&_sg.vk.track.buffers);
+
+    if (is_compute_pass) {
         // transition all tracked images into texture access
         for (int i = 0; i < _sg.vk.track.images.cur_slot; i++) {
             const uint32_t img_id = _sg.vk.track.images.slots[i];
@@ -21087,6 +21221,7 @@ _SOKOL_PRIVATE void _sg_vk_barrier_on_end_pass(VkCommandBuffer cmd_buf, const _s
         }
         _sg_track_reset(&_sg.vk.track.images);
     } else {
+        // transition all render targets into their default-access
         const bool is_swapchain_pass = atts->empty;
         if (is_swapchain_pass) {
             SOKOL_ASSERT(_sg.vk.swapchain.render_image);
@@ -22791,7 +22926,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_buffer(_sg_buffer_t* buf, const s
     VkResult res;
     // FIXME: inject external buffer
 
-    buf->vk.cur_access = _SG_VK_ACCESS_NONE;
+    // NOTE: unlike images, the initial access mask for buffers is their
+    // default access, this is because buffers are immediately ready for
+    // any read type (unless images, which have an UNDEFINED initial image layout)
+    buf->vk.cur_access = _sg_vk_default_buffer_access_mask(buf);
 
     _SG_STRUCT(VkBufferCreateInfo, create_info);
     create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -22852,6 +22990,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
     VkResult res;
     // FIXME: injected images
 
+    // NOTE: initial access mask different from buffers, see the comment in
+    // _sg_vk_create_buffer for explanation
     img->vk.cur_access = _SG_VK_ACCESS_NONE;
 
     _SG_STRUCT(VkImageCreateInfo, create_info);
@@ -23627,8 +23767,11 @@ _SOKOL_PRIVATE void _sg_vk_begin_render_pass(VkCommandBuffer cmd_buf, const sg_p
         SOKOL_ASSERT(_sg.vk.swapchain.present_complete_semaphore);
         SOKOL_ASSERT(_sg.vk.swapchain.render_finished_semaphore);
         // FIXME: need to support multiple present_complete_semaphores
-        SOKOL_ASSERT(0 == _sg.vk.present_complete_sem);
-        _sg.vk.present_complete_sem = (VkSemaphore)_sg.vk.swapchain.present_complete_semaphore;
+        if (0 == _sg.vk.present_complete_sem) {
+            _sg.vk.present_complete_sem = (VkSemaphore)_sg.vk.swapchain.present_complete_semaphore;
+        } else {
+            SOKOL_ASSERT(_sg.vk.present_complete_sem == _sg.vk.swapchain.present_complete_semaphore);
+        }
         if (0 == _sg.vk.render_finished_sem) {
             _sg.vk.render_finished_sem = (VkSemaphore)_sg.vk.swapchain.render_finished_semaphore;
         } else {
@@ -25079,6 +25222,9 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 #endif
             } else if (view_desc->storage_buffer.stage != SG_SHADERSTAGE_NONE) {
                 const sg_shader_storage_buffer_view* sbuf_desc = &view_desc->storage_buffer;
+                if (sbuf_desc->stage == SG_SHADERSTAGE_VERTEX) {
+                    _SG_VALIDATE(sbuf_desc->readonly, VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_VERTEXSHADER_READWRITE);
+                }
                 #if defined(SOKOL_METAL)
                 _SG_VALIDATE(_sg_validate_slot_bits(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n), VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_METAL_BUFFER_SLOT_COLLISION);
                 msl_buf_bits = _sg_validate_set_slot_bit(msl_buf_bits, sbuf_desc->stage, sbuf_desc->msl_buffer_n);
@@ -25236,10 +25382,19 @@ _SOKOL_PRIVATE bool _sg_validate_pipeline_desc(const sg_pipeline_desc* desc) {
                     _SG_VALIDATE(!_sg_strempty(&shd->d3d11.attrs[attr_index].sem_name), VALIDATE_PIPELINEDESC_ATTR_SEMANTICS);
                     #endif
                 }
-                // must only use readonly storage buffer bindings in render pipelines
                 for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
                     if (shd->cmn.views[i].view_type == SG_VIEWTYPE_STORAGEBUFFER) {
-                        _SG_VALIDATE(shd->cmn.views[i].sbuf_readonly, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                        const sg_shader_stage stage = shd->cmn.views[i].stage;
+                        if (!shd->cmn.views[i].sbuf_readonly) {
+                            // read/write storage buffer bindings are not allowed in vertex shaders
+                            _SG_VALIDATE(stage != SG_SHADERSTAGE_VERTEX, VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+                            // on D3D11, fragment shader read/write storage buffer UAV slots must not collide
+                            // with color render target slots
+                            #if defined(SOKOL_D3D11)
+                            _SG_VALIDATE(shd->d3d11.view_register_u_n[i] >= desc->color_count, VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_VS_COLOR_COUNT);
+                            _SG_VALIDATE(shd->d3d11.view_register_u_n[i] < _sg.limits.d3d11_max_unordered_access_views, VALIDATE_PIPELINEDESC_SHADER_HLSL_REGISTER_U_LIMIT);
+                            #endif
+                        }
                     }
                 }
                 for (int buf_index = 0; buf_index < SG_MAX_VERTEXBUFFER_BINDSLOTS; buf_index++) {
@@ -25441,6 +25596,7 @@ _SOKOL_PRIVATE bool _sg_validate_begin_pass(const sg_pass* pass) {
         if (_sg.desc.disable_validation) {
             return true;
         }
+        _sg.validate.pass_index += 1;
         const bool is_invalid_swapchain_pass = pass->swapchain.invalid;
         const bool is_compute_pass = pass->compute;
         const bool is_swapchain_pass = !is_compute_pass && _sg_attachments_empty(&pass->attachments);
@@ -25831,11 +25987,14 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                 if (pip->cmn.vertex_buffer_layout_active[i]) {
                     _SG_VALIDATE(bindings->vertex_buffers[i].id != SG_INVALID_ID, VALIDATE_ABND_EXPECTED_VBUF);
                     if (bindings->vertex_buffers[i].id != SG_INVALID_ID) {
-                        const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
+                        _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                         _SG_VALIDATE(buf != 0, VALIDATE_ABND_VBUF_ALIVE);
                         // NOTE: state != VALID is legal and skips rendering!
                         if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                            buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                            buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
                             _SG_VALIDATE(buf->cmn.usage.vertex_buffer, VALIDATE_ABND_VBUF_USAGE);
+                            _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index, VALIDATE_ABND_VBUF_VS_SBVIEW_READWRITE);
                             if (buf->cmn.usage.write_transient) {
                                 _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                             }
@@ -25858,11 +26017,14 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
             }
             if (bindings->index_buffer.id != SG_INVALID_ID) {
                 // buffer in index-buffer-slot must have index buffer usage
-                const _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
+                _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
                 _SG_VALIDATE(buf != 0, VALIDATE_ABND_IBUF_ALIVE);
                 // NOTE: state != VALID is legal and skips rendering!
                 if (buf && buf->slot.state == SG_RESOURCESTATE_VALID) {
+                    buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                    buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
                     _SG_VALIDATE(buf->cmn.usage.index_buffer, VALIDATE_ABND_IBUF_USAGE);
+                    _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index, VALIDATE_ABND_IBUF_VS_SBVIEW_READWRITE);
                     if (buf->cmn.usage.write_transient) {
                         _sg.validate.write_buffer_transient_missing |= buf->cmn.write_transient_frame_index != _sg.frame_index;
                     }
@@ -25886,7 +26048,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_TEXTURE, VALIDATE_ABND_EXPECT_TEXVIEW);
                                 // NOTE: an invalid image ref is allowed and skips rendering
                                 if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    img->cmn.validate.bind_frame_index = _sg.frame_index;
                                     _SG_VALIDATE(img->cmn.type == shd->cmn.views[i].image_type, VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH);
                                     if (shd->cmn.views[i].multisampled) {
                                         _SG_VALIDATE(img->cmn.sample_count > 1, VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE);
@@ -25913,8 +26076,14 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER, VALIDATE_ABND_EXPECT_SBVIEW);
                                 // NOTE: an invalid buffer ref is allowed and skips rendering
                                 if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                                    const _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
-                                    if (!shd->cmn.views[i].sbuf_readonly) {
+                                    _sg_buffer_t* buf = _sg_buffer_ref_ptr(&view->cmn.buf.ref);
+                                    buf->cmn.validate.bind_frame_index = _sg.frame_index;
+                                    if (shd->cmn.views[i].sbuf_readonly) {
+                                        buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
+                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
+                                    } else {
+                                        buf->cmn.validate.write_render_pass_index = _sg.validate.pass_index;
+                                        _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.read_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
                                         _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
                                     }
                                     if (buf->cmn.usage.write_transient) {
@@ -25928,7 +26097,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                 _SG_VALIDATE(_sg.cur_pass.is_compute, VALIDATE_ABND_SIMGVIEW_COMPUTE_PASS_EXPECTED);
                                 // NOTE: an invalid image ref is allowed and skips rendering
                                 if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                                    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+                                    img->cmn.validate.bind_frame_index = _sg.frame_index;
                                     _SG_VALIDATE(img->cmn.type == shd->cmn.views[i].image_type, VALIDATE_ABND_SIMGVIEW_IMAGETYPE_MISMATCH);
                                     _SG_VALIDATE(img->cmn.pixel_format == shd->cmn.views[i].access_format, VALIDATE_ABND_SIMGVIEW_ACCESSFORMAT);
                                     if (img->cmn.usage.write_transient) {
@@ -26153,8 +26323,8 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         _sg_validate_begin();
         _SG_VALIDATE(buf->cmn.usage.write_transient, VALIDATE_WRITEBUFFERTRANSIENT_USAGE);
         // write-transient is only allowed before resource is 'used' in current frame
-        _SG_VALIDATE(buf->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
-        _SG_VALIDATE(buf->cmn.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        _SG_VALIDATE(buf->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(buf->cmn.validate.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
         // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);
@@ -26235,7 +26405,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, c
         _sg_validate_begin();
         _SG_VALIDATE(!img->cmn.usage.immutable && img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
         // write-transient is only allowed before resource is bound in current frame
-        _SG_VALIDATE(img->cmn.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(img->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
         _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
@@ -26289,7 +26459,7 @@ _SOKOL_PRIVATE bool _sg_validate_seal_image(const _sg_image_t* img) {
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_buf, const _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
+_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(_sg_buffer_t* src_buf, const _sg_buffer_t* dst_buf, const sg_copy_buffer_to_buffer_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(src_buf && dst_buf && desc);
         return true;
@@ -26300,6 +26470,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
         SOKOL_ASSERT(src_buf && dst_buf && desc);
         SOKOL_ASSERT(src_buf->slot.state == SG_RESOURCESTATE_VALID);
         SOKOL_ASSERT(dst_buf->slot.state == SG_RESOURCESTATE_VALID);
+        src_buf->cmn.validate.copy_src_frame_index = _sg.frame_index;
         _sg_validate_begin();
         _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYBUFFERTOBUFFER_INSIDE_PASS);
         _SG_VALIDATE(desc->src.buffer.id != desc->dst.buffer.id, VALIDATE_COPYBUFFERTOBUFFER_SRC_VS_DST_BUFFER);
@@ -26319,7 +26490,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(const _sg_buffer_t* src_b
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_buf, const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
+_SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(_sg_buffer_t* src_buf, const _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(src_buf && dst_img && desc);
         return true;
@@ -26330,6 +26501,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(const _sg_buffer_t* src_bu
         SOKOL_ASSERT(src_buf && dst_img && desc);
         SOKOL_ASSERT(src_buf->slot.state == SG_RESOURCESTATE_VALID);
         SOKOL_ASSERT(dst_img->slot.state == SG_RESOURCESTATE_VALID);
+        src_buf->cmn.validate.copy_src_frame_index = _sg.frame_index;
         _sg_validate_begin();
         const int mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
         const int mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
@@ -28106,7 +28278,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
                 SOKOL_ASSERT(bindings->vertex_buffers[i].id != SG_INVALID_ID);
                 _sg_buffer_t* buf = _sg_lookup_buffer(bindings->vertex_buffers[i].id);
                 if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
-                    buf->cmn.bind_frame_index = _sg.frame_index;
                     bnd.vbs[i] = buf;
                     bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
                 } else {
@@ -28117,7 +28288,6 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         if (bindings->index_buffer.id) {
             _sg_buffer_t* buf = _sg_lookup_buffer(bindings->index_buffer.id);
             if (buf && (SG_RESOURCESTATE_VALID == buf->slot.state)) {
-                buf->cmn.bind_frame_index = _sg.frame_index;
                 bnd.ib = buf;
                 bnd.ib_offset = bindings->index_buffer_offset;
             } else {
@@ -28133,15 +28303,12 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
             bnd.views[i] = view;
             if (view) {
                 if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
-                    if (_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                        view->cmn.buf.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
-                    } else {
+                    // NOTE: _sg_buffer_ref_valid also checks for resource state VALID!
+                    if (!_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
                         _sg.next_draw_valid = false;
                     }
                 } else {
-                    if (_sg_image_ref_valid(&view->cmn.img.ref)) {
-                        view->cmn.img.ref.ptr->cmn.bind_frame_index = _sg.frame_index;
-                    } else {
+                    if (!_sg_image_ref_valid(&view->cmn.img.ref)) {
                         _sg.next_draw_valid = false;
                     }
                 }
@@ -28433,7 +28600,6 @@ SOKOL_API_IMPL void sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc
     }
     if (_sg_validate_copy_buffer_to_buffer(src_buf, dst_buf, desc)) {
         _sg_stats_add(size_copy_buffer_to_buffer, (uint32_t)desc->size);
-        src_buf->cmn.copy_src_frame_index = _sg.frame_index;
         _sg_copy_buffer_to_buffer(src_buf, dst_buf, desc);
     }
     _SG_TRACE_ARGS(copy_buffer_to_buffer, desc);
@@ -28470,7 +28636,6 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
             desc_def.size.height,
             desc_def.size.num_slices);
         _sg_stats_add(size_copy_buffer_to_image, (uint32_t)stats_copy_size);
-        src_buf->cmn.copy_src_frame_index = _sg.frame_index;
         _sg_copy_buffer_to_image(src_buf, dst_img, &desc_def);
     }
     _SG_TRACE_ARGS(copy_buffer_to_image, desc);

@@ -345,8 +345,8 @@ UTEST(sokol_gfx, make_destroy_buffers) {
         T(bufptr->cmn.usage.vertex_buffer);
         T(!bufptr->cmn.usage.write_transient);
         T(!bufptr->cmn.usage.copy_dst);
-        T(bufptr->cmn.bind_frame_index == 0);
-        T(bufptr->cmn.copy_src_frame_index == 0);
+        T(bufptr->cmn.validate.bind_frame_index == 0);
+        T(bufptr->cmn.validate.copy_src_frame_index == 0);
         T(bufptr->cmn.write_transient_frame_index == 0);
         T(bufptr->cmn.num_slots == 1);
         T(bufptr->cmn.active_slot == 0);
@@ -1433,7 +1433,7 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_ok) {
         .size = 32,
     });
     T(num_log_called == 0);
-    T(_sg_lookup_buffer(src.id)->cmn.copy_src_frame_index == _sg.frame_index);
+    T(_sg_lookup_buffer(src.id)->cmn.validate.copy_src_frame_index == _sg.frame_index);
     sg_shutdown();
 }
 
@@ -3672,6 +3672,7 @@ UTEST(sokol_gfx, max_storagebuffer_bindings_per_stage_vs) {
     sg_shader_desc desc = {0};
     for (int i = 0; i < SG_MAX_VIEW_BINDSLOTS; i++) {
         desc.views[i].storage_buffer.stage = SG_SHADERSTAGE_VERTEX;
+        desc.views[i].storage_buffer.readonly = true;
     }
     sg_shader shd = sg_make_shader(&desc);
     T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
@@ -4620,5 +4621,449 @@ UTEST(sokol_gfx, write_resource_state) {
 UTEST(sokol_gfx, write_resource_state_no_validation) {
     setup(&(sg_desc){ .disable_validation = true });
     test_write_resource_state(utest_result);
+    sg_shutdown();
+}
+
+// read/write storage buffers in fragment shaders
+
+// the dummy backend has no compute support, fake it for the storage buffer tests
+static void setup_with_compute(const sg_desc* desc) {
+    setup(desc);
+    _sg.features.compute = true;
+}
+
+static sg_shader create_sbuf_render_shader(sg_shader_stage stage0, bool readonly0, sg_shader_stage stage1, bool readonly1) {
+    return sg_make_shader(&(sg_shader_desc){
+        .views = {
+            [0].storage_buffer = { .stage = stage0, .readonly = readonly0 },
+            [1].storage_buffer = { .stage = stage1, .readonly = readonly1 },
+        },
+    });
+}
+
+typedef struct {
+    sg_buffer buf;              // vertex, index and storage buffer
+    sg_view view;               // storage buffer view on buf
+    sg_view view2;              // another storage buffer view on buf
+    sg_buffer other_buf;        // a second storage buffer
+    sg_view other_view;         // storage buffer view on other_buf
+    sg_pipeline fs_rw_pip;      // views[0]: fragment read/write
+    sg_pipeline fs_ro_pip;      // views[0]: fragment readonly
+    sg_pipeline vs_ro_pip;      // views[0]: vertex readonly
+    sg_pipeline fs_rw_ro_pip;   // views[0]: fragment read/write, views[1]: fragment readonly
+    sg_pipeline vbuf_pip;       // one vertex buffer, no views
+    sg_pipeline ibuf_pip;       // index buffer, no vertex buffers, no views
+    sg_pipeline cs_rw_pip;      // compute, views[0]: read/write
+    sg_pipeline cs_ro_pip;      // compute, views[0]: readonly
+} sbuf_rw_setup_t;
+
+static sbuf_rw_setup_t create_sbuf_rw_setup(void) {
+    sbuf_rw_setup_t s = {0};
+    const uint8_t data[64] = {0};
+    s.buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .vertex_buffer = true, .index_buffer = true, .storage_buffer = true },
+        .data = SG_RANGE(data),
+    });
+    s.view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.buf });
+    s.view2 = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.buf });
+    s.other_buf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    s.other_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.other_buf });
+    s.fs_rw_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = false },
+        }),
+    });
+    s.fs_ro_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = true },
+        }),
+    });
+    s.vs_ro_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_VERTEX, .readonly = true },
+        }),
+    });
+    s.fs_rw_ro_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = create_sbuf_render_shader(SG_SHADERSTAGE_FRAGMENT, false, SG_SHADERSTAGE_FRAGMENT, true),
+    });
+    s.vbuf_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){0}),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    s.ibuf_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){0}),
+        .index_type = SG_INDEXTYPE_UINT16,
+    });
+    s.cs_rw_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = false },
+        }),
+    });
+    s.cs_ro_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true },
+        }),
+    });
+    return s;
+}
+
+#define SBUF_RW_TEST_PASS &(sg_pass){ \
+    .swapchain = { \
+        .width = 64, \
+        .height = 64, \
+        .sample_count = 1, \
+        .color_format = SG_PIXELFORMAT_RGBA8, \
+    } \
+}
+
+static void apply_sbuf_rw(const sbuf_rw_setup_t* s, sg_view view) {
+    sg_apply_pipeline(s->fs_rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+}
+
+UTEST(sokol_gfx, sbuf_rw_setup_valid) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    T(sg_query_buffer_state(s.buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.view2) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(s.other_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.other_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.fs_rw_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.fs_ro_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.vs_ro_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.fs_rw_ro_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.vbuf_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.ibuf_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.cs_rw_pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.cs_ro_pip) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_shader_storagebuffer_vertex_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_VERTEX, .readonly = false },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SHADERDESC_VIEW_STORAGEBUFFER_VERTEXSHADER_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_shader_storagebuffer_fragment_readwrite_vertex_readonly_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sg_shader shd = create_sbuf_render_shader(SG_SHADERSTAGE_FRAGMENT, false, SG_SHADERSTAGE_VERTEX, true);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_pipeline_storagebuffer_fragment_readwrite_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = create_sbuf_render_shader(SG_SHADERSTAGE_FRAGMENT, false, SG_SHADERSTAGE_VERTEX, true),
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// the shader validation already rejects vertex stage read/write storage buffers,
+// so skip the shader validation to reach the pipeline check
+UTEST(sokol_gfx, make_pipeline_storagebuffer_vertex_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    _sg.desc.disable_validation = true;
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_VERTEX, .readonly = false },
+    });
+    _sg.desc.disable_validation = false;
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_PIPELINEDESC_SHADER_READONLY_STORAGEBUFFERS);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_then_vertex_buffer) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_apply_pipeline(s.vbuf_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.buf });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_VBUF_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_then_index_buffer) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_apply_pipeline(s.ibuf_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .index_buffer = s.buf });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_IBUF_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_then_readonly) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_apply_pipeline(s.vs_ro_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_sbuf_readonly_then_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    reset_log_items();
+    apply_sbuf_rw(&s, s.view);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_vertex_buffer_then_sbuf_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.vbuf_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.buf });
+    reset_log_items();
+    apply_sbuf_rw(&s, s.view);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, apply_bindings_index_buffer_then_sbuf_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.ibuf_pip);
+    sg_apply_bindings(&(sg_bindings){ .index_buffer = s.buf });
+    reset_log_items();
+    apply_sbuf_rw(&s, s.view);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// the hazard check must look at the buffer, not the view
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_then_readonly_other_view) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_apply_pipeline(s.fs_ro_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view2 });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// read/write and readonly binding of the same buffer in one sg_apply_bindings()
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_and_readonly_same_call) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_rw_ro_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .views = { [0] = s.view, [1] = s.view2 } });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// different buffers in the read/write and readonly slots are ok
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_and_readonly_different_buffers_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_rw_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views = { [0] = s.view, [1] = s.other_view } });
+    sg_draw(0, 3, 1);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// several draws may write the same buffer in one pass
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_twice_same_pass_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_draw(0, 3, 1);
+    apply_sbuf_rw(&s, s.view2);
+    sg_draw(0, 3, 1);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// write in one pass and read in the next pass (and the other way around)
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_and_read_in_different_passes_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.vs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_draw(0, 3, 1);
+    sg_apply_pipeline(s.vbuf_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.buf });
+    sg_draw(0, 3, 1);
+    sg_apply_pipeline(s.ibuf_pip);
+    sg_apply_bindings(&(sg_bindings){ .index_buffer = s.buf });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    T(num_log_called == 0);
+    sg_commit();
+    sg_shutdown();
+}
+
+// the pass stamps must also not leak into the next frame
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_and_read_in_different_frames_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// compute passes don't have the render pass hazard rules
+UTEST(sokol_gfx, apply_bindings_compute_sbuf_readwrite_then_readonly_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(s.cs_rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_dispatch(1, 1, 1);
+    sg_apply_pipeline(s.cs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_dispatch(1, 1, 1);
+    sg_apply_pipeline(s.cs_rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    T(num_log_called == 0);
+    sg_commit();
+    sg_shutdown();
+}
+
+// a compute pass write followed by a render pass read (and the other way around)
+UTEST(sokol_gfx, apply_bindings_compute_and_render_pass_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(s.cs_rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.vbuf_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.buf });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(s.cs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.view);
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    T(num_log_called == 0);
+    sg_commit();
+    sg_shutdown();
+}
+
+// write_transient storage buffers cannot be bound as read/write
+UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_write_transient) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_transient = true },
+        .size = 64,
+    });
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_rw_pip);
+    reset_log_items();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
     sg_shutdown();
 }
