@@ -1851,7 +1851,7 @@
             - read/write storage buffers in fragment shaders are also bound as 'unordered-access-view'
               (declared as `register(uN)` in HLSL where N must not collide with color attachment
               'bind slots', e.g. when the fragment shader uses 4 color attachments, the UAV bind slots
-              must start at 4: `register(u4..u32)`)
+              must start at 4: `register(u4..u31)`)
 
         Metal:
             - in Metal there is no internal difference between vertex-, uniform- and
@@ -4268,7 +4268,7 @@ typedef struct sg_sampler_desc {
             - HLSL:
                 - for readonly storage buffer bindings: `register(t0..31)`
                 - for read/write storage buffer bindings: `register(u0..31)`
-                  in compute shaders, and `register(uN..32)` in fragment shaders
+                  in compute shaders, and `register(uN..31)` in fragment shaders
                   where N must be >= the number of color attachments used
                   in the fragment shader
             - MSL: the buffer attribute `[[buffer(8..23)]]`
