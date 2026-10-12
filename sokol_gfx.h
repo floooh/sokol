@@ -17390,7 +17390,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_pipeline(_sg_pipeline_t* pip, co
         // as long as it is in flight (since dynamic buffers are double-buffered, and vertex-buffers
         // are not updated by the GPU).
         // For storage buffers the same double-buffering applies, and if they are applied
-        // to the vertex-tage they must be declared as readonly in the shader (writing
+        // to the vertex-stage they must be declared as readonly in the shader (writing
         // to storage buffers in fragment shaders is allowed)
         for (size_t i = 0; i < SG_MAX_VERTEXBUFFER_BINDSLOTS; i++) {
             if (pip->cmn.vertex_buffer_layout_active[i]) {
