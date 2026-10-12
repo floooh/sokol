@@ -36,6 +36,8 @@ sample `histogram-sapp` as an example (requires a WebGPU capable browser):
 - [C source](https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.c)
 - [GLSL source](https://github.com/floooh/sokol-samples/blob/master/sapp/histogram-sapp.glsl)
 
+PR link: https://github.com/floooh/sokol/pull/1619
+
 ### 05-Oct-2026
 
 Critical regression bugfix for the GL backend on Windows with AMD GPUs:
