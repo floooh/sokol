@@ -1350,11 +1350,7 @@
     uint8_t mip1_data[] = { ... };
     // ... more mip levels
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .data.mip_levels = {
-            [0] = SG_RANGE(mip0_data),
-            [1] = SG_RANGE(mip1_data),
-            // ...
-        },
+        .data.= SG_RANGE(image_data),
         // ... more create options
     });
     ```
@@ -3764,47 +3760,6 @@ typedef enum sg_view_type {
 } sg_view_type;
 
 /*
-    sg_image_data
-
-    FIXME: REMOVE BUT KEEP IMAGE DATA LAYOUT DOCUMENTATION!
-
-    Defines the content of an image through an array of sg_range structs, each
-    range pointing to the pixel data for one mip-level. For array-, cubemap- and
-    3D-images each mip-level contains all slice-surfaces for that mip-level in a
-    single tightly packed memory block.
-
-    The size of a single surface in a mip-level for a regular 2D texture
-    can be computed via:
-
-        sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
-
-    For array- and 3d-images the size of a single miplevel is:
-
-        num_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
-
-    For cubemap-images the size of a single mip-level is:
-
-        6 * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
-
-    The order of cubemap-faces is in a mip-level data chunk is:
-
-        [0] => +X
-        [1] => -X
-        [2] => +Y
-        [3] => -Y
-        [4] => +Z
-        [5] => -Z
-
-    NOTE: for more flexible resource initialization of immutable images
-    also consider the sg_write_image_unsealed() function!
-*/
-/*
-typedef struct sg_image_data {
-    sg_range mip_levels[SG_MAX_MIPMAPS];
-} sg_image_data;
-*/
-
-/*
     sg_image_extent
 
     Defines the size of a region within an image's mip level.
@@ -4100,9 +4055,37 @@ typedef struct sg_copy_buffer_to_image_desc {
 
     NOTE:
 
-    Regular images used as texture binding with usage.immutable must be fully
-    initialized by providing a valid .data member which points to initialization
-    data.
+    When initial data is provided via sg_image_desc.data, it must be the complete
+    and tightly packed data for all mip levels and slices in one continuous block
+    of memory. For a more flexible initialization of the initial image content,
+    use sg_write_image_unsealed().
+
+    The size of a single surface in a mip-level for a regular 2D texture
+    can be computed via:
+
+        sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+
+    For array-images the size of a single miplevel is:
+
+        num_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+
+    For 3d-images the size of a single miplevel is:
+
+        mip_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+
+    For cubemap-images the size of a single mip-level is:
+
+        6 * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+
+    The order of cubemap-faces is in a mip-level data chunk is:
+
+        [0] => +X
+        [1] => -X
+        [2] => +Y
+        [3] => -Y
+        [4] => +Z
+        [5] => -Z
+
 
     Images with usage.*_attachment or usage.storage_image must
     *not* be created with initial content. Be aware that the initial
@@ -4130,6 +4113,7 @@ typedef struct sg_copy_buffer_to_image_desc {
 typedef struct sg_image_desc {
     uint32_t _start_canary;
     sg_image_type type;
+    sg_image_usage usage;
     int width;
     int height;
     int num_slices;
@@ -5303,8 +5287,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_DATA, "sg_buffer_desc: buffer content can never be initialized (provide .data, or set .usage.write_unsealed, .usage.write_transient or .usage.copy_dst)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires OpenGL >= 4.3)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4, "size of storage buffers must be a multiple of 4") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_NODATA, "sg_image_data: no data (.ptr and/or .size is zero)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDATA_DATA_SIZE, "sg_image_data: data size doesn't match expected surface size") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DATA_SIZE, "sg_image_desc.data: data size doesn't match expected size (complete tightly packed size across all mip levels and slices) ") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_COPYDST, "sg_image_desc.usage: attachments cannot have usage .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_INITIALDATA, "sg_image_desc.data: attachments cannot have initial data") \
@@ -5623,8 +5606,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SIZE, "sg_write_buffer_*: desc.size must be > 0 and <= desc.src.data.size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_WRITE_OVERFLOW, "sg_write_buffer_*: desc.dst.offset + desc.size must be <= buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_READ_OVERFLOW, "sg_write_buffer_*: desc.src.offset + desc.size must be <= desc.src.data.size") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .immutable && .write_unsealed") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_USAGE, "sg_write_image_transient: image usage must be !.immutable && .write_transient") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .write_unsealed") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_USAGE, "sg_write_image_transient: image usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND, "sg_write_image_transient: cannot be called after image has already been bound in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_POINTER, "sg_write_image_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_SIZE, "sg_write_image_*: desc.src.data.size must be > 0") \
@@ -7115,8 +7098,6 @@ typedef struct {
     sg_image_usage usage;
     sg_pixel_format pixel_format;
     int sample_count;
-    // deprecated:
-    uint32_t upd_frame_index;
 } _sg_image_common_t;
 
 typedef struct {
@@ -9077,8 +9058,6 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->usage = desc->usage;
     cmn->pixel_format = desc->pixel_format;
     cmn->sample_count = desc->sample_count;
-    // deprecated
-    cmn->upd_frame_index = 0;
 }
 
 _SOKOL_PRIVATE void _sg_sampler_common_init(_sg_sampler_common_t* cmn, const sg_sampler_desc* desc) {
@@ -16937,19 +16916,20 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     }
 }
 
-_SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_image_data* data) {
+_SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_range* data) {
+    SOKOL_ASSERT(data->ptr);
+    SOKOL_ASSERT(data->size > 0);
+    size_t src_offset = 0;
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
-        SOKOL_ASSERT(data->mip_levels[mip_level].ptr);
-        SOKOL_ASSERT(data->mip_levels[mip_level].size > 0);
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
         const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_level) : img->cmn.num_slices;
         const int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
         _sg_mtl_write_miplevel_data(img, mtl_tex,
-            (const uint8_t*)data->mip_levels[mip_level].ptr,
-            data->mip_levels[mip_level].size,
-            0,  // src_offset
+            (const uint8_t*)data->ptr,
+            data->size,
+            src_offset,
             bytes_per_row,
             bytes_per_slice,
             mip_level,
@@ -16959,6 +16939,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
             mip_width,
             mip_height,
             mip_depth_or_slices);
+        src_offset += (size_t)bytes_per_slice * (size_t)mip_depth_or_slices;
     }
 }
 
@@ -17034,7 +17015,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
                 _SG_ERROR(METAL_CREATE_TEXTURE_FAILED);
                 return SG_RESOURCESTATE_FAILED;
             }
-            if (desc->data.mip_levels[0].ptr) {
+            if (desc->data.ptr) {
                 _sg_mtl_copy_image_data(img, mtl_tex, &desc->data);
             }
         }
@@ -24845,28 +24826,6 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
     #endif
 }
 
-_SOKOL_PRIVATE void _sg_validate_image_data(const sg_image_data* data, sg_pixel_format fmt, int width, int height, int num_mips, int num_slices) {
-    #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(data);
-        _SOKOL_UNUSED(fmt);
-        _SOKOL_UNUSED(width);
-        _SOKOL_UNUSED(height);
-        _SOKOL_UNUSED(num_mips);
-        _SOKOL_UNUSED(num_slices);
-    #else
-        for (int mip_index = 0; mip_index < num_mips; mip_index++) {
-            const bool has_data = data->mip_levels[mip_index].ptr != 0;
-            const bool has_size = data->mip_levels[mip_index].size > 0;
-            _SG_VALIDATE(has_data && has_size, VALIDATE_IMAGEDATA_NODATA);
-            const int mip_width = _sg_miplevel_dim(width, mip_index);
-            const int mip_height = _sg_miplevel_dim(height, mip_index);
-            const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
-            const int expected_size = bytes_per_slice * num_slices;
-            _SG_VALIDATE(expected_size == (int)data->mip_levels[mip_index].size, VALIDATE_IMAGEDATA_DATA_SIZE);
-        }
-    #endif
-}
-
 _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(desc);
@@ -24961,12 +24920,15 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
         if (desc->data.ptr) {
-            _sg_validate_image_data(&desc->data,
-                desc->pixel_format,
-                desc->width,
-                desc->height,
-                desc->num_mipmaps,
-                desc->num_slices);
+            size_t expected_size = 0;
+            for (int mip_index = 0; mip_index < desc->num_mipmaps; mip_index++) {
+                const int mip_width = _sg_miplevel_dim(desc->width, mip_index);
+                const int mip_height = _sg_miplevel_dim(desc->height, mip_index);
+                const int mip_slices = (SG_IMAGETYPE_3D == desc->type) ? _sg_miplevel_dim(desc->num_slices, mip_index) : desc->num_slices;
+                const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+                expected_size += (size_t)bytes_per_slice * (size_t)mip_slices;
+            }
+            _SG_VALIDATE(expected_size == desc->data.size, VALIDATE_IMAGEDESC_DATA_SIZE);
         } else {
             _SG_VALIDATE(0 == desc->data.size, VALIDATE_IMAGEDESC_NO_DATA_BUT_SIZE_SET);
         }
@@ -26415,7 +26377,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, c
         SOKOL_ASSERT(img && desc);
         SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_VALID);
         _sg_validate_begin();
-        _SG_VALIDATE(!img->cmn.usage.immutable && img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
+        _SG_VALIDATE(img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
         // write-transient is only allowed before resource is bound in current frame
         _SG_VALIDATE(img->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
         _sg_validate_write_image_common(img, desc);
@@ -26435,7 +26397,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_unsealed(const _sg_image_t* img, co
         SOKOL_ASSERT(img && desc);
         SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_UNSEALED);
         _sg_validate_begin();
-        _SG_VALIDATE(img->cmn.usage.immutable && img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
+        _SG_VALIDATE(img->cmn.usage.write_unsealed, VALIDATE_WRITEIMAGEUNSEALED_USAGE);
         _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
@@ -26730,9 +26692,7 @@ _SOKOL_PRIVATE sg_buffer_desc _sg_buffer_desc_defaults(const sg_buffer_desc* des
 
 _SOKOL_PRIVATE sg_image_usage _sg_image_usage_defaults(const sg_image_usage *usg) {
     sg_image_usage def = *usg;
-    if (!(def.immutable || def.write_transient || def.copy_dst)) {
-        def.immutable = true;
-    }
+    // NOTE: currently it's expected that no defaults are patched
     return def;
 }
 
