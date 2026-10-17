@@ -3741,7 +3741,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("  color_attachment: %s", _sgimgui_bool_string(desc->usage.color_attachment));
             _sgimgui_igtext("  resolve_attachment: %s", _sgimgui_bool_string(desc->usage.resolve_attachment));
             _sgimgui_igtext("  depth_stencil_attachment: %s", _sgimgui_bool_string(desc->usage.depth_stencil_attachment));
-            _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(desc->usage.write_unsealed));
             _sgimgui_igtext("  write_transient: %s", _sgimgui_bool_string(desc->usage.write_transient));
             _sgimgui_igtext("  copy_src: %s", _sgimgui_bool_string(desc->usage.copy_src));
@@ -3752,11 +3751,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("Num Mipmaps:    %d", desc->num_mipmaps);
             _sgimgui_igtext("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
             _sgimgui_igtext("Sample Count:   %d", desc->sample_count);
-            if (!desc->usage.immutable) {
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Num Slots:     %d", info.num_slots);
-                _sgimgui_igtext("Active Slot:   %d", info.active_slot);
-            }
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Num Slots:     %d", info.num_slots);
+            _sgimgui_igtext("Active Slot:   %d", info.active_slot);
         } else {
             _sgimgui_igtext("Image 0x%08X not valid.", img.id);
         }
