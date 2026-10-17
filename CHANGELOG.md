@@ -1,5 +1,27 @@
 ## Updates
 
+### 17-Oct-2026
+
+A small fix has been applied to sokol_imgui.h for Dear ImGui v1.93.0 (backward
+compatible with 1.92.x). This ImGui version added a new macOS specifc 'hack' to
+guess the builtin default font (bitmap vs TTF), and this new guess caused the
+TTF font to be selected on macOS for sokol_imgui.h unless sokol_app.h is
+initialized with `.high_dpi = true` (...and the TTF font looks pretty bad in a
+low-dpi scenario compared to the crisp bitmap font). sokol_imgui.h now
+communicates the actual dpi-scale to Dear ImGui before the default font is
+created so that it no longer needs to 'guess' the correct font. E.g. by default
+(on macOS) the crisp bitmap font is used, and when sokol_app.h is initialized
+with `.high_dpi = true` the TTF font, which looks nicer with native high-dpi
+resolution.
+
+PR: https://github.com/floooh/sokol/pull/1620
+
+Note that the [dcimgui source distribution](https://github.com/floooh/dcimgui)
+is not yet on Dear ImGui v1.93.0 because of a couple of Dear Bindings issues:
+
+- https://github.com/dearimgui/dear_bindings/issues/127
+- https://github.com/dearimgui/dear_bindings/issues/128
+
 ### 12-Oct-2026
 
 In sokol_gfx.h, fragment shaders can now write into storage buffers (previously
