@@ -3,8 +3,8 @@
 ### 17-Oct-2026
 
 A small fix has been applied to sokol_imgui.h for Dear ImGui v1.93.0 (backward
-compatible with 1.92.x). This ImGui version added a new macOS specifc 'hack' to
-guess the builtin default font (bitmap vs TTF), and this new guess caused the
+compatible with 1.92.x). Dear ImGui 1.93.0 added a new macOS specifc 'hack' to
+guess the better builtin default font (bitmap vs TTF), and this new guess caused the
 TTF font to be selected on macOS for sokol_imgui.h unless sokol_app.h is
 initialized with `.high_dpi = true` (...and the TTF font looks pretty bad in a
 low-dpi scenario compared to the crisp bitmap font). sokol_imgui.h now
