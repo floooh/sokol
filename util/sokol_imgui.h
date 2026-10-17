@@ -2525,9 +2525,6 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
     _simgui_imgui_create_context();
     _simgui_imgui_style_colors_dark();
     ImGuiIO* io = _simgui_imgui_get_io();
-    if (!_simgui.desc.no_default_font) {
-        _simgui_io_add_font_default(io);
-    }
     io->IniFilename = _simgui.desc.ini_filename;
     io->ConfigMacOSXBehaviors = _simgui_is_osx();
     io->BackendRendererName = "sokol-imgui";
@@ -2536,10 +2533,20 @@ SOKOL_API_IMPL void simgui_setup(const simgui_desc_t* desc) {
         if (!_simgui.desc.disable_set_mouse_cursor) {
             io->BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
         }
+        // initial display size and scale, needed by ImGui's default font selection
+        _simgui.cur_dpi_scale = sapp_dpi_scale();
+        SOKOL_ASSERT(_simgui.cur_dpi_scale > 0.0f);
+        io->DisplaySize.x = sapp_widthf() / _simgui.cur_dpi_scale;
+        io->DisplaySize.y = sapp_heightf() / _simgui.cur_dpi_scale;
+        io->DisplayFramebufferScale.x = _simgui.cur_dpi_scale;
+        io->DisplayFramebufferScale.y = _simgui.cur_dpi_scale;
         ImGuiPlatformIO* pio = _simgui_imgui_get_platform_io();
         pio->Platform_SetClipboardTextFn = _simgui_set_clipboard;
         pio->Platform_GetClipboardTextFn = _simgui_get_clipboard;
     #endif
+    if (!_simgui.desc.no_default_font) {
+        _simgui_io_add_font_default(io);
+    }
     io->ConfigWindowsResizeFromEdges = !_simgui.desc.disable_windows_resize_from_edges;
 
     // create sokol-gfx resources
