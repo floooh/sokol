@@ -4809,9 +4809,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(prev_frame.num_seal_image);
         _sgimgui_frame_stats(prev_frame.num_copy_buffer_to_buffer);
         _sgimgui_frame_stats(prev_frame.num_copy_buffer_to_image);
+        _sgimgui_frame_stats(prev_frame.num_copy_image_to_image);
         _sgimgui_frame_stats(prev_frame.size_apply_uniforms);
         _sgimgui_frame_stats(prev_frame.size_copy_buffer_to_buffer);
         _sgimgui_frame_stats(prev_frame.size_copy_buffer_to_image);
+        _sgimgui_frame_stats(prev_frame.size_copy_image_to_image);
         _sgimgui_frame_stats(prev_frame.buffers.allocated);
         _sgimgui_frame_stats(prev_frame.buffers.deallocated);
         _sgimgui_frame_stats(prev_frame.buffers.inited);
