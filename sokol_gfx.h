@@ -12798,6 +12798,7 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
             const _sg_view_t* rsv_view = atts->resolve_views[i];
             if (rsv_view && rsv_view->gl.msaa_resolve_frame_buffer) {
                 if (!fb_read_bound) {
+                    glDisable(GL_SCISSOR_TEST);
                     glBindFramebuffer(GL_READ_FRAMEBUFFER, _sg.gl.fb);
                     fb_read_bound = true;
                 }
@@ -12809,6 +12810,9 @@ _SOKOL_PRIVATE void _sg_gl_end_render_pass(const _sg_attachments_ptrs_t* atts) {
                 glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
                 fb_draw_bound = true;
             }
+        }
+        if (fb_read_bound) {
+            glEnable(GL_SCISSOR_TEST);
         }
 
         // invalidate framebuffers
