@@ -2328,7 +2328,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
             .width = font_width,
             .height = font_height,
             .pixel_format = SG_PIXELFORMAT_RGBA8,
-            .data.mip_levels[0] = {
+            .data = {
                 .ptr = pixels,
                 .size = (size_t)(font_width * font_height) * sizeof(uint32_t)
             },
@@ -2358,7 +2358,7 @@ SOKOL_API_IMPL void snk_setup(const snk_desc_t* desc) {
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(def_pixels),
+        .data = SG_RANGE(def_pixels),
         .label = "sokol-nuklear-default-image",
     });
     _snuklear.def_tex_view = sg_make_view(&(sg_view_desc){
