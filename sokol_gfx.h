@@ -19875,7 +19875,10 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
     wgpuQueueWriteTexture(_sg.wgpu.queue, &wgpu_copy_tex, (const void*)src_ptr, src_size, &wgpu_layout, &wgpu_extent);
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_image_data* data) {
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_range* data) {
+    SOKOL_ASSERT(data->ptr);
+    SOKOL_ASSERT(data->size > 0);
+    size_t src_offset = 0;
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
@@ -19883,9 +19886,9 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_im
         const int bytes_per_row = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
         const int bytes_per_slice = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
         _sg_wgpu_write_miplevel_data(img,
-            (const uint8_t*)data->mip_levels[mip_level].ptr,
-            data->mip_levels[mip_level].size,
-            0,  // src_offset
+            (const uint8_t*)data->ptr,
+            data->size,
+            src_offset,
             bytes_per_row,
             bytes_per_slice,
             mip_level,
@@ -19895,6 +19898,7 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_im
             mip_width,
             mip_height,
             mip_depth_or_slices);
+        src_offset += (size_t)bytes_per_slice * (size_t)mip_depth_or_slices;
     }
 }
 
@@ -19916,6 +19920,12 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
         if (desc->usage.storage_image) {
             wgpu_tex_desc.usage |= WGPUTextureUsage_StorageBinding;
         }
+        if (desc->usage.copy_src) {
+            wgpu_tex_desc.usage |= WGPUTextureUsage_CopySrc;
+        }
+        if (desc->usage.copy_dst) {
+            wgpu_tex_desc.usage |= WGPUTextureUsage_CopyDst;
+        }
         wgpu_tex_desc.dimension = _sg_wgpu_texture_dimension(img->cmn.type);
         wgpu_tex_desc.size.width = (uint32_t) img->cmn.width;
         wgpu_tex_desc.size.height = (uint32_t) img->cmn.height;
@@ -19928,7 +19938,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_image(_sg_image_t* img, const s
             _SG_ERROR(WGPU_CREATE_TEXTURE_FAILED);
             return SG_RESOURCESTATE_FAILED;
         }
-        if (desc->data.mip_levels[0].ptr) {
+        if (desc->data.ptr) {
             _sg_wgpu_copy_image_data(img, &desc->data);
         }
     }
@@ -20798,6 +20808,36 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_ima
         wgpu_copy_size.depthOrArrayLayers = (uint32_t)desc->size.num_slices;
         wgpuCommandEncoderCopyBufferToTexture(_sg.wgpu.cmd_enc, &wgpu_src_info, &wgpu_dst_info, &wgpu_copy_size);
     }
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    SOKOL_ASSERT(src_img->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_img->wgpu.tex);
+    SOKOL_ASSERT(dst_img->wgpu.tex);
+
+    _sg_wgpu_acquire_command_encoder();
+    const int block_dim = _sg_block_dim(src_img->cmn.pixel_format);
+    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_src_info);
+    _SG_STRUCT(WGPUTexelCopyTextureInfo, wgpu_dst_info);
+    _SG_STRUCT(WGPUExtent3D, wgpu_copy_size);
+    wgpu_src_info.texture = src_img->wgpu.tex;
+    wgpu_src_info.mipLevel = (uint32_t)desc->src.mip_level;
+    wgpu_src_info.origin.x = (uint32_t)desc->src.x;
+    wgpu_src_info.origin.y = (uint32_t)desc->src.y;
+    wgpu_src_info.origin.z = (uint32_t)desc->src.slice;
+    wgpu_src_info.aspect = WGPUTextureAspect_All;
+    wgpu_dst_info.texture = dst_img->wgpu.tex;
+    wgpu_dst_info.mipLevel = (uint32_t)desc->dst.mip_level;
+    wgpu_dst_info.origin.x = (uint32_t)desc->dst.x;
+    wgpu_dst_info.origin.y = (uint32_t)desc->dst.y;
+    wgpu_dst_info.origin.z = (uint32_t)desc->dst.slice;
+    wgpu_dst_info.aspect = WGPUTextureAspect_All;
+    wgpu_copy_size.width = (uint32_t)_sg_roundup_pow2(desc->size.width, block_dim);
+    wgpu_copy_size.height = (uint32_t)_sg_roundup_pow2(desc->size.height, block_dim);
+    wgpu_copy_size.depthOrArrayLayers = (uint32_t)desc->size.num_slices;
+    wgpuCommandEncoderCopyTextureToTexture(_sg.wgpu.cmd_enc, &wgpu_src_info, &wgpu_dst_info, &wgpu_copy_size);
 }
 
 // ██    ██ ██    ██ ██      ██   ██  █████  ███    ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
