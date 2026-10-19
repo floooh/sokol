@@ -11988,26 +11988,28 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_image(_sg_image_t* img, const sg_
             _sg_gl_cache_store_texture_sampler_binding(0);
             _sg_gl_cache_bind_texture_sampler(0, img->gl.target, img->gl.tex[slot], 0);
             _sg_gl_texstorage(img);
+            const uint8_t* data_ptr = (const uint8_t*)desc->data.ptr;
             for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
-                const GLvoid* data_ptr = desc->data.mip_levels[mip_index].ptr;
-                const GLsizei data_size = (GLsizei)desc->data.mip_levels[mip_index].size;
                 const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
                 const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-                const int mip_depth = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+                const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+                const int surf_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+                const int mip_size = surf_pitch * mip_depth_or_slices;
                 if (SG_IMAGETYPE_CUBE == img->cmn.type) {
-                    const int surf_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
                     // NOTE: surf_ptr is allowed to be null here
-                    const uint8_t* surf_ptr = (const uint8_t*) data_ptr;
+                    const uint8_t* surf_ptr = data_ptr;
                     for (int i = 0; i < 6; i++) {
                         const GLenum gl_img_target = _sg_gl_cubeface_target(i);
-                        _sg_gl_teximage(img, gl_img_target, mip_index, mip_width, mip_height, mip_depth, surf_ptr, surf_pitch);
+                        _sg_gl_teximage(img, gl_img_target, mip_index, mip_width, mip_height, mip_depth_or_slices, surf_ptr, surf_pitch);
                         if (data_ptr) {
-                            SOKOL_ASSERT((6 * surf_pitch) <= data_size);
                             surf_ptr += surf_pitch;
                         }
                     }
                 } else {
-                    _sg_gl_teximage(img, img->gl.target, mip_index, mip_width, mip_height, mip_depth, data_ptr, data_size);
+                    _sg_gl_teximage(img, img->gl.target, mip_index, mip_width, mip_height, mip_depth_or_slices, data_ptr, mip_size);
+                }
+                if (data_ptr) {
+                    data_ptr += mip_size;
                 }
             }
             _sg_gl_cache_restore_texture_sampler_binding(0);
@@ -13537,6 +13539,14 @@ _SOKOL_PRIVATE void _sg_gl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     _sg_gl_cache_restore_texture_sampler_binding(0);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
     _SG_GL_CHECK_ERROR();
+}
+
+_SOKOL_PRIVATE void _sg_gl_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    SOKOL_ASSERT(src_img->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME");
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
