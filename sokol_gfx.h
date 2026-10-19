@@ -18463,7 +18463,42 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_to_image(_sg_image_t* src_img, _sg_image_
     SOKOL_ASSERT(src_img->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
 
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_mtl_acquire_cmd_buffer();
+    SOKOL_ASSERT(_sg.mtl.cmd_buffer);
+    _sg_mtl_acquire_blit_cmd_encoder();
+    SOKOL_ASSERT(_sg.mtl.blit_cmd_encoder);
+
+    __unsafe_unretained id<MTLTexture> mtl_src_tex = _sg_mtl_id(src_img->mtl.tex[src_img->cmn.active_slot]);
+    __unsafe_unretained id<MTLTexture> mtl_dst_tex = _sg_mtl_id(dst_img->mtl.tex[dst_img->cmn.active_slot]);
+
+    MTLSize mtl_size;
+    MTLOrigin mtl_src_origin;
+    MTLOrigin mtl_dst_origin;
+    if (src_img->cmn.type == SG_IMAGETYPE_3D) {
+        SOKOL_ASSERT(dst_img->cmn.type == SG_IMAGETYPE_3D);
+        mtl_size = MTLSizeMake((NSUInteger)desc->size.width, (NSUInteger)desc->size.height, (NSUInteger)desc->size.num_slices);
+        mtl_src_origin = MTLOriginMake((NSUInteger)desc->src.x, (NSUInteger)desc->src.y, (NSUInteger)desc->src.slice);
+        mtl_dst_origin = MTLOriginMake((NSUInteger)desc->dst.x, (NSUInteger)desc->dst.y, (NSUInteger)desc->dst.slice);
+    } else {
+        SOKOL_ASSERT(dst_img->cmn.type != SG_IMAGETYPE_3D);
+        mtl_size = MTLSizeMake((NSUInteger)desc->size.width, (NSUInteger)desc->size.height, 1);
+        mtl_src_origin = MTLOriginMake((NSUInteger)desc->src.x, (NSUInteger)desc->src.y, 0);
+        mtl_dst_origin = MTLOriginMake((NSUInteger)desc->dst.x, (NSUInteger)desc->dst.y, 0);
+    }
+    const int mtl_src_slice_index = (src_img->cmn.type == SG_IMAGETYPE_3D) ? 0 : desc->src.slice;
+    const int mtl_dst_slice_index = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 0 : desc->dst.slice;
+    const int mtl_num_slices = (dst_img->cmn.type == SG_IMAGETYPE_3D) ? 1 : desc->size.num_slices;
+    for (int i = 0; i < mtl_num_slices; i++) {
+        [_sg.mtl.blit_cmd_encoder copyFromTexture:mtl_src_tex
+            sourceSlice:(NSUInteger)(mtl_src_slice_index + i)
+            sourceLevel:(NSUInteger)desc->src.mip_level
+            sourceOrigin:mtl_src_origin
+            sourceSize:mtl_size
+            toTexture:mtl_dst_tex
+            destinationSlice:(NSUInteger)(mtl_dst_slice_index + i)
+            destinationLevel:(NSUInteger)desc->dst.mip_level
+            destinationOrigin:mtl_dst_origin];
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
