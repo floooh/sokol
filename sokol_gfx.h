@@ -5617,7 +5617,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
@@ -5627,6 +5627,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGEUNSEALED_USAGE, "sg_write_image_unsealed: image usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_USAGE, "sg_write_image_transient: image usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND, "sg_write_image_transient: cannot be called after image has already been bound in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_COPY, "sg_write_image_transient: cannot be called after image has been copied from in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_POINTER, "sg_write_image_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_SRC_DATA_SIZE, "sg_write_image_*: desc.src.data.size must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEIMAGE_BYTESPERROW, "sg_write_image_*: desc.src.bytes_per_row must be a multiple of the pixel or compression-block size") \
@@ -5688,6 +5689,43 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.x + desc.size.width must be <= destination mip level width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_IMAGE, "sg_copy_image_to_image: src and dst image cannot be the same") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_INSIDE_PASS, "sg_copy_image_to_image: must not be called inside a pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_SRC, "sg_copy_image_to_image: source image must have .copy_src usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_DST, "sg_copy_image_to_image: destination image must have .copy_dst usage") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER, "sg_copy_image_to_image: cannot copy between a 3D image and non-3D image types") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be equal or the SRGB variant") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT, "sg_copy_image_to_image: source and destination image must have identical sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the whole mip level must be copied") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the src and dst mip level size must be identical") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_MIPLEVEL, "sg_copy_image_to_image: desc.src.mip_level must be >= 0 and less than the number of mipmaps in the source image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH, "sg_copy_image_to_image: desc.size.width must be > 0 and <= source image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT, "sg_copy_image_to_image: desc.size.height must be > 0 and <= source image height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_MIPLEVEL, "sg_copy_image_to_image: desc.dst.mip_level must be >= 0 and less than the number of mipmaps in the destination image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH, "sg_copy_image_to_image: desc.size.width must be > 0 and <= destination image width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT, "sg_copy_image_to_image: desc.size.height must be > 0 and <= destination image height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH_MULTIPLE, "sg_copy_image_to_image: for compressed pixel formats, desc.size.width must be a multiple of 4, or desc.src.x + desc.size.width must be equal to the source miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT_MULTIPLE, "sg_copy_image_to_image: for compressed pixel formats, desc.size.height must be a multiple of 4, or desc.src.y + desc.size.height must be equal to the source miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH_MULTIPLE, "sg_copy_image_to_image: for compressed pixel formats, desc.size.width must be a multiple of 4, or desc.dst.x + desc.size.width must be equal to the destination miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_MULTIPLE, "sg_copy_image_to_image: for compressed pixel formats, desc.size.height must be a multiple of 4, or desc.dst.y + desc.size.height must be equal to the destination miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES, "sg_copy_image_to_image: desc.size.num_slices must be > 0 and <= source image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES, "sg_copy_image_to_image: desc.size.num_slices must be > 0 and <= destination image num slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_X_RANGE, "sg_copy_image_to_image: desc.src.x must be >= 0 and < source miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_X_RANGE, "sg_copy_image_to_image: desc.dst.x must be >= 0 and < destination miplevel width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_Y_RANGE, "sg_copy_image_to_image: desc.src.y must be >= 0 and < source miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_Y_RANGE, "sg_copy_image_to_image: desc.dst.y must be >= 0 and < destination miplevel height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_X_ALIGNMENT, "sg_copy_image_to_image: desc.src.x must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_X_ALIGNMENT, "sg_copy_image_to_image: desc.dst.x must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_Y_ALIGNMENT, "sg_copy_image_to_image: desc.src.y must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_Y_ALIGNMENT, "sg_copy_image_to_image: desc.dst.y must be a multiple of 4 for compressed pixel formats") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_SLICE_RANGE, "sg_copy_image_to_image: desc.src.slice must be >= 0 and < source miplevel depth or array/cubemap slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_SLICE_RANGE, "sg_copy_image_to_image: desc.dst.slice must be >= 0 and < destination miplevel depth or array/cubemap slices") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH_OVERFLOW, "sg_copy_image_to_image: desc.src.x + desc.size.width must be <= source mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_image_to_image: desc.dst.x + desc.size.width must be <= destination mip level width") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT_OVERFLOW, "sg_copy_image_to_image: desc.src.y + desc.size.height must be <= source mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_image_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES_OVERFLOW, "sg_copy_image_to_image: desc.src.slice + desc.size.num_slices must be <= source number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_image_to_image: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -7109,6 +7147,7 @@ typedef struct {
     uint32_t write_transient_frame_index; // last frame index when written to
     struct {
         uint32_t bind_frame_index;  // last frame index the image was bound
+        uint32_t copy_src_frame_index; // last frame index the image was used as copy-source
     } validate;
     sg_image_type type;
     int width;
@@ -9070,6 +9109,7 @@ _SOKOL_PRIVATE void _sg_image_common_init(_sg_image_common_t* cmn, const sg_imag
     cmn->active_slot = 0;
     cmn->write_transient_frame_index = 0;
     cmn->validate.bind_frame_index = 0;
+    cmn->validate.copy_src_frame_index = 0;
     cmn->type = desc->type;
     cmn->width = desc->width;
     cmn->height = desc->height;
@@ -9553,6 +9593,20 @@ _SOKOL_PRIVATE bool _sg_is_srgb_format(sg_pixel_format fmt) {
         default:
             return false;
     }
+}
+
+_SOKOL_PRIVATE sg_pixel_format _sg_to_non_srgb_format(sg_pixel_format fmt) {
+    if (fmt == SG_PIXELFORMAT_SRGB8A8) {
+        return SG_PIXELFORMAT_RGBA8;
+    } else if (fmt == SG_PIXELFORMAT_SBGR8A8) {
+        return SG_PIXELFORMAT_BGRA8;
+    } else {
+        return fmt;
+    }
+}
+
+_SOKOL_PRIVATE bool _sg_is_copy_compatible_format(sg_pixel_format src_fmt, sg_pixel_format dst_fmt) {
+    return _sg_to_non_srgb_format(src_fmt) == _sg_to_non_srgb_format(dst_fmt);
 }
 
 _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
@@ -18404,6 +18458,14 @@ _SOKOL_PRIVATE void _sg_mtl_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_imag
     }
 }
 
+_SOKOL_PRIVATE void _sg_mtl_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    SOKOL_ASSERT(src_img->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 _SOKOL_PRIVATE void _sg_mtl_push_debug_group(const char* name) {
     SOKOL_ASSERT(name);
     if (_sg.mtl.render_cmd_encoder) {
@@ -24731,6 +24793,23 @@ static inline void _sg_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* 
     #endif
 }
 
+static inline void _sg_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_copy_image_to_image(src_img, dst_img, desc);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_copy_image_to_image(src_img, dst_img, desc);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_copy_image_to_image(src_img, dst_img, desc);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_copy_image_to_image(src_img, dst_img, desc);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_copy_image_to_image(src_img, dst_img, desc);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_copy_image_to_image(src_img, dst_img, desc);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
 static inline void _sg_push_debug_group(const char* name) {
     #if defined(SOKOL_METAL)
     _sg_mtl_push_debug_group(name);
@@ -26398,8 +26477,9 @@ _SOKOL_PRIVATE bool _sg_validate_write_image_transient(const _sg_image_t* img, c
         SOKOL_ASSERT(img->slot.state == SG_RESOURCESTATE_VALID);
         _sg_validate_begin();
         _SG_VALIDATE(img->cmn.usage.write_transient, VALIDATE_WRITEIMAGETRANSIENT_USAGE);
-        // write-transient is only allowed before resource is bound in current frame
+        // write-transient is only allowed before resource is 'used' in current frame
         _SG_VALIDATE(img->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_BIND);
+        _SG_VALIDATE(img->cmn.validate.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_COPY);
         _sg_validate_write_image_common(img, desc);
         return _sg_validate_end();
     #endif
@@ -26555,6 +26635,72 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(_sg_buffer_t* src_buf, con
         _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW);
         _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW);
         _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(src_img && dst_img && desc);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(src_img && dst_img && desc);
+        SOKOL_ASSERT(src_img->slot.state == SG_RESOURCESTATE_VALID);
+        SOKOL_ASSERT(dst_img->slot.state == SG_RESOURCESTATE_VALID);
+        src_img->cmn.validate.copy_src_frame_index = _sg.frame_index;
+        _sg_validate_begin();
+        const sg_pixel_format src_fmt = src_img->cmn.pixel_format;
+        const sg_pixel_format dst_fmt = dst_img->cmn.pixel_format;
+        const int src_mip_width = _sg_miplevel_dim(src_img->cmn.width, desc->src.mip_level);
+        const int src_mip_height = _sg_miplevel_dim(src_img->cmn.height, desc->src.mip_level);
+        const int src_mip_depth_or_slices = (SG_IMAGETYPE_3D == src_img->cmn.type) ? _sg_miplevel_dim(src_img->cmn.num_slices, desc->src.mip_level) : src_img->cmn.num_slices;
+        const int dst_mip_width = _sg_miplevel_dim(dst_img->cmn.width, desc->dst.mip_level);
+        const int dst_mip_height = _sg_miplevel_dim(dst_img->cmn.height, desc->dst.mip_level);
+        const int dst_mip_depth_or_slices = (SG_IMAGETYPE_3D == dst_img->cmn.type) ? _sg_miplevel_dim(dst_img->cmn.num_slices, desc->dst.mip_level) : dst_img->cmn.num_slices;
+        const int block_dim = _sg_block_dim(src_fmt);
+        _SG_VALIDATE(desc->src.image.id != desc->dst.image.id, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_IMAGE);
+        _SG_VALIDATE(!_sg.cur_pass.in_pass, VALIDATE_COPYIMAGETOIMAGE_INSIDE_PASS);
+        _SG_VALIDATE(src_img->cmn.usage.copy_src, VALIDATE_COPYIMAGETOIMAGE_COPY_SRC);
+        _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYIMAGETOIMAGE_COPY_DST);
+        _SG_VALIDATE((src_img->cmn.type == SG_IMAGETYPE_3D) == (dst_img->cmn.type == SG_IMAGETYPE_3D), VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER);
+        // pixel formats must be either identical, or copy between an SRGB/non-SRGB variant of the same format
+        _SG_VALIDATE(_sg_is_copy_compatible_format(src_fmt, dst_fmt), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
+        _SG_VALIDATE(src_img->cmn.sample_count == dst_img->cmn.sample_count, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT);
+        if ((src_img->cmn.sample_count > 1) || _sg_is_depth_or_depth_stencil_format(src_fmt)) {
+            _SG_VALIDATE((src_mip_width == dst_mip_width) && (src_mip_height == dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE);
+            _SG_VALIDATE((src_mip_width == desc->size.width) && (src_mip_height == desc->size.height), VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL);
+        }
+        _SG_VALIDATE((desc->src.mip_level >= 0) && (desc->src.mip_level < src_img->cmn.num_mipmaps), VALIDATE_COPYIMAGETOIMAGE_SRC_MIPLEVEL);
+        _SG_VALIDATE((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps), VALIDATE_COPYIMAGETOIMAGE_DST_MIPLEVEL);
+        _SG_VALIDATE((desc->size.width > 0) && (desc->size.width <= src_mip_width), VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH);
+        _SG_VALIDATE((desc->size.width > 0) && (desc->size.width <= dst_mip_width), VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH);
+        _SG_VALIDATE((desc->size.height > 0) && (desc->size.height <= src_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT);
+        _SG_VALIDATE((desc->size.height > 0) && (desc->size.height <= dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT);
+        _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim) || ((desc->src.x + desc->size.width) == src_mip_width), VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH_MULTIPLE);
+        _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim) || ((desc->src.y + desc->size.height) == src_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT_MULTIPLE);
+        _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim) || ((desc->dst.x + desc->size.width) == dst_mip_width), VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH_MULTIPLE);
+        _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim) || ((desc->dst.y + desc->size.height) == dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_MULTIPLE);
+        _SG_VALIDATE((desc->size.num_slices > 0) && (desc->size.num_slices <= src_mip_depth_or_slices), VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES);
+        _SG_VALIDATE((desc->size.num_slices > 0) && (desc->size.num_slices <= dst_mip_depth_or_slices), VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES);
+        _SG_VALIDATE((desc->src.x >= 0) && (desc->src.x < src_mip_width), VALIDATE_COPYIMAGETOIMAGE_SRC_X_RANGE);
+        _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < dst_mip_width), VALIDATE_COPYIMAGETOIMAGE_DST_X_RANGE);
+        _SG_VALIDATE((desc->src.y >= 0) && (desc->src.y < src_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_Y_RANGE);
+        _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_DST_Y_RANGE);
+        _SG_VALIDATE((desc->src.x < 0) || _sg_multiple(desc->src.x, block_dim), VALIDATE_COPYIMAGETOIMAGE_SRC_X_ALIGNMENT);
+        _SG_VALIDATE((desc->dst.x < 0) || _sg_multiple(desc->dst.x, block_dim), VALIDATE_COPYIMAGETOIMAGE_DST_X_ALIGNMENT);
+        _SG_VALIDATE((desc->src.y < 0) || _sg_multiple(desc->src.y, block_dim), VALIDATE_COPYIMAGETOIMAGE_SRC_Y_ALIGNMENT);
+        _SG_VALIDATE((desc->dst.y < 0) || _sg_multiple(desc->dst.y, block_dim), VALIDATE_COPYIMAGETOIMAGE_DST_Y_ALIGNMENT);
+        _SG_VALIDATE((desc->src.slice >= 0) && (desc->src.slice < src_mip_depth_or_slices), VALIDATE_COPYIMAGETOIMAGE_SRC_SLICE_RANGE);
+        _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < dst_mip_depth_or_slices), VALIDATE_COPYIMAGETOIMAGE_DST_SLICE_RANGE);
+        _SG_VALIDATE((desc->src.x + desc->size.width) <= src_mip_width, VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH_OVERFLOW);
+        _SG_VALIDATE((desc->dst.x + desc->size.width) <= dst_mip_width, VALIDATE_COPYIMAGETOIMAGE_DST_WIDTH_OVERFLOW);
+        _SG_VALIDATE((desc->src.y + desc->size.height) <= src_mip_height, VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT_OVERFLOW);
+        _SG_VALIDATE((desc->dst.y + desc->size.height) <= dst_mip_height, VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_OVERFLOW);
+        _SG_VALIDATE((desc->src.slice + desc->size.num_slices) <= src_mip_depth_or_slices, VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES_OVERFLOW);
+        _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= dst_mip_depth_or_slices, VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES_OVERFLOW);
         return _sg_validate_end();
     #endif
 }
@@ -27342,6 +27488,17 @@ _SOKOL_PRIVATE sg_copy_buffer_to_image_desc _sg_copy_buffer_to_image_desc_defaul
     res.size.width = _sg_def(res.size.width, mip_width - desc->dst.x);
     res.size.height = _sg_def(res.size.height, mip_height - desc->dst.y);
     res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->dst.slice);
+    return res;
+}
+
+_SOKOL_PRIVATE sg_copy_image_to_image_desc _sg_copy_image_to_image_desc_defaults(const _sg_image_t* src_img, const sg_copy_image_to_image_desc* desc) {
+    sg_copy_image_to_image_desc res = *desc;
+    const int mip_width = _sg_miplevel_dim(src_img->cmn.width, desc->src.mip_level);
+    const int mip_height = _sg_miplevel_dim(src_img->cmn.height, desc->src.mip_level);
+    const int mip_depth_or_slices = (SG_IMAGETYPE_3D == src_img->cmn.type) ? _sg_miplevel_dim(src_img->cmn.num_slices, desc->src.mip_level) : src_img->cmn.num_slices;
+    res.size.width = _sg_def(res.size.width, mip_width - desc->src.x);
+    res.size.height = _sg_def(res.size.height, mip_height - desc->src.y);
+    res.size.num_slices = _sg_def(res.size.num_slices, mip_depth_or_slices - desc->src.slice);
     return res;
 }
 
@@ -28635,7 +28792,7 @@ SOKOL_API_IMPL void sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* 
     _SG_TRACE_ARGS(copy_buffer_to_image, desc);
 }
 
-SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image* desc) {
+SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image_desc* desc) {
     SOKOL_ASSERT(_sg.valid);
     SOKOL_ASSERT(desc);
     _sg_stats_inc(num_copy_image_to_image);
@@ -28646,7 +28803,7 @@ SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image* desc) {
         return;
     }
     if (!dst_img) {
-        _SG_ERRO(COPY_IMAGE_TO_IMAGE_DST_ALIVE);
+        _SG_ERROR(COPY_IMAGE_TO_IMAGE_DST_ALIVE);
         return;
     }
     if (src_img->slot.state != SG_RESOURCESTATE_VALID) {
@@ -28657,9 +28814,9 @@ SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image* desc) {
         _SG_ERROR(COPY_IMAGE_TO_IMAGE_DST_VALID);
         return;
     }
-    sg_copy_image_to_image_desc desc_def = _sg_copy_image_to_image_desc_defaults(src_img, dst_img, desc);
+    sg_copy_image_to_image_desc desc_def = _sg_copy_image_to_image_desc_defaults(src_img, desc);
     if (_sg_validate_copy_image_to_image(src_img, dst_img, &desc_def)) {
-        const sg_pixel_format fmt = src_img->cmn.pixel_format,
+        const sg_pixel_format fmt = src_img->cmn.pixel_format;
         const size_t stats_copy_size = _sg_image_copy_size(fmt,
             _sg_row_pitch(fmt, desc_def.size.width, 1),
             _sg_surface_pitch(fmt, desc_def.size.width, desc_def.size.height, 1),
