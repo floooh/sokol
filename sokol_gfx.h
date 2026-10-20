@@ -12410,25 +12410,27 @@ _SOKOL_PRIVATE void _sg_gl_discard_pipeline(_sg_pipeline_t* pip) {
     _sg_gl_cache_invalidate_pipeline(pip);
 }
 
-_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_view_t* view, GLenum gl_att_type) {
-    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
-    const GLuint gl_tex = img->gl.tex[0];
+_SOKOL_PRIVATE void _sg_gl_fb_attach_image_slice(GLenum fb_target, GLenum gl_att_type, const _sg_image_t* img, int mip_level, int slice) {
+    const GLuint gl_tex = img->gl.tex[img->cmn.active_slot];
     SOKOL_ASSERT(gl_tex);
-    const GLuint gl_target = img->gl.target;
-    SOKOL_ASSERT(gl_target);
-    const int mip_level = view->cmn.img.mip_level;
-    const int slice = view->cmn.img.slice;
     switch (img->cmn.type) {
         case SG_IMAGETYPE_2D:
-            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, gl_target, gl_tex, mip_level);
+            glFramebufferTexture2D(fb_target, gl_att_type, img->gl.target, gl_tex, mip_level);
             break;
         case SG_IMAGETYPE_CUBE:
-            glFramebufferTexture2D(GL_FRAMEBUFFER, gl_att_type, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
+            glFramebufferTexture2D(fb_target, gl_att_type, _sg_gl_cubeface_target(slice), gl_tex, mip_level);
             break;
         default:
-            glFramebufferTextureLayer(GL_FRAMEBUFFER, gl_att_type, gl_tex, mip_level, slice);
+            glFramebufferTextureLayer(fb_target, gl_att_type, gl_tex, mip_level, slice);
             break;
     }
+}
+
+_SOKOL_PRIVATE void _sg_gl_fb_attach_texture(const _sg_view_t* view, GLenum gl_att_type) {
+    const _sg_image_t* img = _sg_image_ref_ptr(&view->cmn.img.ref);
+    const int mip_level = view->cmn.img.mip_level;
+    const int slice = view->cmn.img.slice;
+    _sg_gl_fb_attach_image_slice(GL_FRAMEBUFFER, gl_att_type, img, mip_level, slice);
 }
 
 _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_image_t* ds_img) {
@@ -13567,8 +13569,84 @@ _SOKOL_PRIVATE void _sg_gl_copy_image_to_image(_sg_image_t* src_img, _sg_image_t
     SOKOL_ASSERT(src_img && dst_img && desc);
     SOKOL_ASSERT(src_img->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    _SG_GL_CHECK_ERROR();
 
-    SOKOL_ASSERT(false && "FIXME");
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+    if (src_img->cmn.usage.storage_image || dst_img->cmn.usage.storage_image) {
+        glMemoryBarrier(GL_TEXTURE_UPDATE_BARRIER_BIT|GL_FRAMEBUFFER_BARRIER_BIT);
+    }
+    #endif
+
+    const int src_mip = desc->src.mip_level;
+    const int src_x0 = desc->src.x;
+    const int src_y0 = desc->src.y;
+    const int src_slice = desc->src.slice;
+    const int dst_mip = desc->dst.mip_level;
+    const int dst_x0 = desc->dst.x;
+    const int dst_y0 = desc->dst.y;
+    const int dst_slice = desc->dst.slice;
+    const int w = desc->size.width;
+    const int h = desc->size.height;
+
+    // simple shortcut for GL 4.3+
+    #if defined(_SOKOL_GL_HAS_COPYIMAGE)
+    if (_sg.features.copy_image_to_image_relaxed) {
+        const GLuint gl_src_tex = src_img->gl.tex[src_img->cmn.active_slot];
+        const GLuint gl_dst_tex = dst_img->gl.tex[dst_img->cmn.active_slot];
+        SOKOL_ASSERT(gl_src_tex && gl_dst_tex);
+        glCopyImageSubData(
+            gl_src_tex,
+            src_img->gl.target,
+            src_mip,
+            src_x0,
+            src_y0,
+            src_slice,
+            gl_dst_tex,
+            dst_img->gl.target,
+            dst_mip,
+            dst_x0,
+            dst_y0,
+            dst_slice,
+            w,
+            h,
+            desc->size.num_slices);
+        _SG_GL_CHECK_ERROR();
+        return;
+    }
+    #endif
+
+    // fallback path via glBlitFramebuffer for GLES3 and GL <4.3
+    const sg_pixel_format fmt = src_img->cmn.pixel_format;
+    GLenum gl_att_type = GL_COLOR_ATTACHMENT0;
+    GLbitfield gl_mask = GL_COLOR_BUFFER_BIT;
+    if (_sg_is_depth_or_depth_stencil_format(fmt)) {
+        gl_att_type = _sg_gl_depth_stencil_attachment_type(src_img);
+        gl_mask = GL_DEPTH_BUFFER_BIT;
+        if (_sg_is_depth_stencil_format(fmt)) {
+            gl_mask |= GL_STENCIL_BUFFER_BIT;
+        }
+    }
+    glDisable(GL_SCISSOR_TEST);
+    #if defined(SOKOL_GLCORE)
+    glDisable(GL_FRAMEBUFFER_SRGB);
+    #endif
+    const int src_x1 = src_x0 + w;
+    const int src_y1 = src_y0 + h;
+    const int dst_x1 = dst_x0 + w;
+    const int dst_y1 = dst_y0 + h;
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, _sg.gl.copy_src_fb);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _sg.gl.copy_dst_fb);
+    for (int i = 0; i < desc->size.num_slices; i++) {
+        _sg_gl_fb_attach_image_slice(GL_READ_FRAMEBUFFER, gl_att_type, src_img, src_mip, src_slice + i);
+        _sg_gl_fb_attach_image_slice(GL_DRAW_FRAMEBUFFER, gl_att_type, dst_img, dst_mip, dst_slice + i);
+        glBlitFramebuffer(src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, gl_mask, GL_NEAREST);
+    }
+    // detach, otherwise some drivers fail on a later color- vs depth-attachment switch
+    glFramebufferTexture2D(GL_READ_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, 0, 0);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, gl_att_type, GL_TEXTURE_2D, 0, 0);
+    // NOTE: draw-fb and GL_FRAMEBUFFER_SRGB are set as needed in next sg_begin_pass()
+    glEnable(GL_SCISSOR_TEST);
+    _SG_GL_CHECK_ERROR();
 }
 
 // ██████  ██████  ██████   ██  ██     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
