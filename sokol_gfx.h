@@ -6590,15 +6590,18 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
     #elif defined(__EMSCRIPTEN__)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
     #elif defined(__ANDROID__)
-        #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
+        #if defined(GL_ES_VERSION_3_1)
+            #define _SOKOL_GL_HAS_COMPUTE (1)
+        #endif
         #if defined(GL_ES_VERSION_3_2)
             #define _SOKOL_GL_HAS_COLORMASKI (1)
             #define _SOKOL_GL_HAS_COPYIMAGE (1)
+            #define _SOKOL_GL_HAS_BASEVERTEX (1)
         #endif
     #elif defined(__linux__) || defined(__unix__)
-        #define _SOKOL_GL_HAS_COLORMASKI (1)
         #if defined(SOKOL_GLCORE)
+            #define _SOKOL_GL_HAS_COLORMASKI (1)
             #if defined(GL_VERSION_4_3)
                 #define _SOKOL_GL_HAS_COMPUTE (1)
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
@@ -6616,9 +6619,15 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
                 #define _SOKOL_GL_HAS_MSAA_TEXTURES (1)
             #endif
         #else
-            #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
-            #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #if defined(GL_ES_VERSION_3_1)
+                #define _SOKOL_GL_HAS_COMPUTE (1)
+            #endif
+            #if defined(GL_ES_VERSION_3_2)
+                #define _SOKOL_GL_HAS_COLORMASKI (1)
+                #define _SOKOL_GL_HAS_COPYIMAGE (1)
+                #define _SOKOL_GL_HAS_BASEVERTEX (1)
+            #endif
         #endif
     #endif
 
@@ -11159,7 +11168,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     #else
     _sg.features.separate_buffer_types = false;
     #endif
+    #if defined(_SOKOL_GL_HAS_BASEVERTEX)
     _sg.features.draw_base_vertex = version >= 320;
+    #else
+    _sg.features.draw_base_vertex = false;
+    #endif
     _sg.features.draw_base_instance = false;
     _sg.features.dual_source_blending = false;
     _sg.features.vertexformat_int10_n2 = true;
@@ -14453,7 +14466,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = false;
     // technically irrelevant since the bytes-per-row alignment rule only affects non-staging buffers
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
-    _sg.fratures.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -18979,7 +18992,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     // when copying from non-staging buffer, bytes-per-row must be multiple of 256
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = false;
-    _sg.fratures.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -22822,7 +22835,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
-    _sg.fratures.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
