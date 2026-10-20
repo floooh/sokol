@@ -5694,7 +5694,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_SRC, "sg_copy_image_to_image: source image must have .copy_src usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_DST, "sg_copy_image_to_image: destination image must have .copy_dst usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER, "sg_copy_image_to_image: cannot copy between a 3D image and non-3D image types") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be equal or the SRGB variant") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be identical") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT, "sg_copy_image_to_image: source and destination image must have identical sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the whole mip level must be copied") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the src and dst mip level size must be identical") \
@@ -9593,20 +9593,6 @@ _SOKOL_PRIVATE bool _sg_is_srgb_format(sg_pixel_format fmt) {
         default:
             return false;
     }
-}
-
-_SOKOL_PRIVATE sg_pixel_format _sg_to_non_srgb_format(sg_pixel_format fmt) {
-    if (fmt == SG_PIXELFORMAT_SRGB8A8) {
-        return SG_PIXELFORMAT_RGBA8;
-    } else if (fmt == SG_PIXELFORMAT_SBGR8A8) {
-        return SG_PIXELFORMAT_BGRA8;
-    } else {
-        return fmt;
-    }
-}
-
-_SOKOL_PRIVATE bool _sg_is_copy_compatible_format(sg_pixel_format src_fmt, sg_pixel_format dst_fmt) {
-    return _sg_to_non_srgb_format(src_fmt) == _sg_to_non_srgb_format(dst_fmt);
 }
 
 _SOKOL_PRIVATE int _sg_pixelformat_bytesize(sg_pixel_format fmt) {
@@ -26755,8 +26741,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const
         _SG_VALIDATE(src_img->cmn.usage.copy_src, VALIDATE_COPYIMAGETOIMAGE_COPY_SRC);
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYIMAGETOIMAGE_COPY_DST);
         _SG_VALIDATE((src_img->cmn.type == SG_IMAGETYPE_3D) == (dst_img->cmn.type == SG_IMAGETYPE_3D), VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER);
-        // pixel formats must be either identical, or copy between an SRGB/non-SRGB variant of the same format
-        _SG_VALIDATE(_sg_is_copy_compatible_format(src_fmt, dst_fmt), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
+        _SG_VALIDATE(src_fmt == dst_fmt, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
         _SG_VALIDATE(src_img->cmn.sample_count == dst_img->cmn.sample_count, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT);
         if ((src_img->cmn.sample_count > 1) || _sg_is_depth_or_depth_stencil_format(src_fmt)) {
             _SG_VALIDATE((src_mip_width == dst_mip_width) && (src_mip_height == dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE);
