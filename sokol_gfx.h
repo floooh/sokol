@@ -2622,6 +2622,7 @@ typedef struct sg_features {
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
     bool copy_buffer_to_image_relaxed_bytes_per_row;    // if false: sg_copy_buffer_to_image .src.bytes_per_row must be a multiple of 256 (webgpu restriction)
+    bool copy_image_to_image_relaxed;   // if false: sg_copy_image_to_image only works for renderable and non-msaa pixel formats
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -5696,6 +5697,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER, "sg_copy_image_to_image: cannot copy between a 3D image and non-3D image types") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be identical") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT, "sg_copy_image_to_image: source and destination image must have identical sample count") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_RENDERABLE, "sg_copy_image_to_image: image pixel formats must be renderable when sg_features.copy_image_to_image_relaxed is false") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_MSAA, "sg_copy_image_to_image: images cannot be multi-sampled (sg_image_desc.sample_count > 1) when sg_features.copy_image_to_image_relaxed is false") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the whole mip level must be copied") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the src and dst mip level size must be identical") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_MIPLEVEL, "sg_copy_image_to_image: desc.src.mip_level must be >= 0 and less than the number of mipmaps in the source image") \
@@ -6550,6 +6553,7 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #if defined(GL_VERSION_4_3) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_COMPUTE (1)
             #define _SOKOL_GL_HAS_TEXVIEWS (1)
+            #define _SOKOL_GL_HAS_COPYIMAGE (1)
         #endif
         #if defined(GL_VERSION_4_2) || defined(_SOKOL_USE_WIN32_GL_LOADER)
             #define _SOKOL_GL_HAS_TEXSTORAGE (1)
@@ -6590,6 +6594,7 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #define _SOKOL_GL_HAS_TEXSTORAGE (1)
         #if defined(GL_ES_VERSION_3_2)
             #define _SOKOL_GL_HAS_COLORMASKI (1)
+            #define _SOKOL_GL_HAS_COPYIMAGE (1)
         #endif
     #elif defined(__linux__) || defined(__unix__)
         #define _SOKOL_GL_HAS_COLORMASKI (1)
@@ -6597,6 +6602,7 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
             #if defined(GL_VERSION_4_3)
                 #define _SOKOL_GL_HAS_COMPUTE (1)
                 #define _SOKOL_GL_HAS_TEXVIEWS (1)
+                #define _SOKOL_GL_HAS_COPYIMAGE (1)
             #endif
             #if defined(GL_VERSION_4_2)
                 #define _SOKOL_GL_HAS_TEXSTORAGE (1)
@@ -7457,6 +7463,8 @@ typedef struct {
     bool valid;
     GLuint vao;     // global mutated vertex-array-object
     GLuint fb;      // global mutated framebuffer
+    GLuint copy_src_fb;     // copy source framebuffer
+    GLuint copy_dst_fb;     // copy destination framebuffer
     _sg_gl_cache_t cache;
     bool ext_anisotropic;
     GLint max_anisotropy;
@@ -10212,7 +10220,8 @@ _SOKOL_PRIVATE void _sg_dummy_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_im
     _SG_XMACRO(glDrawElementsInstancedBaseVertex, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex)) \
     _SG_XMACRO(glDrawElementsInstancedBaseVertexBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance)) \
     _SG_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
-    _SG_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size))
+    _SG_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
+    _SG_XMACRO(glCopyImageSubData,                void, (GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)) \
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -11021,6 +11030,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    #if defined(_SOKOL_GL_HAS_COPYIMAGE)
+        _sg.features.copy_image_to_image_relaxed = version >= 430;
+    #else
+        _sg.features.copy_image_to_image_relaxed = false;
+    #endif
 
     // scan extensions
     bool has_s3tc = false;  // BC1..BC3
@@ -11151,6 +11165,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    _sg.features.copy_image_to_image_relaxed = false;
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -11633,8 +11648,10 @@ _SOKOL_PRIVATE void _sg_gl_setup_backend(const sg_desc* desc) {
     glBindVertexArray(_sg.gl.vao);
     _SG_GL_CHECK_ERROR();
 
-    // create global framebuffer object which will be mutated as needed
+    // create global framebuffer objects which will be mutated as needed
     glGenFramebuffers(1, &_sg.gl.fb);
+    glGenFramebuffers(1, &_sg.gl.copy_src_fb);
+    glGenFramebuffers(1, &_sg.gl.copy_dst_fb);
     _SG_GL_CHECK_ERROR();
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
@@ -11649,6 +11666,12 @@ _SOKOL_PRIVATE void _sg_gl_discard_backend(void) {
     SOKOL_ASSERT(_sg.gl.valid);
     if (_sg.gl.fb) {
         glDeleteFramebuffers(1, &_sg.gl.fb);
+    }
+    if (_sg.gl.copy_src_fb) {
+        glDeleteFramebuffers(1, &_sg.gl.copy_src_fb);
+    }
+    if (_sg.gl.copy_dst_fb) {
+        glDeleteFramebuffers(1, &_sg.gl.copy_dst_fb);
     }
     if (_sg.gl.vao) {
         glDeleteVertexArrays(1, &_sg.gl.vao);
@@ -14430,6 +14453,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = false;
     // technically irrelevant since the bytes-per-row alignment rule only affects non-staging buffers
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    _sg.fratures.copy_image_to_image_relaxed = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -16595,6 +16619,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    _sg.features.copy_image_to_image_relaxed = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -18954,6 +18979,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     // when copying from non-staging buffer, bytes-per-row must be multiple of 256
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = false;
+    _sg.fratures.copy_image_to_image_relaxed = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -22796,6 +22822,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    _sg.fratures.copy_image_to_image_relaxed = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -26743,6 +26770,12 @@ _SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const
         _SG_VALIDATE((src_img->cmn.type == SG_IMAGETYPE_3D) == (dst_img->cmn.type == SG_IMAGETYPE_3D), VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER);
         _SG_VALIDATE(src_fmt == dst_fmt, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
         _SG_VALIDATE(src_img->cmn.sample_count == dst_img->cmn.sample_count, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT);
+        if (!_sg.features.copy_image_to_image_relaxed) {
+            // additional restriction: pixel format must be renderable
+            _SG_VALIDATE(_sg.formats[src_fmt].render, VALIDATE_COPYIMAGETOIMAGE_RENDERABLE);
+            // additional restriction: images cannot be multi-sampled
+            _SG_VALIDATE(src_img->cmn.sample_count == 1, VALIDATE_COPYIMAGETOIMAGE_MSAA);
+        }
         if ((src_img->cmn.sample_count > 1) || _sg_is_depth_or_depth_stencil_format(src_fmt)) {
             _SG_VALIDATE((src_mip_width == dst_mip_width) && (src_mip_height == dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE);
             _SG_VALIDATE((src_mip_width == desc->size.width) && (src_mip_height == desc->size.height), VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL);
