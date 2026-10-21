@@ -16215,13 +16215,13 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_imag
         d3d11_dst_slice = desc->dst.slice;
         d3d11_num_slices = desc->size.num_slices;
     }
+    const UINT src_mip_level = (UINT)desc->src.mip_level;
+    const UINT src_num_mips = (UINT)src_img->cmn.num_mipmaps;
+    const UINT dst_mip_level = (UINT)desc->dst.mip_level;
+    const UINT dst_num_mips = (UINT)dst_img->cmn.num_mipmaps;
     for (int i = 0; i < d3d11_num_slices; i++) {
-        const UINT src_mip_level = (UINT)desc->src.mip_level;
         const UINT src_array_index = (UINT)(d3d11_src_slice + i);
-        const UINT src_num_mips = (UINT)src_img->cmn.num_mipmaps;
-        const UINT dst_mip_level = (UINT)desc->dst.mip_level;
         const UINT dst_array_index = (UINT)(d3d11_dst_slice + i);
-        const UINT dst_num_mips = (UINT)dst_img->cmn.num_mipmaps;
         const UINT d3d11_src_subres = _sg_d3d11_calcsubresource(src_mip_level, src_array_index, src_num_mips);
         const UINT d3d11_dst_subres = _sg_d3d11_calcsubresource(dst_mip_level, dst_array_index, dst_num_mips);
         _sg_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
