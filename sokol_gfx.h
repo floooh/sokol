@@ -14682,7 +14682,7 @@ _SOKOL_PRIVATE void _sg_d3d11_fill_image_subres_data(const _sg_image_t* img, con
             const UINT subres_index = _sg_d3d11_calcsubresource((UINT)mip_index, (UINT)array_index, (UINT)img->cmn.num_mipmaps);
             SOKOL_ASSERT(subres_index < _SG_D3D11_MAX_TEXTURE_SUBRESOURCES);
             D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
-            subres_data->pSysMem = ptr + mip_offset + array_index * surf_pitch;
+            subres_data->pSysMem = ptr + mip_offset + (size_t)array_index * (size_t)surf_pitch;
             subres_data->SysMemPitch = (UINT)row_pitch;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
                 subres_data->SysMemSlicePitch = (UINT)surf_pitch;
@@ -15984,15 +15984,16 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
     SOKOL_ASSERT((src_offset + _sg_image_copy_size(img->cmn.pixel_format, src_bytes_per_row, src_bytes_per_slice, width, height, num_slices)) <= src_size);
     _SOKOL_UNUSED(src_size);
 
+    const int block_dim = _sg_block_dim(img->cmn.pixel_format);
     const UINT d3d11_src_row_pitch = (UINT)src_bytes_per_row;
     UINT d3d11_src_depth_pitch = 0;
     int d3d11_slice = 0;
     int d3d11_num_slices = 0;
     _SG_STRUCT(D3D11_BOX, d3d11_dst_box);
     d3d11_dst_box.left = (UINT)x;
-    d3d11_dst_box.right = (UINT)(x + width);
+    d3d11_dst_box.right = (UINT)_sg_roundup_pow2(x + width, block_dim);
     d3d11_dst_box.top = (UINT)y;
-    d3d11_dst_box.bottom = (UINT)(y + height);
+    d3d11_dst_box.bottom = (UINT)_sg_roundup_pow2(y + height, block_dim);
     if (img->cmn.type == SG_IMAGETYPE_3D) {
         d3d11_slice = 0;
         d3d11_num_slices = 1;
@@ -16007,7 +16008,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
         d3d11_src_depth_pitch = 0;
     }
     for (int i = 0; i < d3d11_num_slices; i++) {
-        const void* d3d11_src_ptr = (void*)(src_ptr + src_offset + i * src_bytes_per_slice);
+        const void* d3d11_src_ptr = (const void*)(src_ptr + src_offset + (size_t)i * (size_t)src_bytes_per_slice);
         const UINT d3d11_subres = _sg_d3d11_calcsubresource((UINT)mip_level, (UINT)(d3d11_slice + i), (UINT)img->cmn.num_mipmaps);
         _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx,
             d3d11_res,
@@ -16177,13 +16178,62 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_im
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(src_img && dst_img && desc);
     SOKOL_ASSERT(src_img->cmn.usage.copy_src);
     SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
     SOKOL_ASSERT(src_img->d3d11.res);
     SOKOL_ASSERT(dst_img->d3d11.res);
 
-    SOKOL_ASSERT(false && "FXIME");
+    // NOTE: msaa and depth-stencil images can only be copied as whole mip levels
+    const int block_dim = _sg_block_dim(src_img->cmn.pixel_format);
+    const bool is_depth_stencil = _sg_is_depth_or_depth_stencil_format(src_img->cmn.pixel_format);
+    const bool is_msaa = src_img->cmn.sample_count > 1;
+    const bool whole_subres = is_depth_stencil || is_msaa;
+    _SG_STRUCT(D3D11_BOX, d3d11_src_box);
+    d3d11_src_box.left = (UINT)desc->src.x;
+    d3d11_src_box.right = (UINT)_sg_roundup_pow2(desc->src.x + desc->size.width, block_dim);
+    d3d11_src_box.top = (UINT)desc->src.y;
+    d3d11_src_box.bottom = (UINT)_sg_roundup_pow2(desc->src.y + desc->size.height, block_dim);
+    UINT d3d11_dst_z = 0;
+    int d3d11_src_slice = 0;
+    int d3d11_dst_slice = 0;
+    int d3d11_num_slices = 0;
+    if (src_img->cmn.type == SG_IMAGETYPE_3D) {
+        SOKOL_ASSERT(dst_img->cmn.type == SG_IMAGETYPE_3D);
+        // 3D images cannot be multi-sampled or depth-stencil in the first place
+        SOKOL_ASSERT(!whole_subres);
+        d3d11_src_box.front = (UINT)desc->src.slice;
+        d3d11_src_box.back = (UINT)(desc->src.slice + desc->size.num_slices);
+        d3d11_dst_z = (UINT)desc->dst.slice;
+        d3d11_num_slices = 1;
+    } else {
+        SOKOL_ASSERT(dst_img->cmn.type != SG_IMAGETYPE_3D);
+        d3d11_src_box.front = 0;
+        d3d11_src_box.back = 1;
+        d3d11_src_slice = desc->src.slice;
+        d3d11_dst_slice = desc->dst.slice;
+        d3d11_num_slices = desc->size.num_slices;
+    }
+    for (int i = 0; i < d3d11_num_slices; i++) {
+        const UINT src_mip_level = (UINT)desc->src.mip_level;
+        const UINT src_array_index = (UINT)(d3d11_src_slice + i);
+        const UINT src_num_mips = (UINT)src_img->cmn.num_mipmaps;
+        const UINT dst_mip_level = (UINT)desc->dst.mip_level;
+        const UINT dst_array_index = (UINT)(d3d11_dst_slice + i);
+        const UINT dst_num_mips = (UINT)dst_img->cmn.num_mipmaps;
+        const UINT d3d11_src_subres = _sg_d3d11_calcsubresource(src_mip_level, src_array_index, src_num_mips);
+        const UINT d3d11_dst_subres = _sg_d3d11_calcsubresource(dst_mip_level, dst_array_index, dst_num_mips);
+        _sg_d3d11_CopySubresourceRegion(_sg.d3d11.ctx,
+            dst_img->d3d11.res,     // pDstResource
+            d3d11_dst_subres,       // DstSubresource
+            (UINT)desc->dst.x,      // DstX
+            (UINT)desc->dst.y,      // DstY
+            d3d11_dst_z,            // DstZ
+            src_img->d3d11.res,     // pSrcResource
+            d3d11_src_subres,       // SrcSubresource
+            whole_subres ? 0 : &d3d11_src_box); // pSrcBox (0 for whole-mip copies)
+    }
 }
 
 // ███    ███ ███████ ████████  █████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
@@ -29581,10 +29631,12 @@ SOKOL_API_IMPL sg_d3d11_view_info sg_d3d11_query_view_info(sg_view view_id) {
     _SG_STRUCT(sg_d3d11_view_info, res);
     #if defined(SOKOL_D3D11)
         const _sg_view_t* view = _sg_lookup_view(view_id.id);
-        res.srv = (const void*) view->d3d11.srv;
-        res.uav = (const void*) view->d3d11.uav;
-        res.rtv = (const void*) view->d3d11.rtv;
-        res.dsv = (const void*) view->d3d11.dsv;
+        if (view) {
+            res.srv = (const void*) view->d3d11.srv;
+            res.uav = (const void*) view->d3d11.uav;
+            res.rtv = (const void*) view->d3d11.rtv;
+            res.dsv = (const void*) view->d3d11.dsv;
+        }
     #else
         _SOKOL_UNUSED(view_id);
     #endif
