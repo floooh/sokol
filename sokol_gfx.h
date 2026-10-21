@@ -14662,28 +14662,37 @@ _SOKOL_PRIVATE void _sg_d3d11_seal_buffer(_sg_buffer_t* buf) {
     _SOKOL_UNUSED(buf);
 }
 
-_SOKOL_PRIVATE void _sg_d3d11_fill_subres_data(const _sg_image_t* img, const sg_image_data* data) {
-    const int num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
-    int subres_index = 0;
-    for (int slice_index = 0; slice_index < num_slices; slice_index++) {
-        for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++, subres_index++) {
+// D3D11CalcSubresource only exists for C++
+_SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, UINT mip_levels) {
+    return mip_slice + array_slice * mip_levels;
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_fill_image_subres_data(const _sg_image_t* img, const sg_range* data) {
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
+    const uint8_t* ptr = (const uint8_t*)data->ptr;
+    const int num_array_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : img->cmn.num_slices;
+    size_t mip_offset = 0;
+    for (int mip_index = 0; mip_index < img->cmn.num_mipmaps; mip_index++) {
+        const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
+        const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
+        const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, mip_index) : img->cmn.num_slices;
+        const int row_pitch = _sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+        const int surf_pitch = _sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+        for (int array_index = 0; array_index < num_array_slices; array_index++) {
+            const UINT subres_index = _sg_d3d11_calcsubresource((UINT)mip_index, (UINT)array_index, (UINT)img->cmn.num_mipmaps);
             SOKOL_ASSERT(subres_index < _SG_D3D11_MAX_TEXTURE_SUBRESOURCES);
             D3D11_SUBRESOURCE_DATA* subres_data = &_sg.d3d11.subres_data[subres_index];
-            const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_index);
-            const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_index);
-            const sg_range* miplevel_data = &(data->mip_levels[mip_index]);
-            const size_t slice_size = miplevel_data->size / (size_t)num_slices;
-            const size_t slice_offset = slice_size * (size_t)slice_index;
-            const uint8_t* ptr = (const uint8_t*) miplevel_data->ptr;
-            subres_data->pSysMem = ptr + slice_offset;
-            subres_data->SysMemPitch = (UINT)_sg_row_pitch(img->cmn.pixel_format, mip_width, 1);
+            subres_data->pSysMem = ptr + mip_offset + array_index * surf_pitch;
+            subres_data->SysMemPitch = (UINT)row_pitch;
             if (img->cmn.type == SG_IMAGETYPE_3D) {
-                subres_data->SysMemSlicePitch = (UINT)_sg_surface_pitch(img->cmn.pixel_format, mip_width, mip_height, 1);
+                subres_data->SysMemSlicePitch = (UINT)surf_pitch;
             } else {
                 subres_data->SysMemSlicePitch = 0;
             }
         }
+        mip_offset += (size_t)surf_pitch * (size_t)mip_depth_or_slices;
     }
+    SOKOL_ASSERT(mip_offset == data->size);
 }
 
 _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const sg_image_desc* desc) {
@@ -14702,8 +14711,8 @@ _SOKOL_PRIVATE sg_resource_state _sg_d3d11_create_image(_sg_image_t* img, const 
 
     // prepare initial content pointers
     D3D11_SUBRESOURCE_DATA* init_data = 0;
-    if (!injected && desc->data.mip_levels[0].ptr) {
-        _sg_d3d11_fill_subres_data(img, &desc->data);
+    if (!injected && desc->data.ptr) {
+        _sg_d3d11_fill_image_subres_data(img, &desc->data);
         init_data = _sg.d3d11.subres_data;
     }
     if (img->cmn.type != SG_IMAGETYPE_3D) {
@@ -15599,11 +15608,6 @@ _SOKOL_PRIVATE void _sg_d3d11_begin_pass(const sg_pass* pass, const _sg_attachme
     }
 }
 
-// D3D11CalcSubresource only exists for C++
-_SOKOL_PRIVATE UINT _sg_d3d11_calcsubresource(UINT mip_slice, UINT array_slice, UINT mip_levels) {
-    return mip_slice + array_slice * mip_levels;
-}
-
 _SOKOL_PRIVATE void _sg_d3d11_end_pass(const _sg_attachments_ptrs_t* atts) {
     SOKOL_ASSERT(_sg.d3d11.ctx && atts);
 
@@ -16172,6 +16176,15 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_im
         desc->size.num_slices);
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    SOKOL_ASSERT(src_img->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_img->d3d11.res);
+    SOKOL_ASSERT(dst_img->d3d11.res);
+
+    SOKOL_ASSERT(false && "FXIME");
+}
 
 // ███    ███ ███████ ████████  █████  ██          ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
 // ████  ████ ██         ██    ██   ██ ██          ██   ██ ██   ██ ██      ██  ██  ██      ████   ██ ██   ██
@@ -17107,8 +17120,7 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
 }
 
 _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unretained id<MTLTexture> mtl_tex, const sg_range* data) {
-    SOKOL_ASSERT(data->ptr);
-    SOKOL_ASSERT(data->size > 0);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     size_t src_offset = 0;
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
