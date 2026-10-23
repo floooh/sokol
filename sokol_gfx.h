@@ -5003,6 +5003,7 @@ typedef struct sg_frame_stats_vk {
     uint32_t num_delete_queue_collected;
     uint32_t num_cmd_copy_buffer;
     uint32_t num_cmd_copy_buffer_to_image;
+    uint32_t num_cmd_copy_image;
     uint32_t num_cmd_set_descriptor_buffer_offsets;
     uint32_t size_descriptor_buffer_writes;
 } sg_frame_stats_vk;
@@ -24458,7 +24459,63 @@ _SOKOL_PRIVATE void _sg_vk_copy_image_to_image(_sg_image_t* src_img, _sg_image_t
     SOKOL_ASSERT(src_img->vk.img);
     SOKOL_ASSERT(dst_img->vk.img);
 
-    SOKOL_ASSERT(false && "FIXME");
+    _sg_vk_acquire_frame_command_buffers();
+
+    // NOTE: not stream_cmd_buf but the regular cmd_buf, because gpu-copies must run
+    // interleaved with passes, while the stream_cmd_buf is submitted before cmd_buf
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    _sg_vk_image_barrier(cmd_buf, src_img, _SG_VK_ACCESS_COPY_SRC);
+    _sg_vk_image_barrier(cmd_buf, dst_img, _SG_VK_ACCESS_COPY_DST);
+
+    const sg_pixel_format fmt = src_img->cmn.pixel_format;
+    VkImageAspectFlags aspect_mask = 0;
+    if (_sg_is_depth_or_depth_stencil_format(fmt)) {
+        aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        if (_sg_is_depth_stencil_format(fmt)) {
+            aspect_mask = VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+    _SG_STRUCT(VkImageCopy2, region);
+    region.sType = VK_STRUCTURE_TYPE_IMAGE_COPY_2;
+    region.srcSubresource.aspectMask = aspect_mask;
+    region.srcSubresource.mipLevel = (uint32_t)desc->src.mip_level;
+    region.srcOffset.x = desc->src.x;
+    region.srcOffset.y = desc->src.y;
+    region.dstSubresource.aspectMask = aspect_mask;
+    region.dstSubresource.mipLevel = (uint32_t)desc->dst.mip_level;
+    region.dstOffset.x = desc->dst.x;
+    region.dstOffset.y = desc->dst.y;
+    region.extent.width = (uint32_t)desc->size.width;
+    region.extent.height = (uint32_t)desc->size.height;
+    if (src_img->cmn.type == SG_IMAGETYPE_3D) {
+        SOKOL_ASSERT(dst_img->cmn.type == SG_IMAGETYPE_3D);
+        region.srcSubresource.layerCount = 1;
+        region.dstSubresource.layerCount = 1;
+        region.srcOffset.z = desc->src.slice;
+        region.dstOffset.z = desc->dst.slice;
+        region.extent.depth = (uint32_t)desc->size.num_slices;
+    } else {
+        SOKOL_ASSERT(dst_img->cmn.type != SG_IMAGETYPE_3D);
+        region.srcSubresource.baseArrayLayer = (uint32_t)desc->src.slice;
+        region.srcSubresource.layerCount = (uint32_t)desc->size.num_slices;
+        region.dstSubresource.baseArrayLayer = (uint32_t)desc->dst.slice;
+        region.dstSubresource.layerCount = (uint32_t)desc->size.num_slices;
+        region.extent.depth = 1;
+    }
+    _SG_STRUCT(VkCopyImageInfo2, copy_info);
+    copy_info.sType = VK_STRUCTURE_TYPE_COPY_IMAGE_INFO_2;
+    copy_info.srcImage = src_img->vk.img;
+    copy_info.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    copy_info.dstImage = dst_img->vk.img;
+    copy_info.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    copy_info.regionCount = 1;
+    copy_info.pRegions = &region;
+    vkCmdCopyImage2(cmd_buf, &copy_info);
+    _sg_stats_inc(vk.num_cmd_copy_image);
+    _sg_vk_image_barrier(cmd_buf, src_img, _sg_vk_default_image_access_mask(src_img));
+    _sg_vk_image_barrier(cmd_buf, dst_img, _sg_vk_default_image_access_mask(dst_img));
 }
 
 #endif
