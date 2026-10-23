@@ -22067,14 +22067,10 @@ _SOKOL_PRIVATE void _sg_vk_init_vk_image_staging_structs(const _sg_image_t* img,
     SOKOL_ASSERT(img && region && copy_info);
 
     region->sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2;
-    if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
-        region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
-            region->imageSubresource.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-    } else {
-        region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
+    // NOTE: trying to stage into depth or depth-stencil buffers is actually illegal
+    // (also checked by validation layer)
+    SOKOL_ASSERT(!_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format));
+    region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     region->imageSubresource.layerCount = 1;
     region->imageExtent.depth = 1;
 
