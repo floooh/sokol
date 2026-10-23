@@ -16,7 +16,7 @@
 
 - [Doom Shareware](https://floooh.github.io/doom-sokol/) ported to the Sokol headers ([source](https://github.com/floooh/doom-sokol))
 
-- [Slopa](https://slopa.io) - performant 3D MMORPG, uses sokol realtime rendering
+- [Sulrim](https://sulrim.com) - performant 3D MMORPG, uses Sokol realtime rendering
 
 - [Syntonic Dentiforms Redux](https://aras-p.github.io/SyntonicDentiforms/) demo remaster by Aras Pranckevičius ([blog post](https://aras-p.info/blog/2026/04/13/Syntonic-Dentiforms-redux/)).
 
