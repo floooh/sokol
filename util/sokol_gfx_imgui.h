@@ -4953,6 +4953,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.vk.num_delete_queue_collected);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer_to_image);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_image);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_set_descriptor_buffer_offsets);
                 _sgimgui_frame_stats(prev_frame.vk.size_descriptor_buffer_writes);
                 break;
