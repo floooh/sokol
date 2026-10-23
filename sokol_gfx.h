@@ -20041,8 +20041,7 @@ _SOKOL_PRIVATE void _sg_wgpu_write_miplevel_data(const _sg_image_t* img,
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_copy_image_data(const _sg_image_t* img, const sg_range* data) {
-    SOKOL_ASSERT(data->ptr);
-    SOKOL_ASSERT(data->size > 0);
+    SOKOL_ASSERT(data && data->ptr && (data->size > 0));
     size_t src_offset = 0;
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
@@ -21287,7 +21286,9 @@ _SOKOL_PRIVATE void _sg_vk_swapchain_endpass_barrier(VkCommandBuffer cmd_buf, Vk
 
 _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* img, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf && img && img->vk.img);
-    if (_sg_vk_is_read_access(img->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
+    const bool all_read_access = _sg_vk_is_read_access(img->vk.cur_access) && _sg_vk_is_read_access(new_access);
+    const bool no_layout_change = _sg_vk_image_layout(img->vk.cur_access) == _sg_vk_image_layout(new_access);
+    if (all_read_access && no_layout_change) {
         return;
     }
     _SG_STRUCT(VkImageMemoryBarrier2, barrier);
@@ -22184,20 +22185,20 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_miplevel_data(_sg_image_t* img,
     }
 }
 
-_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_image_data* src_data, bool initial_wait) {
+_SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_range* src_data, bool initial_wait) {
     SOKOL_ASSERT(img);
+    SOKOL_ASSERT(src_data && src_data->ptr && (src_data->size > 0));
     const sg_pixel_format fmt = img->cmn.pixel_format;
+    size_t src_offset = 0;
     for (int mip_level = 0; mip_level < img->cmn.num_mipmaps; mip_level++) {
-        SOKOL_ASSERT(src_data->mip_levels[mip_level].ptr);
-        SOKOL_ASSERT(src_data->mip_levels[mip_level].size > 0);
         const int mip_width = _sg_miplevel_dim(img->cmn.width, mip_level);
         const int mip_height = _sg_miplevel_dim(img->cmn.height, mip_level);
         const int mip_depth_or_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? _sg_miplevel_dim(img->cmn.num_slices, mip_level) : img->cmn.num_slices;
         const int bytes_per_row = _sg_row_pitch(fmt, mip_width, 1);
         const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
         _sg_vk_staging_copy_miplevel_data(img,
-            (const uint8_t*)src_data->mip_levels[mip_level].ptr,
-            src_data->mip_levels[mip_level].size,
+            (const uint8_t*)src_data->ptr,
+            src_data->size,
             0,  // src_offset
             bytes_per_row,
             bytes_per_slice,
@@ -22209,6 +22210,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_im
             mip_height,
             mip_depth_or_slices,
             (mip_level == 0) ? initial_wait : false);
+        src_offset += (size_t)bytes_per_slice * (size_t)mip_depth_or_slices;
     }
 }
 
@@ -22648,6 +22650,9 @@ _SOKOL_PRIVATE VkImageUsageFlags _sg_vk_image_usage(const sg_image_usage* usg) {
     }
     if (usg->depth_stencil_attachment) {
         res |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+    if (usg->copy_src) {
+        res |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     }
     return res;
 }
@@ -23354,7 +23359,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_image(_sg_image_t* img, const sg_
         _SG_ERROR(VULKAN_BIND_IMAGE_MEMORY_FAILED);
         return SG_RESOURCESTATE_FAILED;
     }
-    if (desc->data.mip_levels[0].ptr) {
+    if (desc->data.ptr) {
         _sg_vk_staging_copy_image_data(img, &desc->data, false);
     }
     return SG_RESOURCESTATE_VALID;
@@ -24445,6 +24450,17 @@ _SOKOL_PRIVATE void _sg_vk_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image
     _sg_vk_buffer_barrier(cmd_buf, src_buf, _sg_vk_default_buffer_access_mask(src_buf));
     _sg_vk_image_barrier(cmd_buf, dst_img, _sg_vk_default_image_access_mask(dst_img));
 }
+
+_SOKOL_PRIVATE void _sg_vk_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    SOKOL_ASSERT(src_img->cmn.usage.copy_src);
+    SOKOL_ASSERT(dst_img->cmn.usage.copy_dst);
+    SOKOL_ASSERT(src_img->vk.img);
+    SOKOL_ASSERT(dst_img->vk.img);
+
+    SOKOL_ASSERT(false && "FIXME");
+}
+
 #endif
 
 //  ██████  ███████ ███    ██ ███████ ██████  ██  ██████     ██████   █████   ██████ ██   ██ ███████ ███    ██ ██████
