@@ -22070,7 +22070,7 @@ _SOKOL_PRIVATE void _sg_vk_init_vk_image_staging_structs(const _sg_image_t* img,
     if (_sg_is_depth_or_depth_stencil_format(img->cmn.pixel_format)) {
         region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         if (_sg_is_depth_stencil_format(img->cmn.pixel_format)) {
-            region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            region->imageSubresource.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
         }
     } else {
         region->imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -22200,7 +22200,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_ra
         _sg_vk_staging_copy_miplevel_data(img,
             (const uint8_t*)src_data->ptr,
             src_data->size,
-            0,  // src_offset
+            src_offset,
             bytes_per_row,
             bytes_per_slice,
             mip_level,
@@ -22213,6 +22213,7 @@ _SOKOL_PRIVATE void _sg_vk_staging_copy_image_data(_sg_image_t* img, const sg_ra
             (mip_level == 0) ? initial_wait : false);
         src_offset += (size_t)bytes_per_slice * (size_t)mip_depth_or_slices;
     }
+    SOKOL_ASSERT(src_offset == src_data->size);
 }
 
 // staging system for non-blocking streaming (aka transient) updates with a max per-frame data limit
@@ -24472,7 +24473,7 @@ _SOKOL_PRIVATE void _sg_vk_copy_image_to_image(_sg_image_t* src_img, _sg_image_t
     if (_sg_is_depth_or_depth_stencil_format(fmt)) {
         aspect_mask = VK_IMAGE_ASPECT_DEPTH_BIT;
         if (_sg_is_depth_stencil_format(fmt)) {
-            aspect_mask = VK_IMAGE_ASPECT_STENCIL_BIT;
+            aspect_mask |= VK_IMAGE_ASPECT_STENCIL_BIT;
         }
     } else {
         aspect_mask = VK_IMAGE_ASPECT_COLOR_BIT;
