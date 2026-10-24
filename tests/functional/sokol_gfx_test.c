@@ -1405,11 +1405,20 @@ UTEST(sokol_gfx, view_uninit_count) {
     sg_shutdown();
 }
 
+// copy sources with write_transient usage must be written in the current frame
+static sg_buffer write_transient_once(sg_buffer buf) {
+    if (sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID) {
+        const uint32_t data = 0;
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf, .size = sizeof(data) });
+    }
+    return buf;
+}
+
 static sg_buffer create_staging_buffer(size_t size) {
-    return sg_make_buffer(&(sg_buffer_desc){
+    return write_transient_once(sg_make_buffer(&(sg_buffer_desc){
         .size = size,
         .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true },
-    });
+    }));
 }
 
 static sg_buffer create_copy_dst_buffer(size_t size) {
@@ -1512,7 +1521,7 @@ UTEST(sokol_gfx, copy_buffer_to_buffer_validate_size_and_offsets) {
 static sg_buffer create_copy_src_buffer(sg_buffer_usage usage, size_t size) {
     usage.copy_src = true;
     usage.write_transient = true;
-    return sg_make_buffer(&(sg_buffer_desc){ .size = size, .usage = usage });
+    return write_transient_once(sg_make_buffer(&(sg_buffer_desc){ .size = size, .usage = usage }));
 }
 
 static sg_image create_copy_dst_image(int width, int height) {
@@ -2251,11 +2260,11 @@ UTEST(sokol_gfx, copy_buffer_to_image_negative_bytes_per_row) {
         .src = { .buffer = src, .bytes_per_row = -64, .bytes_per_slice = 1024 },
         .dst.image = dst,
     });
+    // NOTE: SRC_OVERFLOW is skipped for invalid pitches
     T(log_items[0] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_MULTIPLE_BLOCKSIZE);
     T(log_items[1] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_BYTESPERSLICE);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
-    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 4);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
     sg_shutdown();
 }
 
@@ -3938,10 +3947,11 @@ UTEST(sokol_gfx, make_image_zero_width_height) {
         .data = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    // NOTE: DATA_SIZE is skipped for invalid dimensions
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_WIDTH);
     T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_HEIGHT);
-    T(log_items[2] == SG_LOGITEM_VALIDATE_IMAGEDESC_DATA_SIZE);
-    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
     sg_shutdown();
 }
 
@@ -4299,7 +4309,8 @@ UTEST(sokol_gfx, make_image_validate_depth_stencil_attachment_vs_storage_image) 
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_storage_image_vs_initial_data) {
+// storage images can have initial data
+UTEST(sokol_gfx, make_image_storage_image_with_initial_data) {
     setup(&(sg_desc){0});
     _sg.formats[SG_PIXELFORMAT_RGBA8].write = true;
     const uint32_t pixels[8][8] = {0};
@@ -4309,10 +4320,26 @@ UTEST(sokol_gfx, make_image_validate_storage_image_vs_initial_data) {
         .height = 8,
         .data = SG_RANGE(pixels),
     });
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_STORAGEIMAGE_VS_INITIALDATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 2);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// storage images can be written while unsealed
+UTEST(sokol_gfx, make_image_storage_image_write_unsealed) {
+    setup(&(sg_desc){0});
+    _sg.formats[SG_PIXELFORMAT_RGBA8].write = true;
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage = { .storage_image = true, .write_unsealed = true },
+        .width = 8,
+        .height = 8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst.image = img });
+    sg_seal_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
@@ -5697,8 +5724,9 @@ UTEST(sokol_gfx, write_image_tiny_pitches_rejected) {
     });
     T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERROW_TOO_SMALL);
     T(log_items[1] == SG_LOGITEM_VALIDATE_WRITEIMAGE_BYTESPERSLICE_TOO_SMALL);
-    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 3);
+    T(log_items[2] == SG_LOGITEM_VALIDATE_WRITEIMAGE_READ_OVERFLOW);
+    T(log_items[3] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 4);
     sg_shutdown();
 }
 

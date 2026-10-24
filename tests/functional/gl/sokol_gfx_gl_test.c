@@ -66,9 +66,8 @@
 //
 // The thresholds must match the feature macro block in tests/mocks/gl/gl.h.
 //
-// TEST_HAS_COPYIMAGE_RELAXED: sg_copy_image_to_image() uses glCopyImageSubData.
-// GLES 3.2 also has glCopyImageSubData, but sokol_gfx.h uses the
-// glBlitFramebuffer path there.
+// TEST_HAS_COPYIMAGE_RELAXED: sg_copy_image_to_image() uses glCopyImageSubData
+// (GL 4.3 and GLES 3.2), else glBlitFramebuffer.
 #if defined(SOKOL_GLCORE)
     #define TEST_HAS_COMPUTE    (GL_MOCK_VERSION >= 430)
     #define TEST_HAS_TEXSTORAGE (GL_MOCK_VERSION >= 420)
@@ -76,7 +75,7 @@
 #else
     #define TEST_HAS_COMPUTE    (GL_MOCK_VERSION >= 310)
     #define TEST_HAS_TEXSTORAGE (1)
-    #define TEST_HAS_COPYIMAGE_RELAXED (0)
+    #define TEST_HAS_COPYIMAGE_RELAXED (GL_MOCK_VERSION >= 320)
 #endif
 
 // Apple GL driver workaround gate, also keyed on the mock option and never on
@@ -2547,6 +2546,9 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_tightly_sized_source) {
     setup();
     // 4x2 region with an 8 pixel row pitch: 32 (first row incl. padding) + 16 (last row)
     sg_buffer stage = sg_make_buffer(&(sg_buffer_desc){ .usage = { .staging_buffer = true, .write_transient = true, .copy_src = true }, .size = 32 + 16 });
+    // write_transient copy sources must be written in the current frame
+    const uint32_t data = 0;
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = stage, .size = sizeof(data) });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2577,6 +2579,9 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     setup();
     // GL doesn't restrict the source buffer type, nor the row pitch alignment
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true }, .size = 8 * 8 * 4 });
+    // write_transient copy sources must be written in the current frame
+    const uint32_t data = 0;
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = vbuf, .size = sizeof(data) });
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -2606,7 +2611,7 @@ UTEST(sokol_gfx_gl, copy_buffer_to_image_non_staging_source) {
     });
     const int bind_idx = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_PIXEL_UNPACK_BUFFER);
     TA(bind_idx >= 0);
-    T(gl_mock_call(bind_idx)->args[1].i == query_gl_buf(vbuf, 0));
+    T(gl_mock_call(bind_idx)->args[1].i == query_active_gl_buf(vbuf));
     sub = gl_mock_last_call(GL_MOCK_FUNC_glTexSubImage2D);
     TA(sub != 0);
     T(sub->args[8].p == (const void*)(uintptr_t)32);

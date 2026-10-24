@@ -2783,6 +2783,8 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_non_staging_source) {
     setup();
     // Metal doesn't restrict the source buffer type, nor the row pitch alignment
     sg_buffer src = sg_make_buffer(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .write_transient = true, .copy_src = true }, .size = 1024 });
+    // write_transient copy sources must be written in the current frame
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = { .ptr = pattern, .size = 1024 }, .dst.buffer = src });
     sg_image img = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);     // 64 byte row pitch
     T(sg_query_buffer_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -2792,6 +2794,7 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_non_staging_source) {
     T(!logged(SG_LOGITEM_VALIDATION_FAILED));
     T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromBufferToTexture) == 1);
     const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture);
+    ASSERT_TRUE(call != 0);
     T(call->args[0].p == active_mtl_buf(src));
     T(call->args[2].u == 16 * 4);
     teardown();
