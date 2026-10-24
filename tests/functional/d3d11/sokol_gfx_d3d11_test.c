@@ -252,7 +252,7 @@ UTEST(sokol_gfx_d3d11, image_2d_creates_texture2d) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(d3d11_mock_live_object_count() == before + 1);
@@ -345,7 +345,7 @@ UTEST(sokol_gfx_d3d11, image_compressed_bc3) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_BC3_RGBA,
-        .data.mip_levels[0] = SG_RANGE(bc3),
+        .data = SG_RANGE(bc3),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_destroy_image(img);
@@ -362,7 +362,6 @@ UTEST(sokol_gfx_d3d11, image_inject_native_texture) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
         .d3d11_texture = raw,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -649,7 +648,7 @@ UTEST(sokol_gfx_d3d11, view_texture_creates_srv) {
     uint8_t px[4 * 4 * 4] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(px),
+        .data = SG_RANGE(px),
     });
     const int before = d3d11_mock_live_object_count();
     sg_view v = sg_make_view(&(sg_view_desc){ .texture.image = img });
@@ -710,7 +709,7 @@ UTEST(sokol_gfx_d3d11, view_srv_create_fail) {
     uint8_t px[4 * 4 * 4] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(px),
+        .data = SG_RANGE(px),
     });
     d3d11_mock_fail_next_create(1);
     sg_view v = sg_make_view(&(sg_view_desc){ .texture.image = img });
@@ -1684,7 +1683,7 @@ UTEST(sokol_gfx_d3d11, image_tex2d_desc_variants) {
     sg_destroy_image(img);
     // BC3 compressed
     c = make_image_get_create(&(sg_image_desc){
-        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_BC3_RGBA, .data.mip_levels[0] = { pattern, 256 },
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_BC3_RGBA, .data = { pattern, 256 },
     }, &img);
     T(c && (c->tex2d_desc.Format == DXGI_FORMAT_BC3_UNORM) && c->has_init_data && (c->src_row_pitch == 64));
     sg_destroy_image(img);
@@ -1699,7 +1698,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // 2D with 2 mips: first subresource points at mip0 data, row pitch, no slice pitch
     const d3d11_mock_call_t* c = make_image_get_create(&(sg_image_desc){
         .width = 16, .height = 16, .num_mipmaps = 2, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels = { [0] = { pattern, 1024 }, [1] = { pattern + 1024, 256 } },
+        .data = { pattern, 1024 + 256 },
     }, &img);
     T(no_errors() && (sg_query_image_state(img) == SG_RESOURCESTATE_VALID));
     T(c && c->has_init_data && (c->src_data == pattern) && (c->src_row_pitch == 64) && (c->src_depth_pitch == 0));
@@ -1707,7 +1706,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // array: per-slice data is split out of the mip-level data
     c = make_image_get_create(&(sg_image_desc){
         .type = SG_IMAGETYPE_ARRAY, .width = 4, .height = 4, .num_slices = 3, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = { pattern, 3 * 64 },
+        .data = { pattern, 3 * 64 },
     }, &img);
     T(c && c->has_init_data && (c->src_data == pattern) && (c->src_row_pitch == 16) && (c->src_depth_pitch == 0));
     T(c && (c->tex2d_desc.ArraySize == 3));
@@ -1715,7 +1714,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // 3D: slice pitch is set
     c = make_image_get_create(&(sg_image_desc){
         .type = SG_IMAGETYPE_3D, .width = 8, .height = 8, .num_slices = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = { pattern, 1024 },
+        .data = { pattern, 1024 },
     }, &img);
     T(no_errors() && (sg_query_image_state(img) == SG_RESOURCESTATE_VALID));
     T(c && (c->dst == sg_d3d11_query_image_info(img).tex3d) && (c->dst == ntex(img)));
@@ -2342,7 +2341,7 @@ UTEST(sokol_gfx_d3d11, apply_bindings_render_srvs_and_samplers) {
     });
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = { pattern, 36 } });
     sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = { pattern, 256 } });
-    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8, .data.mip_levels[0] = { pattern, 64 } });
+    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8, .data = { pattern, 64 } });
     sg_view tex_view = sg_make_view(&(sg_view_desc){ .texture.image = img });
     sg_view sbuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){ .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR });

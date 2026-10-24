@@ -177,12 +177,13 @@ UTEST(sokol_gfx_gl, backend_and_version) {
 
 UTEST(sokol_gfx_gl, setup_creates_vao_and_framebuffer) {
     setup();
-    // setup creates one 'global' vertex array object and one framebuffer
+    // setup creates one 'global' vertex array object, one 'global' framebuffer
+    // and two framebuffers for sg_copy_image_to_image()
     T(gl_mock_live_objects(GL_MOCK_OBJ_VERTEXARRAY) == 1);
-    T(gl_mock_live_objects(GL_MOCK_OBJ_FRAMEBUFFER) == 1);
+    T(gl_mock_live_objects(GL_MOCK_OBJ_FRAMEBUFFER) == 3);
     T(gl_mock_bindings()->vertex_array != 0);
     T(gl_mock_count_calls(GL_MOCK_FUNC_glGenVertexArrays) == 1);
-    T(gl_mock_count_calls(GL_MOCK_FUNC_glGenFramebuffers) == 1);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glGenFramebuffers) == 3);
     // GL_UNPACK_ALIGNMENT is set to 1 for tightly packed pixel data
     T(gl_mock_render_state()->unpack_alignment == 1);
     #if defined(SOKOL_GLCORE)
@@ -335,13 +336,13 @@ UTEST(sokol_gfx_gl, buffer_create_destroy) {
 
 UTEST(sokol_gfx_gl, image_create_destroy) {
     setup();
-    // an immutable image uses a single texture slot
+    // an image with initial data uses a single texture slot
     static uint32_t pixels[8 * 8];
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 1);
@@ -606,13 +607,12 @@ UTEST(sokol_gfx_gl, image_3d_takes_texstorage3d_or_teximage3d) {
 
 UTEST(sokol_gfx_gl, image_cube_uses_texture_cube_map_target) {
     setup();
-    static uint32_t face_pixels[8 * 8];
+    static uint32_t face_pixels[8 * 8 * 6];
     sg_image img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_CUBE,
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0].ptr = face_pixels,
-        .data.mip_levels[0].size = sizeof(face_pixels) * 6,
+        .data = SG_RANGE(face_pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     const gl_mock_call_t* bind = gl_mock_last_call(GL_MOCK_FUNC_glBindTexture);
@@ -693,7 +693,7 @@ UTEST(sokol_gfx_gl, image_compressed_uses_compressed_upload) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 8, .height = 8,
         .pixel_format = SG_PIXELFORMAT_BC1_RGBA,
-        .data.mip_levels[0] = SG_RANGE(bc1),
+        .data = SG_RANGE(bc1),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     #if TEST_HAS_TEXSTORAGE
@@ -904,7 +904,7 @@ UTEST(sokol_gfx_gl, view_texture_no_new_gl_object) {
     static uint32_t pixels[4 * 4];
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     const int before = gl_mock_live_objects_total();
     sg_view v = sg_make_view(&(sg_view_desc){ .texture.image = img });
@@ -1985,7 +1985,7 @@ UTEST(sokol_gfx_gl, image_write_unsealed_then_seal) {
         .usage.write_unsealed = true,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
-    // write_unsealed implies immutable, so a single texture
+    // write_unsealed uses a single texture
     T(gl_mock_live_objects(GL_MOCK_OBJ_TEXTURE) == 1);
     // the texture is allocated without data
     #if TEST_HAS_TEXSTORAGE
@@ -3691,7 +3691,7 @@ UTEST(sokol_gfx_gl, image_all_pixel_formats) {
         // 2D with initial data
         sg_image img = sg_make_image(&(sg_image_desc){
             .width = 4, .height = 4, .pixel_format = fmt,
-            .data.mip_levels[0] = { .ptr = data, .size = (size_t)pitch },
+            .data = { .ptr = data, .size = (size_t)pitch },
         });
         T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
         gl_mock_texture_info_t ti;
@@ -3707,7 +3707,7 @@ UTEST(sokol_gfx_gl, image_all_pixel_formats) {
         gl_mock_clear_calls();
         img = sg_make_image(&(sg_image_desc){
             .type = SG_IMAGETYPE_ARRAY, .width = 4, .height = 4, .num_slices = 2, .pixel_format = fmt,
-            .data.mip_levels[0] = { .ptr = data, .size = (size_t)(pitch * 2) },
+            .data = { .ptr = data, .size = (size_t)(pitch * 2) },
         });
         T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
         if (info.compressed) {

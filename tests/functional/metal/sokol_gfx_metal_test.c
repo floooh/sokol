@@ -217,8 +217,7 @@ static sg_image make_2d_image(void) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 16 * 16 * 4 },
+        .data = { .ptr = scratch, .size = 16 * 16 * 4 },
         .label = "img",
     });
 }
@@ -391,7 +390,6 @@ UTEST(sokol_gfx_metal, create_image_injected) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
         .mtl_texture = mtl_tex,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -851,9 +849,7 @@ UTEST(sokol_gfx_metal, create_image_2d) {
         .height = 16,
         .num_mipmaps = 2,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 16 * 16 * 4 },
-        .data.mip_levels[1] = { .ptr = scratch, .size = 8 * 8 * 4 },
+        .data = { .ptr = scratch, .size = 16 * 16 * 4 + 8 * 8 * 4 },
         .label = "img2d",
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -878,8 +874,7 @@ UTEST(sokol_gfx_metal, create_image_3d) {
         .height = 8,
         .num_slices = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 8 * 8 * 4 * 4 },
+        .data = { .ptr = scratch, .size = 8 * 8 * 4 * 4 },
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     metal_mock_texture_info_t info = {0};
@@ -901,8 +896,7 @@ UTEST(sokol_gfx_metal, create_image_cube) {
         .width = 8,
         .height = 8,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 6 * 8 * 8 * 4 },
+        .data = { .ptr = scratch, .size = 6 * 8 * 8 * 4 },
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     metal_mock_texture_info_t info = {0};
@@ -920,8 +914,7 @@ UTEST(sokol_gfx_metal, create_image_array) {
         .height = 8,
         .num_slices = 3,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 3 * 8 * 8 * 4 },
+        .data = { .ptr = scratch, .size = 3 * 8 * 8 * 4 },
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     metal_mock_texture_info_t info = {0};
@@ -939,7 +932,7 @@ UTEST(sokol_gfx_metal, create_image_msaa_attachment) {
         .height = 16,
         .sample_count = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     metal_mock_texture_info_t info = {0};
@@ -957,7 +950,7 @@ UTEST(sokol_gfx_metal, create_image_storage) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .storage_image = true, .immutable = true },
+        .usage = { .storage_image = true },
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     metal_mock_texture_info_t info = {0};
@@ -989,7 +982,6 @@ UTEST(sokol_gfx_metal, pixelformat_sweep) {
         sg_image_desc desc = { .width = 32, .height = 32, .pixel_format = fmt };
         if (fmt_info.depth) {
             desc.usage.depth_stencil_attachment = true;
-            desc.usage.immutable = true;
         } else if (!fmt_info.sample) {
             continue;
         } else if (fmt_info.compressed) {
@@ -997,8 +989,7 @@ UTEST(sokol_gfx_metal, pixelformat_sweep) {
             if ((size <= 0) || ((size_t)size > sizeof(scratch))) {
                 continue;
             }
-            desc.usage.immutable = true;
-            desc.data.mip_levels[0] = (sg_range){ .ptr = scratch, .size = (size_t)size };
+            desc.data = (sg_range){ .ptr = scratch, .size = (size_t)size };
         } else {
             desc.usage.write_transient = true;
         }
@@ -1646,11 +1637,7 @@ UTEST(sokol_gfx_metal, create_texture_view) {
         .num_slices = 4,
         .num_mipmaps = 2,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels = {
-            [0] = { .ptr = scratch, .size = 4 * 8 * 8 * 4 },
-            [1] = { .ptr = scratch, .size = 4 * 4 * 4 * 4 },
-        },
+        .data = { .ptr = scratch, .size = 4 * 8 * 8 * 4 + 4 * 4 * 4 * 4 },
     });
     metal_mock_clear_calls();
     sg_view view = sg_make_view(&(sg_view_desc){
@@ -1680,8 +1667,7 @@ UTEST(sokol_gfx_metal, create_texture_view_failed) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
-        .data.mip_levels[0] = { .ptr = scratch, .size = 16 * 16 * 4 },
+        .data = { .ptr = scratch, .size = 16 * 16 * 4 },
     });
     metal_mock_clear_calls();
     metal_mock_fail_next(METAL_MOCK_OBJ_TEXTURE_VIEW, 1);
@@ -1696,7 +1682,7 @@ UTEST(sokol_gfx_metal, create_texture_view_failed) {
 
 UTEST(sokol_gfx_metal, create_texture_view_failed_second_slot) {
     setup();
-    // a non-immutable image has one MTLTexture per inflight frame, so
+    // a write_transient image has one MTLTexture per inflight frame, so
     // _sg_mtl_create_view() creates one texture view per slot
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16,
@@ -1725,7 +1711,7 @@ UTEST(sokol_gfx_metal, create_storage_image_view) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .storage_image = true, .immutable = true },
+        .usage = { .storage_image = true },
     });
     metal_mock_clear_calls();
     sg_view view = sg_make_view(&(sg_view_desc){ .storage_image.image = img });
@@ -1740,7 +1726,7 @@ UTEST(sokol_gfx_metal, create_attachment_view_no_mtl_object) {
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     metal_mock_clear_calls();
     sg_view view = sg_make_view(&(sg_view_desc){ .color_attachment.image = img });
@@ -1867,12 +1853,12 @@ UTEST(sokol_gfx_metal, offscreen_pass_load_store_actions) {
     sg_image color_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     sg_image depth_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32,
         .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
-        .usage = { .depth_stencil_attachment = true, .immutable = true },
+        .usage = { .depth_stencil_attachment = true },
     });
     sg_view color_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = color_img });
     sg_view ds_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment.image = depth_img });
@@ -1912,7 +1898,7 @@ UTEST(sokol_gfx_metal, offscreen_pass_depth_stencil_store_actions) {
     sg_image depth_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32,
         .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
-        .usage = { .depth_stencil_attachment = true, .immutable = true },
+        .usage = { .depth_stencil_attachment = true },
     });
     sg_view ds_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment.image = depth_img });
     const sg_store_action stores[2] = { SG_STOREACTION_STORE, SG_STOREACTION_DONTCARE };
@@ -1943,12 +1929,12 @@ UTEST(sokol_gfx_metal, offscreen_pass_msaa_resolve) {
     sg_image msaa_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32, .sample_count = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     sg_image resolve_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32, .sample_count = 1,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .resolve_attachment = true, .immutable = true },
+        .usage = { .resolve_attachment = true },
     });
     sg_view color_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = msaa_img });
     sg_view resolve_view = sg_make_view(&(sg_view_desc){ .resolve_attachment.image = resolve_img });
@@ -1979,7 +1965,7 @@ UTEST(sokol_gfx_metal, offscreen_pass_cube_slice) {
         .type = SG_IMAGETYPE_CUBE,
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     sg_view view = sg_make_view(&(sg_view_desc){
         .color_attachment = { .image = img, .slice = 3 },
@@ -1999,7 +1985,7 @@ UTEST(sokol_gfx_metal, offscreen_pass_3d_depth_plane) {
         .type = SG_IMAGETYPE_3D,
         .width = 16, .height = 16, .num_slices = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     // NOTE: the validation layer only allows slice 0 on 3D attachment views, so
     // depthPlane can never be anything but 0 here. This is a known restriction
@@ -2023,7 +2009,7 @@ UTEST(sokol_gfx_metal, offscreen_pass_mrt) {
         sg_image img = sg_make_image(&(sg_image_desc){
             .width = 16, .height = 16,
             .pixel_format = SG_PIXELFORMAT_RGBA8,
-            .usage = { .color_attachment = true, .immutable = true },
+            .usage = { .color_attachment = true },
         });
         views[i] = sg_make_view(&(sg_view_desc){ .color_attachment.image = img });
     }
@@ -2423,7 +2409,7 @@ UTEST(sokol_gfx_metal, dispatch) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .storage_image = true, .immutable = true },
+        .usage = { .storage_image = true },
     });
     sg_view view = sg_make_view(&(sg_view_desc){ .storage_image.image = img });
     sg_begin_pass(&(sg_pass){ .compute = true });
@@ -3231,13 +3217,13 @@ UTEST(sokol_gfx_metal, offscreen_pass_array_slices) {
     sg_image msaa_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32, .sample_count = 4,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     sg_image resolve_img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_ARRAY,
         .width = 32, .height = 32, .num_slices = 3,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .resolve_attachment = true, .immutable = true },
+        .usage = { .resolve_attachment = true },
     });
     sg_view msaa_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = msaa_img });
     sg_view resolve_view = sg_make_view(&(sg_view_desc){ .resolve_attachment = { .image = resolve_img, .slice = 1 } });
@@ -3250,13 +3236,13 @@ UTEST(sokol_gfx_metal, offscreen_pass_array_slices) {
     sg_image color_img = sg_make_image(&(sg_image_desc){
         .width = 32, .height = 32,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage = { .color_attachment = true, .immutable = true },
+        .usage = { .color_attachment = true },
     });
     sg_image depth_img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_ARRAY,
         .width = 32, .height = 32, .num_slices = 3,
         .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
-        .usage = { .depth_stencil_attachment = true, .immutable = true },
+        .usage = { .depth_stencil_attachment = true },
     });
     sg_view color_view = sg_make_view(&(sg_view_desc){ .color_attachment.image = color_img });
     sg_view depth_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment = { .image = depth_img, .slice = 2 } });

@@ -1,5 +1,7 @@
 //------------------------------------------------------------------------------
 //  sokol-gl-test.c
+//
+//  LLM maintained.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
 #define SOKOL_GL_IMPL
@@ -100,7 +102,7 @@ UTEST(sokol_gl, texture) {
         .type = SG_IMAGETYPE_2D,
         .width = 8,
         .height = 8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     sg_view view = sg_make_view(&(sg_view_desc){
         .texture = { .image = img },
@@ -120,7 +122,7 @@ UTEST(sokol_gl, texture_image_nosampler) {
         .type = SG_IMAGETYPE_2D,
         .width = 8,
         .height = 8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     sg_view view = sg_make_view(&(sg_view_desc){
         .texture.image = img,

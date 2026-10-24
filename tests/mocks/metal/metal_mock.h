@@ -113,7 +113,8 @@
     _MTLM_XMACRO(dispatchThreadgroups) \
     _MTLM_XMACRO(blitCommandEncoder) \
     _MTLM_XMACRO(copyFromBufferToBuffer) \
-    _MTLM_XMACRO(copyFromBufferToTexture)
+    _MTLM_XMACRO(copyFromBufferToTexture) \
+    _MTLM_XMACRO(copyFromTextureToTexture)
 
 typedef enum {
     METAL_MOCK_FUNC_INVALID = 0,
@@ -185,6 +186,7 @@ typedef struct {
     const void* view_source;    // only valid if 'is_view' is true, retained by the view
     int num_replace_region;
     int num_copy_from_buffer;   // blit copyFromBuffer:...toTexture: calls
+    int num_copy_from_texture;  // blit copyFromTexture:...toTexture: calls (as dst)
     char label[METAL_MOCK_MAX_STRING];
 } metal_mock_texture_info_t;
 
@@ -341,6 +343,7 @@ typedef struct {
     bool ended;
     int num_buffer_copies;      // copyFromBuffer:...toBuffer:
     int num_texture_copies;     // copyFromBuffer:...toTexture:
+    int num_texture_to_texture_copies;  // copyFromTexture:...toTexture:
     int debug_group_depth;
     char label[METAL_MOCK_MAX_STRING];
 } metal_mock_blit_encoder_state_t;
