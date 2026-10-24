@@ -11186,7 +11186,11 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
+    #if defined(_SOKOL_GL_HAS_COPYIMAGE)
+    _sg.features.copy_image_to_image_relaxed = version >= 320;
+    #else
     _sg.features.copy_image_to_image_relaxed = false;
+    #endif
 
     bool has_s3tc = false;  // BC1..BC3
     bool has_rgtc = false;  // BC4 and BC5
@@ -12449,8 +12453,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_depth_stencil_attachment_type(const _sg_image_t* ds
     }
 }
 
-_SOKOL_PRIVATE bool _sg_gl_check_framebuffer_status(void) {
-    const GLenum fb_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+_SOKOL_PRIVATE bool _sg_gl_check_framebuffer_status(GLenum target) {
+    const GLenum fb_status = glCheckFramebufferStatus(target);
     if (fb_status != GL_FRAMEBUFFER_COMPLETE) {
         switch (fb_status) {
             case GL_FRAMEBUFFER_UNDEFINED:
@@ -12516,7 +12520,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_view(_sg_view_t* view, const sg_v
         glGenFramebuffers(1, &view->gl.msaa_resolve_frame_buffer);
         glBindFramebuffer(GL_FRAMEBUFFER, view->gl.msaa_resolve_frame_buffer);
         _sg_gl_fb_attach_texture(view, GL_COLOR_ATTACHMENT0);
-        if (!_sg_gl_check_framebuffer_status()) {
+        if (!_sg_gl_check_framebuffer_status(GL_FRAMEBUFFER)) {
             return SG_RESOURCESTATE_FAILED;
         }
         // setup color attachments for the framebuffer
@@ -12706,7 +12710,7 @@ _SOKOL_PRIVATE void _sg_gl_begin_pass(const sg_pass* pass, const _sg_attachments
             glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
         }
-        if (!_sg_gl_check_framebuffer_status()) {
+        if (!_sg_gl_check_framebuffer_status(GL_FRAMEBUFFER)) {
             _sg.cur_pass.valid = false;
             return;
         }
@@ -13647,6 +13651,9 @@ _SOKOL_PRIVATE void _sg_gl_copy_image_to_image(_sg_image_t* src_img, _sg_image_t
     for (int i = 0; i < desc->size.num_slices; i++) {
         _sg_gl_fb_attach_image_slice(GL_READ_FRAMEBUFFER, gl_att_type, src_img, src_mip, src_slice + i);
         _sg_gl_fb_attach_image_slice(GL_DRAW_FRAMEBUFFER, gl_att_type, dst_img, dst_mip, dst_slice + i);
+        if (!_sg_gl_check_framebuffer_status(GL_READ_FRAMEBUFFER) || !_sg_gl_check_framebuffer_status(GL_DRAW_FRAMEBUFFER)) {
+            break;
+        }
         glBlitFramebuffer(src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, gl_mask, GL_NEAREST);
     }
     // detach, otherwise some drivers fail on a later color- vs depth-attachment switch
@@ -17170,7 +17177,6 @@ _SOKOL_PRIVATE void _sg_mtl_write_miplevel_data(const _sg_image_t* img,
     const int mtl_num_slices = (img->cmn.type == SG_IMAGETYPE_3D) ? 1 : num_slices;
     for (int i = 0; i < mtl_num_slices; i++) {
         const size_t offset = src_offset + (size_t)i * (size_t)src_bytes_per_slice;
-        SOKOL_ASSERT((offset + (size_t)src_bytes_per_slice) <= src_size);
         [mtl_tex replaceRegion:mtl_region
             mipmapLevel:(NSUInteger)mip_level
             slice:(NSUInteger)(mtl_slice_index + i)
@@ -25275,6 +25281,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         const bool any_attachment = usg->color_attachment || usg->resolve_attachment || usg->depth_stencil_attachment;
         const bool injected = (0 != desc->gl_texture) || (0 != desc->mtl_texture) || (0 != desc->d3d11_texture) || (0 != desc->wgpu_texture);
         _sg_validate_begin();
+        SOKOL_ASSERT(((int)fmt > SG_PIXELFORMAT_NONE) && ((int)fmt < _SG_PIXELFORMAT_NUM));
         _SG_VALIDATE(desc->_start_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         _SG_VALIDATE(desc->_end_canary == 0, VALIDATE_IMAGEDESC_CANARY);
         if (any_attachment) {
@@ -26762,7 +26769,6 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_unsealed(const _sg_buffer_t* buf, 
 
 #if defined(SOKOL_DEBUG)
 _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, const sg_write_image_desc* desc) {
-    const size_t write_size = (size_t)desc->src.bytes_per_slice * (size_t)desc->size.num_slices;
     const int mip_width = _sg_miplevel_dim(img->cmn.width, desc->dst.mip_level);
     const int mip_height = _sg_miplevel_dim(img->cmn.height, desc->dst.mip_level);
     const int mip_depth_or_slices = (SG_IMAGETYPE_3D == img->cmn.type) ? _sg_miplevel_dim(img->cmn.num_slices, desc->dst.mip_level) : img->cmn.num_slices;
@@ -26784,7 +26790,10 @@ _SOKOL_PRIVATE void _sg_validate_write_image_common(const _sg_image_t* img, cons
     _SG_VALIDATE((desc->size.width > 0) && (desc->size.width <= mip_width), VALIDATE_WRITEIMAGE_WIDTH);
     _SG_VALIDATE((desc->size.height > 0) && (desc->size.height <= mip_height), VALIDATE_WRITEIMAGE_HEIGHT);
     _SG_VALIDATE((desc->size.num_slices > 0) && (desc->size.num_slices <= mip_depth_or_slices), VALIDATE_WRITEIMAGE_NUMSLICES);
-    _SG_VALIDATE((desc->src.offset + write_size) <= desc->src.data.size, VALIDATE_WRITEIMAGE_READ_OVERFLOW);
+    if ((desc->size.width > 0) && (desc->size.height > 0) && (desc->size.num_slices > 0) && (bpr > 0) && (bps > 0)) {
+        const size_t required_size = desc->src.offset + _sg_image_copy_size(fmt, bpr, bps, desc->size.width, desc->size.height, desc->size.num_slices);
+        _SG_VALIDATE(required_size <= desc->src.data.size, VALIDATE_WRITEIMAGE_READ_OVERFLOW);
+    }
     _SG_VALIDATE((desc->dst.x >= 0) && (desc->dst.x < mip_width), VALIDATE_WRITEIMAGE_DST_X_RANGE);
     _SG_VALIDATE((desc->dst.y >= 0) && (desc->dst.y < mip_height), VALIDATE_WRITEIMAGE_DST_Y_RANGE);
     _SG_VALIDATE((desc->dst.slice >= 0) && (desc->dst.slice < mip_depth_or_slices), VALIDATE_WRITEIMAGE_DST_SLICE_RANGE);
@@ -26961,7 +26970,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(_sg_buffer_t* src_buf, con
         // (needed for compressed miplevels smaller than one block)
         _SG_VALIDATE((desc->size.width <= 0) || _sg_multiple(desc->size.width, block_dim) || ((desc->dst.x + desc->size.width) == mip_width), VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_MULTIPLE);
         _SG_VALIDATE((desc->size.height <= 0) || _sg_multiple(desc->size.height, block_dim) || ((desc->dst.y + desc->size.height) == mip_height), VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_MULTIPLE);
-        if ((desc->size.width > 0) && (desc->size.height > 0) && (desc->size.num_slices > 0)) {
+        if ((desc->size.width > 0) && (desc->size.height > 0) && (desc->size.num_slices > 0) && (bpr > 0) && (bps > 0)) {
             const size_t required_size = (size_t)desc->src.offset + _sg_image_copy_size(fmt, bpr, bps, desc->size.width, desc->size.height, desc->size.num_slices);
             _SG_VALIDATE(required_size <= (size_t)src_buf->cmn.size, VALIDATE_COPYBUFFERTOIMAGE_SRC_OVERFLOW);
         }
@@ -29165,8 +29174,8 @@ SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image_desc* de
     }
     sg_copy_image_to_image_desc desc_def = _sg_copy_image_to_image_desc_defaults(src_img, desc);
     if (_sg_validate_copy_image_to_image(src_img, dst_img, &desc_def)) {
-        SOKOL_ASSERT((desc->src.mip_level >= 0) && (desc->src.mip_level < src_img->cmn.num_mipmaps));
-        SOKOL_ASSERT((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps));
+        SOKOL_ASSERT((desc_def.src.mip_level >= 0) && (desc_def.src.mip_level < src_img->cmn.num_mipmaps));
+        SOKOL_ASSERT((desc_def.dst.mip_level >= 0) && (desc_def.dst.mip_level < dst_img->cmn.num_mipmaps));
         const sg_pixel_format fmt = src_img->cmn.pixel_format;
         const size_t stats_copy_size = _sg_image_copy_size(fmt,
             _sg_row_pitch(fmt, desc_def.size.width, 1),
