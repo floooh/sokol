@@ -2621,7 +2621,7 @@ typedef struct sg_features {
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
     bool copy_buffer_to_image_relaxed_bytes_per_row;    // if false: sg_copy_buffer_to_image .src.bytes_per_row must be a multiple of 256 (webgpu restriction)
-    bool copy_image_to_image_relaxed;   // if false: sg_copy_image_to_image only works for renderable and non-msaa pixel formats
+    bool copy_image_to_image_relaxed;   // if false: sg_copy_image_to_image only works for renderable formats
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -3722,11 +3722,11 @@ typedef struct sg_buffer_desc {
         same frame by the GPU-side and doesn't need to survive into the next
         frame
     .copy_src (default: false)
-        TODO: currently unused, will become useful when the rest of the
-        sg_copy_* functions are implemented
+        the image is going to be used as source in an `sg_copy_image_to_image()`
+        call
     .copy_dst (default: false)
         the image is going to be used as destination in an `sg_copy_buffer_to_image()`
-        call
+        or `sg_copy_image_to_image()` call
 
     Note that creating a texture view from the image to be used for
     texture-sampling in vertex-, fragment- or compute-shaders
@@ -5340,6 +5340,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_HEIGHT, "sg_image_desc.height must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT, "non-attachment images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT, "invalid pixel format for render attachment image") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY, "multisampled images cannot have .usage.copy_src or .usage.copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT, "multisampling not supported for this pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS, "multisample images must have num_mipmaps == 1") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_3D_IMAGE, "3D images cannot have a sample_count > 1") \
@@ -5692,11 +5693,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_DST, "sg_copy_image_to_image: destination image must have .copy_dst usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER, "sg_copy_image_to_image: cannot copy between a 3D image and non-3D image types") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be identical") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT, "sg_copy_image_to_image: source and destination image must have identical sample count") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_RENDERABLE, "sg_copy_image_to_image: image pixel formats must be renderable when sg_features.copy_image_to_image_relaxed is false") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_MSAA, "sg_copy_image_to_image: images cannot be multi-sampled (sg_image_desc.sample_count > 1) when sg_features.copy_image_to_image_relaxed is false") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the whole mip level must be copied") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil) or multi-sampled images, the src and dst mip level size must be identical") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_MSAA, "sg_copy_image_to_image: images cannot be multi-sampled (sg_image_desc.sample_count > 1)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) images, the whole mip level must be copied") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil), the src and dst mip level size must be identical") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_MIPLEVEL, "sg_copy_image_to_image: desc.src.mip_level must be >= 0 and less than the number of mipmaps in the source image") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH, "sg_copy_image_to_image: desc.size.width must be > 0 and <= source image width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_HEIGHT, "sg_copy_image_to_image: desc.size.height must be > 0 and <= source image height") \
@@ -16191,11 +16191,9 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_imag
     SOKOL_ASSERT(src_img->d3d11.res);
     SOKOL_ASSERT(dst_img->d3d11.res);
 
-    // NOTE: msaa and depth-stencil images can only be copied as whole mip levels
+    // NOTE: depth-stencil images can only be copied as whole mip levels
     const int block_dim = _sg_block_dim(src_img->cmn.pixel_format);
-    const bool is_depth_stencil = _sg_is_depth_or_depth_stencil_format(src_img->cmn.pixel_format);
-    const bool is_msaa = src_img->cmn.sample_count > 1;
-    const bool whole_subres = is_depth_stencil || is_msaa;
+    const bool whole_subres_required = _sg_is_depth_or_depth_stencil_format(src_img->cmn.pixel_format);
     _SG_STRUCT(D3D11_BOX, d3d11_src_box);
     d3d11_src_box.left = (UINT)desc->src.x;
     d3d11_src_box.right = (UINT)_sg_roundup_pow2(desc->src.x + desc->size.width, block_dim);
@@ -16207,8 +16205,8 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_imag
     int d3d11_num_slices = 0;
     if (src_img->cmn.type == SG_IMAGETYPE_3D) {
         SOKOL_ASSERT(dst_img->cmn.type == SG_IMAGETYPE_3D);
-        // 3D images cannot be multi-sampled or depth-stencil in the first place
-        SOKOL_ASSERT(!whole_subres);
+        // 3D images cannot have depth format
+        SOKOL_ASSERT(!whole_subres_required);
         d3d11_src_box.front = (UINT)desc->src.slice;
         d3d11_src_box.back = (UINT)(desc->src.slice + desc->size.num_slices);
         d3d11_dst_z = (UINT)desc->dst.slice;
@@ -16238,7 +16236,7 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_imag
             d3d11_dst_z,            // DstZ
             src_img->d3d11.res,     // pSrcResource
             d3d11_src_subres,       // SrcSubresource
-            whole_subres ? 0 : &d3d11_src_box); // pSrcBox (0 for whole-mip copies)
+            whole_subres_required ? 0 : &d3d11_src_box); // pSrcBox (0 for whole-mip copies)
     }
 }
 
@@ -25280,6 +25278,7 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_INITIALDATA);
             _SG_VALIDATE(_sg.formats[fmt].render, VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT);
             if (desc->sample_count > 1) {
+                _SG_VALIDATE(!usg->copy_src && !usg->copy_dst, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY);
                 _SG_VALIDATE(_sg.formats[fmt].msaa, VALIDATE_IMAGEDESC_ATTACHMENT_NO_MSAA_SUPPORT);
                 _SG_VALIDATE(desc->num_mipmaps == 1, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_NUM_MIPMAPS);
                 _SG_VALIDATE(desc->type != SG_IMAGETYPE_ARRAY, VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_ARRAY_IMAGE);
@@ -26993,14 +26992,12 @@ _SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const
         _SG_VALIDATE(dst_img->cmn.usage.copy_dst, VALIDATE_COPYIMAGETOIMAGE_COPY_DST);
         _SG_VALIDATE((src_img->cmn.type == SG_IMAGETYPE_3D) == (dst_img->cmn.type == SG_IMAGETYPE_3D), VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER);
         _SG_VALIDATE(src_fmt == dst_fmt, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
-        _SG_VALIDATE(src_img->cmn.sample_count == dst_img->cmn.sample_count, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT);
+        _SG_VALIDATE(src_img->cmn.sample_count == 1, VALIDATE_COPYIMAGETOIMAGE_MSAA);
         if (!_sg.features.copy_image_to_image_relaxed) {
             // additional restriction: pixel format must be renderable
             _SG_VALIDATE(_sg.formats[src_fmt].render, VALIDATE_COPYIMAGETOIMAGE_RENDERABLE);
-            // additional restriction: images cannot be multi-sampled
-            _SG_VALIDATE(src_img->cmn.sample_count == 1, VALIDATE_COPYIMAGETOIMAGE_MSAA);
         }
-        if ((src_img->cmn.sample_count > 1) || _sg_is_depth_or_depth_stencil_format(src_fmt)) {
+        if (_sg_is_depth_or_depth_stencil_format(src_fmt)) {
             _SG_VALIDATE((src_mip_width == dst_mip_width) && (src_mip_height == dst_mip_height), VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE);
             _SG_VALIDATE((src_mip_width == desc->size.width) && (src_mip_height == desc->size.height), VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL);
         }
