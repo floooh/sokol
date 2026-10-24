@@ -2607,9 +2607,8 @@ UTEST(sokol_gfx, copy_image_to_image_validate_format) {
     sg_shutdown();
 }
 
-// NOTE: a MSAA copy can't pass validation, since MSAA images must be attachments,
-// and attachments can't have copy_dst usage
-UTEST(sokol_gfx, copy_image_to_image_validate_sample_count) {
+// MSAA images cannot have copy_src usage, so they can't be copy sources
+UTEST(sokol_gfx, copy_image_to_image_msaa_src_not_valid) {
     setup(&(sg_desc){0});
     sg_image src = sg_make_image(&(sg_image_desc){
         .usage = { .color_attachment = true, .copy_src = true },
@@ -2619,34 +2618,35 @@ UTEST(sokol_gfx, copy_image_to_image_validate_sample_count) {
         .sample_count = 4,
     });
     sg_image dst = create_copy_dst_image(16, 16);
-    T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(src) == SG_RESOURCESTATE_FAILED);
     T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
     reset_log_items();
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
-    T_COPYIMG_ERRORS(
-        SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT,
-        SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_MSAA);
-    // the MSAA restriction is lifted with relaxed copies
-    set_copy_image_to_image_relaxed(true);
-    reset_log_items();
-    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
-    T_COPYIMG_ERRORS(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT);
+    T(num_log_called == 1);
+    T(log_items[0] == SG_LOGITEM_COPY_IMAGE_TO_IMAGE_SRC_VALID);
     sg_shutdown();
 }
 
-// MSAA src images need whole mip level copies
-UTEST(sokol_gfx, copy_image_to_image_validate_msaa_whole_miplevel) {
+// the copy validation also rejects MSAA sources (bypass sg_make_image validation to reach it)
+UTEST(sokol_gfx, copy_image_to_image_validate_msaa) {
     setup(&(sg_desc){0});
     sg_image src = sg_make_image(&(sg_image_desc){
-        .usage = { .color_attachment = true, .copy_src = true },
+        .usage.color_attachment = true,
         .width = 16,
         .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
         .sample_count = 4,
     });
-    sg_image dst = create_copy_dst_image(32, 32);
+    sg_image dst = create_copy_dst_image(16, 16);
     T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    _sg_image_t* src_img = _sg_lookup_image(src.id);
+    ASSERT_TRUE(src_img != 0);
+    src_img->cmn.usage.copy_src = true;
+    reset_log_items();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T_COPYIMG_ERRORS(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_MSAA);
+    // relaxed copies don't lift the MSAA restriction, and MSAA has no whole mip level rule
     set_copy_image_to_image_relaxed(true);
     reset_log_items();
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
@@ -2654,10 +2654,7 @@ UTEST(sokol_gfx, copy_image_to_image_validate_msaa_whole_miplevel) {
         .dst.image = dst,
         .size = { .width = 8, .height = 8 },
     });
-    T_COPYIMG_ERRORS(
-        SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SAMPLE_COUNT,
-        SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE,
-        SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL);
+    T_COPYIMG_ERRORS(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_MSAA);
     sg_shutdown();
 }
 
@@ -4056,6 +4053,60 @@ UTEST(sokol_gfx, make_image_validate_depth_format_attachment_or_copy_dst) {
     T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
     T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DEPTHFORMAT_ATTACHMENT_OR_COPYDST);
     T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_INITIAL_DATA_REQUIRED);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_msaa_vs_copy_src) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage = { .color_attachment = true, .copy_src = true },
+        .width = 8,
+        .height = 8,
+        .sample_count = 4,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    // also for depth-stencil attachments
+    reset_log_items();
+    img = sg_make_image(&(sg_image_desc){
+        .usage = { .depth_stencil_attachment = true, .copy_src = true },
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .sample_count = 4,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    // non-MSAA attachments can have copy_src
+    reset_log_items();
+    img = sg_make_image(&(sg_image_desc){
+        .usage = { .color_attachment = true, .copy_src = true },
+        .width = 8,
+        .height = 8,
+        .sample_count = 1,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_msaa_vs_copy_dst) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage = { .color_attachment = true, .copy_dst = true },
+        .width = 8,
+        .height = 8,
+        .sample_count = 4,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_COPYDST);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY);
     T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
     T(num_log_called == 3);
     sg_shutdown();

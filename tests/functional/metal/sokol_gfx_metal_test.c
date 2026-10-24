@@ -2958,6 +2958,280 @@ UTEST(sokol_gfx_metal, copy_buffer_to_image_and_buffer_share_encoder) {
     discard_swapchain(&sc);
 }
 
+//------------------------------------------------------------------------------
+//  sg_copy_image_to_image (=> copyFromTexture:...toTexture:)
+//------------------------------------------------------------------------------
+static sg_image make_copy_src_image(sg_image_type type, int width, int height, int num_slices, int num_mipmaps) {
+    return sg_make_image(&(sg_image_desc){
+        .type = type,
+        .width = width,
+        .height = height,
+        .num_slices = num_slices,
+        .num_mipmaps = num_mipmaps,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .copy_src = true, .copy_dst = true },
+        .label = "copy-src",
+    });
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_features) {
+    setup();
+    T(sg_query_features().copy_image_to_image_relaxed);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_2d) {
+    setup();
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_2D, 32, 32, 1, 1);
+    T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    metal_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .x = 2, .y = 3 },
+        .dst = { .image = dst, .x = 10, .y = 20 },
+        .size = { .width = 8, .height = 4 },
+    });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 1);
+    T(metal_mock_find_call(METAL_MOCK_FUNC_blitCommandEncoder, 0) < metal_mock_find_call(METAL_MOCK_FUNC_copyFromTextureToTexture, 0));
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(metal_mock_is_object(METAL_MOCK_OBJ_BLIT_ENCODER, call->obj));
+    T(call->args[0].p == active_mtl_tex(src));
+    T(call->args[1].u == 0 && call->args[2].u == 0);     // src slice, level
+    T(call->args[3].u == 2 && call->args[4].u == 3 && call->args[5].u == 0);
+    T(call->args[6].u == 8 && call->args[7].u == 4 && call->args[8].u == 1);
+    T(call->args[9].p == active_mtl_tex(dst));
+    T(call->args[10].u == 0 && call->args[11].u == 0);   // dst slice, level
+    T(call->args[12].u == 10 && call->args[13].u == 20 && call->args[14].u == 0);
+    metal_mock_texture_info_t info = {0};
+    T(metal_mock_texture_info(active_mtl_tex(dst), &info));
+    T(info.num_copy_from_texture == 1);
+    T(metal_mock_texture_info(active_mtl_tex(src), &info));
+    T(info.num_copy_from_texture == 0);
+    T(metal_mock_blit_encoder_state()->num_texture_to_texture_copies == 1);
+    sg_commit();
+    T(metal_mock_find_call(METAL_MOCK_FUNC_endEncoding, 0) < metal_mock_find_call(METAL_MOCK_FUNC_commit, 0));
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_defaults) {
+    setup();
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_2D, 16, 16, 1, 3);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_2D, 8, 8, 1, 1);
+    metal_mock_clear_calls();
+    // size defaults to the src mip level size minus the src offset
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 1, .x = 2, .y = 4 },
+        .dst.image = dst,
+    });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(call != 0);
+    T(call->args[2].u == 1);
+    T(call->args[3].u == 2 && call->args[4].u == 4);
+    T(call->args[6].u == 6 && call->args[7].u == 4 && call->args[8].u == 1);
+    T(call->args[12].u == 0 && call->args[13].u == 0);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_array_slices) {
+    setup();
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_ARRAY, 8, 8, 4, 2);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_ARRAY, 4, 4, 3, 1);
+    metal_mock_clear_calls();
+    // array images get one copy per slice
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 1, .slice = 1 },
+        .dst = { .image = dst, .slice = 1 },
+        .size = { .num_slices = 2 },
+    });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 2);
+    int n = 0;
+    for (int i = 0; i < metal_mock_num_calls(); i++) {
+        const metal_mock_call_t* call = metal_mock_call(i);
+        if (call->func != METAL_MOCK_FUNC_copyFromTextureToTexture) {
+            continue;
+        }
+        T(call->args[0].p == active_mtl_tex(src));
+        T(call->args[1].u == (uint64_t)(1 + n));
+        T(call->args[2].u == 1);
+        T(call->args[5].u == 0);
+        T(call->args[6].u == 4 && call->args[7].u == 4 && call->args[8].u == 1);
+        T(call->args[9].p == active_mtl_tex(dst));
+        T(call->args[10].u == (uint64_t)(1 + n));
+        T(call->args[11].u == 0);
+        T(call->args[14].u == 0);
+        n++;
+    }
+    T(n == 2);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_cube_to_array) {
+    setup();
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_CUBE, 8, 8, 6, 1);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_ARRAY, 8, 8, 6, 1);
+    metal_mock_clear_calls();
+    // cube faces map to slices
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .slice = 4 },
+        .dst = { .image = dst, .slice = 0 },
+        .size = { .num_slices = 2 },
+    });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 2);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(call->args[1].u == 5 && call->args[10].u == 1);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_3d) {
+    setup();
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_3D, 8, 8, 8, 2);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_3D, 8, 8, 4, 1);
+    metal_mock_clear_calls();
+    // 3D images get a single copy with depth = num_slices and the slice as origin.z
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 1, .x = 1, .slice = 1 },
+        .dst = { .image = dst, .x = 2, .y = 3, .slice = 2 },
+        .size = { .width = 3, .height = 4, .num_slices = 2 },
+    });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 1);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(call->args[1].u == 0 && call->args[2].u == 1);     // slice index is always 0 for 3D
+    T(call->args[3].u == 1 && call->args[4].u == 0 && call->args[5].u == 1);
+    T(call->args[6].u == 3 && call->args[7].u == 4 && call->args[8].u == 2);
+    T(call->args[10].u == 0 && call->args[11].u == 0);
+    T(call->args[12].u == 2 && call->args[13].u == 3 && call->args[14].u == 2);
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_depth) {
+    setup();
+    sg_image src = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .usage = { .depth_stencil_attachment = true, .copy_src = true },
+    });
+    sg_image dst = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .usage.copy_dst = true,
+    });
+    T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    metal_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(call != 0);
+    T(call->args[0].p == active_mtl_tex(src) && call->args[9].p == active_mtl_tex(dst));
+    T(call->args[6].u == 16 && call->args[7].u == 16 && call->args[8].u == 1);
+    // depth images can only be copied as whole mip levels
+    metal_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst, .size = { .width = 8, .height = 8 } });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 0);
+    sg_commit();
+    teardown();
+}
+
+// write_transient images are multi-buffered, the copy must read the active slot
+UTEST(sokol_gfx_metal, copy_image_to_image_uses_active_slot) {
+    setup();
+    sg_image src = sg_make_image(&(sg_image_desc){
+        .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .write_transient = true, .copy_src = true },
+    });
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_2D, 8, 8, 1, 1);
+    T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
+    const sg_mtl_image_info info0 = sg_mtl_query_image_info(src);
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 8 * 8 * 4 },
+        .dst.image = src,
+    });
+    const sg_mtl_image_info info1 = sg_mtl_query_image_info(src);
+    T(info1.active_slot != info0.active_slot);
+    metal_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture);
+    T(call != 0);
+    T(call->args[0].p == info1.tex[info1.active_slot]);
+    T(call->args[0].p != info0.tex[info0.active_slot]);
+    // a write after the copy in the same frame is rejected
+    sg_write_image_transient(&(sg_write_image_desc){
+        .src.data = { .ptr = scratch, .size = 8 * 8 * 4 },
+        .dst.image = src,
+    });
+    T(logged(SG_LOGITEM_VALIDATE_WRITEIMAGETRANSIENT_WRITE_BEFORE_COPY));
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_and_buffer_to_image_share_encoder) {
+    setup();
+    fill_pattern(7);
+    sg_buffer buf = make_staging_buffer(1024);
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    metal_mock_clear_calls();
+    sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){ .src.buffer = buf, .dst.image = src });
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_commandBufferWithUnretainedReferences) == 1);
+    T(metal_mock_last_call(METAL_MOCK_FUNC_copyFromBufferToTexture)->obj == metal_mock_last_call(METAL_MOCK_FUNC_copyFromTextureToTexture)->obj);
+    T(metal_mock_find_call(METAL_MOCK_FUNC_copyFromBufferToTexture, 0) < metal_mock_find_call(METAL_MOCK_FUNC_copyFromTextureToTexture, 0));
+    T(metal_mock_blit_encoder_state()->num_texture_copies == 1);
+    T(metal_mock_blit_encoder_state()->num_texture_to_texture_copies == 1);
+    sg_commit();
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_endEncoding) == 1);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, copy_image_to_image_validation_skips_backend) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_image src = make_copy_src_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    sg_image dst = make_copy_dst_image(SG_IMAGETYPE_2D, 16, 16, 1, 1);
+    sg_image msaa = sg_make_image(&(sg_image_desc){
+        .width = 16, .height = 16, .sample_count = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .usage = { .color_attachment = true, .copy_src = true },
+    });
+    // MSAA images cannot have copy_src usage
+    T(sg_query_image_state(msaa) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY));
+    reset_log();
+    metal_mock_clear_calls();
+    // src has no copy_src usage
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = dst, .dst.image = src });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_COPY_SRC));
+    reset_log();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = msaa, .dst.image = dst });
+    T(logged(SG_LOGITEM_COPY_IMAGE_TO_IMAGE_SRC_VALID));
+    reset_log();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst = { .image = dst, .y = 4 } });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_OVERFLOW));
+    reset_log();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_INSIDE_PASS));
+    sg_end_pass();
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_copyFromTextureToTexture) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_blitCommandEncoder) == 0);
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
 UTEST(sokol_gfx_metal, create_image_copy_dst) {
     setup_with((setup_desc_t){ .non_apple_gpu = true });
     metal_mock_clear_calls();
