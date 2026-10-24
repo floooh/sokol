@@ -6,7 +6,7 @@
 #-------------------------------------------------------------------------------
 import textwrap
 import gen_util as util
-import os, sys
+import os, sys, shutil
 
 bindings_root = 'sokol-jai'
 c_root = f'{bindings_root}/sokol/c'
@@ -482,6 +482,10 @@ def pre_parse(inp):
 
 def prepare():
     util.prepare('Jai', module_root, c_root)
+    # sokol_fontstash.h has foreign types (FONScontext*) in its public API and
+    # cannot be generated. Copy only the C header to keep the implementation in
+    # sync. The sokol/fontstash/module.jai bindings are written by hand.
+    shutil.copyfile('../util/sokol_fontstash.h', f'{c_root}/sokol_fontstash.h')
 
 def gen(opts):
     reset_globals()

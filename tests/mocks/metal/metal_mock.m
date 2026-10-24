@@ -1160,6 +1160,50 @@ static NSError* _mtlm_error(void) {
     dst->info.num_copy_from_buffer++;
     _mtlm.blit_encoder_state.num_texture_copies++;
 }
+
+// args: [0] src texture, [1] src slice, [2] src level, [3..5] src origin x/y/z,
+// [6..8] size w/h/d, [9] dst texture, [10] dst slice, [11] dst level,
+// [12..14] dst origin x/y/z
+- (void)copyFromTexture:(id<MTLTexture>)sourceTexture
+            sourceSlice:(NSUInteger)sourceSlice
+            sourceLevel:(NSUInteger)sourceLevel
+           sourceOrigin:(MTLOrigin)sourceOrigin
+             sourceSize:(MTLSize)sourceSize
+              toTexture:(id<MTLTexture>)destinationTexture
+       destinationSlice:(NSUInteger)destinationSlice
+       destinationLevel:(NSUInteger)destinationLevel
+      destinationOrigin:(MTLOrigin)destinationOrigin
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_copyFromTextureToTexture, self);
+    c->num_args = 15;
+    c->args[0].p = sourceTexture;
+    c->args[1].u = sourceSlice;
+    c->args[2].u = sourceLevel;
+    c->args[3].u = sourceOrigin.x;
+    c->args[4].u = sourceOrigin.y;
+    c->args[5].u = sourceOrigin.z;
+    c->args[6].u = sourceSize.width;
+    c->args[7].u = sourceSize.height;
+    c->args[8].u = sourceSize.depth;
+    c->args[9].p = destinationTexture;
+    c->args[10].u = destinationSlice;
+    c->args[11].u = destinationLevel;
+    c->args[12].u = destinationOrigin.x;
+    c->args[13].u = destinationOrigin.y;
+    c->args[14].u = destinationOrigin.z;
+    _MTLM_ASSERT(!_mtlm.blit_encoder_state.ended);
+    _MTLM_ASSERT(_mtlm_is_obj(sourceTexture, METAL_MOCK_OBJ_TEXTURE));
+    _MTLM_ASSERT(_mtlm_is_obj(destinationTexture, METAL_MOCK_OBJ_TEXTURE));
+    _mtlm_texture* src = (_mtlm_texture*)sourceTexture;
+    _mtlm_texture* dst = (_mtlm_texture*)destinationTexture;
+    // Metal requires same pixel format and sample count
+    _MTLM_ASSERT(src->info.pixel_format == dst->info.pixel_format);
+    _MTLM_ASSERT(src->info.sample_count == dst->info.sample_count);
+    _MTLM_ASSERT(sourceLevel < src->info.mipmap_level_count);
+    _MTLM_ASSERT(destinationLevel < dst->info.mipmap_level_count);
+    dst->info.num_copy_from_texture++;
+    _mtlm.blit_encoder_state.num_texture_to_texture_copies++;
+}
 @end
 
 //== command buffer and queue ==================================================

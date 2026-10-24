@@ -32,7 +32,6 @@ c_callbacks = [
 
 overrides = {
     'ref':                                  '_ref',
-    'immutable':                            '_immutable',
     'sgl_error':                            'sgl_get_error',
     'sgl_deg':                              'sgl_as_degrees',
     'sgl_rad':                              'sgl_as_radians',

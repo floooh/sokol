@@ -747,6 +747,15 @@ typedef struct {
       destinationSlice:(NSUInteger)destinationSlice
       destinationLevel:(NSUInteger)destinationLevel
      destinationOrigin:(MTLOrigin)destinationOrigin;
+- (void)copyFromTexture:(id<MTLTexture> _Nonnull)sourceTexture
+            sourceSlice:(NSUInteger)sourceSlice
+            sourceLevel:(NSUInteger)sourceLevel
+           sourceOrigin:(MTLOrigin)sourceOrigin
+             sourceSize:(MTLSize)sourceSize
+              toTexture:(id<MTLTexture> _Nonnull)destinationTexture
+       destinationSlice:(NSUInteger)destinationSlice
+       destinationLevel:(NSUInteger)destinationLevel
+      destinationOrigin:(MTLOrigin)destinationOrigin;
 @end
 
 //== MTLDrawable.h =============================================================
