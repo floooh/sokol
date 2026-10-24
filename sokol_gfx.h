@@ -1350,7 +1350,7 @@
     uint8_t mip1_data[] = { ... };
     // ... more mip levels
     const sg_image img = sg_make_image(&(sg_image_desc){
-        .data.= SG_RANGE(image_data),
+        .data = SG_RANGE(image_data),
         // ... more create options
     });
     ```
