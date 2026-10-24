@@ -1346,9 +1346,7 @@
     ```
 
     ```c
-    uint8_t mip0_data[] = { ... };
-    uint8_t mip1_data[] = { ... };
-    // ... more mip levels
+    uint8_t image_data[] = { ... };
     const sg_image img = sg_make_image(&(sg_image_desc){
         .data = SG_RANGE(image_data),
         // ... more create options
@@ -1362,8 +1360,7 @@
     is:
 
     1. Create the resource in resource state 'unsealed' via the write_unsealed
-       usage flag (note that `desc.usage.write_unsealed = true` implies
-       `desc.usage.immutable = true`).
+       usage flag:
 
         For buffers:
         ```c
@@ -4081,7 +4078,7 @@ typedef struct sg_copy_image_to_image_desc {
 
     For 3d-images the size of a single miplevel is:
 
-        mip_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+        num_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
 
     For cubemap-images the size of a single mip-level is:
 
