@@ -1881,7 +1881,6 @@
 
         sg_image storage_image = sg_make_image(&(sg_image_desc){
             .usage.storage_image = true,
-            },
             .width = ...,
             .height = ...,
             .pixel_format = ...,
@@ -3696,7 +3695,7 @@ typedef struct sg_buffer_desc {
         the image can be used as parent resource of a storage-image-view,
         which allows compute shaders to write to the image in a compute
         pass (for read-only access in compute shaders bind the image
-        via a texture view instead
+        via a texture view instead)
     .color_attachment (default: false)
         the image can be used as parent resource of a color-attachment-view,
         which is then passed into sg_begin_pass via sg_pass.attachments.colors[]
@@ -4098,10 +4097,9 @@ typedef struct sg_copy_image_to_image_desc {
         [5] => -Z
 
 
-    Images with usage.*_attachment or usage.storage_image must
-    *not* be created with initial content. Be aware that the initial
-    content of pass attachment and storage images is undefined
-    (not guaranteed to be zeroed).
+    Images with usage.*_attachment must *not* be created with initial content.
+    Be aware that the initial content of pass attachment and storage images is
+    undefined (not guaranteed to be zeroed).
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
@@ -5318,7 +5316,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHFORMAT_ATTACHMENT_OR_COPYDST, "sg_image_desc: images with depth- or depth-stencil format must have .usage.depth_stencil_attachment or .usage.copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHSTENCIL_ATTACHMENT_PIXELFORMAT, "sg_image_desc.pixel_format: the image's pixel format isn't a valid depth- or depth-stencil format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHSTENCIL_ATTACHMENT_VS_STORAGEIMAGE, "sg_image_desc.usage: .usage.storage_image cannot be used together with .usage.depth_stencil_attachment") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_VS_INITIALDATA, "sg_image_desc: images with .usage.storage_image cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_STORAGEIMAGE_VS_WRITETRANSIENT, "sg_image_desc.usage: .storage_image cannot be combined with .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_COPYDST, "sg_image_desc.usage: .write_transient cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_INITIALDATA, "sg_image_desc: images with .usage.write_transient cannot have initial data") \
@@ -17212,7 +17209,7 @@ _SOKOL_PRIVATE void _sg_mtl_copy_image_data(const _sg_image_t* img, __unsafe_unr
     }
 }
 
-_SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_image_t* img) {
+_SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_image_t* img, bool has_initial_data) {
     mtl_desc.textureType = _sg_mtl_texture_type(img->cmn.type, img->cmn.sample_count > 1);
     mtl_desc.pixelFormat = _sg_mtl_pixel_format(img->cmn.pixel_format);
     if (MTLPixelFormatInvalid == mtl_desc.pixelFormat) {
@@ -17245,8 +17242,9 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
     }
     mtl_desc.usage = mtl_tex_usage;
 
+    const bool cpu_write = has_initial_data || usg->write_unsealed;
     MTLResourceOptions mtl_res_options = 0;
-    if (any_attachment || img->cmn.usage.storage_image || img->cmn.usage.copy_dst) {
+    if (!cpu_write && (any_attachment || img->cmn.usage.storage_image || img->cmn.usage.copy_dst)) {
         mtl_res_options |= MTLResourceStorageModePrivate;
     } else {
         mtl_res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
@@ -17266,7 +17264,7 @@ _SOKOL_PRIVATE sg_resource_state _sg_mtl_create_image(_sg_image_t* img, const sg
 
     // initialize a Metal texture descriptor
     MTLTextureDescriptor* mtl_desc = [[MTLTextureDescriptor alloc] init];
-    if (!_sg_mtl_init_texdesc(mtl_desc, img)) {
+    if (!_sg_mtl_init_texdesc(mtl_desc, img, (desc->data.ptr != 0))) {
         _SG_OBJC_RELEASE(mtl_desc);
         return SG_RESOURCESTATE_FAILED;
     }
@@ -25320,7 +25318,6 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
             _SG_VALIDATE(_sg_is_valid_storage_image_format(fmt), VALIDATE_IMAGEDESC_STORAGEIMAGE_PIXELFORMAT);
             // D3D11 doesn't allow multisampled UAVs (see: https://github.com/gpuweb/gpuweb/issues/513)
             _SG_VALIDATE(desc->sample_count == 1, VALIDATE_IMAGEDESC_STORAGEIMAGE_EXPECT_NO_MSAA);
-            _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_IMAGEDESC_STORAGEIMAGE_VS_INITIALDATA);
         }
         if (usg->write_unsealed) {
             requires_initial_data = false;
