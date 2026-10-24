@@ -4098,8 +4098,8 @@ typedef struct sg_copy_image_to_image_desc {
 
 
     Images with usage.*_attachment must *not* be created with initial content.
-    Be aware that the initial content of pass attachment and storage images is
-    undefined (not guaranteed to be zeroed).
+    Be aware that the initial content of pass attachments and storage images
+    without initial data is undefined (not guaranteed to be zeroed).
 
     ADVANCED TOPIC: Injecting native 3D-API textures:
 
@@ -17237,14 +17237,14 @@ _SOKOL_PRIVATE bool _sg_mtl_init_texdesc(MTLTextureDescriptor* mtl_desc, _sg_ima
     if (any_attachment) {
         mtl_tex_usage |= MTLTextureUsageRenderTarget;
     }
-    if (img->cmn.usage.storage_image) {
+    if (usg->storage_image) {
         mtl_tex_usage |= MTLTextureUsageShaderWrite;
     }
     mtl_desc.usage = mtl_tex_usage;
 
     const bool cpu_write = has_initial_data || usg->write_unsealed;
     MTLResourceOptions mtl_res_options = 0;
-    if (!cpu_write && (any_attachment || img->cmn.usage.storage_image || img->cmn.usage.copy_dst)) {
+    if (!cpu_write && (any_attachment || usg->storage_image || usg->copy_dst)) {
         mtl_res_options |= MTLResourceStorageModePrivate;
     } else {
         mtl_res_options |= _sg_mtl_resource_options_storage_mode_managed_or_shared();
