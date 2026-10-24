@@ -5335,6 +5335,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_IMAGETYPE_3D_NUMSLICES, "sg_image_desc.num_slices must be ((>= 1) && (<= sg_limits.max_image_size_3d)) for SG_IMAGETYPE_3D") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WIDTH, "sg_image_desc.width must be > 0") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_HEIGHT, "sg_image_desc.height must be > 0") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_NUM_MIPMAPS, "sg_image_desc.num_mipmaps must be > 0 and <= 16") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_MSAA_BUT_NO_ATTACHMENT, "non-attachment images cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_PIXELFORMAT, "invalid pixel format for render attachment image") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_VS_COPY, "multisampled images cannot have .usage.copy_src or .usage.copy_dst") \
@@ -5656,6 +5657,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.src.offset + desc.size) is greater than desc.src.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_DST_OVERFLOW, "sg_copy_buffer_to_buffer: (desc.dst.offset + desc.size) is greater than desc.dst.buffer size") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_buffer: on webgl2, src and dst buffer must both be index buffers or both be non-index buffers (usage.staging_index_buffer counts as index buffer)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOBUFFER_SRC_TRANSIENT_MISSING, "sg_copy_buffer_to_buffer: src buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DEPTH_FORMAT_NOT_ALLOWED, "sg_copy_buffer_to_image: cannot copy into a depth- or depth-stencil pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_WEBGL2_INDEX_BUFFER, "sg_copy_buffer_to_image: on webgl2, source buffer cannot have usage.index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_BYTESPERROW_TOO_SMALL, "sg_copy_buffer_to_image: desc.src.bytes_per_row is smaller than required by desc.size.width") \
@@ -5684,6 +5686,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.x + desc.size.width must be <= destination mip level width") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_buffer_to_image: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYBUFFERTOIMAGE_SRC_TRANSIENT_MISSING, "sg_copy_buffer_to_image: src buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_IMAGE, "sg_copy_image_to_image: src and dst image cannot be the same") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_INSIDE_PASS, "sg_copy_image_to_image: must not be called inside a pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_SRC, "sg_copy_image_to_image: source image must have .copy_src usage") \
@@ -5722,6 +5725,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_OVERFLOW, "sg_copy_image_to_image: desc.dst.y + desc.size.height must be <= destination mip level height") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES_OVERFLOW, "sg_copy_image_to_image: desc.src.slice + desc.size.num_slices must be <= source number of slices in mip level") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES_OVERFLOW, "sg_copy_image_to_image: desc.dst.slice + desc.size.num_slices must be <= destination number of slices in mip level") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_TRANSIENT_MISSING, "sg_copy_image_to_image: src image has usage.write_transient but hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATION_FAILED, "validation layer checks failed") \
 
 #define _SG_LOGITEM_XMACRO(item,msg) SG_LOGITEM_##item,
@@ -9012,7 +9016,8 @@ _SOKOL_PRIVATE bool _sg_resource_state_valid_unsealed(sg_resource_state s) {
 // return size of a mipmap level
 _SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
     SOKOL_ASSERT(base_dim >= 0);
-    SOKOL_ASSERT((mip_level >= 0) && (mip_level < _SG_MAX_MIPMAPS));
+    // NOTE: the following assert checks for UB, not valid mipmap range!
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < 32));
     return _sg_max(base_dim >> mip_level, 1);
 }
 
@@ -25349,16 +25354,21 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         }
         _SG_VALIDATE(desc->width > 0, VALIDATE_IMAGEDESC_WIDTH);
         _SG_VALIDATE(desc->height > 0, VALIDATE_IMAGEDESC_HEIGHT);
+        _SG_VALIDATE((desc->num_mipmaps > 0) && (desc->num_mipmaps <= _SG_MAX_MIPMAPS), VALIDATE_IMAGEDESC_NUM_MIPMAPS);
         if (desc->data.ptr) {
-            size_t expected_size = 0;
-            for (int mip_index = 0; mip_index < desc->num_mipmaps; mip_index++) {
-                const int mip_width = _sg_miplevel_dim(desc->width, mip_index);
-                const int mip_height = _sg_miplevel_dim(desc->height, mip_index);
-                const int mip_slices = (SG_IMAGETYPE_3D == desc->type) ? _sg_miplevel_dim(desc->num_slices, mip_index) : desc->num_slices;
-                const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
-                expected_size += (size_t)bytes_per_slice * (size_t)mip_slices;
+            const bool dims_valid = (desc->width > 0) && (desc->height > 0) && (desc->num_slices > 0) && (desc->num_mipmaps <= _SG_MAX_MIPMAPS);
+            // prevent that broken size params hit asserts
+            if (dims_valid) {
+                size_t expected_size = 0;
+                for (int mip_index = 0; mip_index < desc->num_mipmaps; mip_index++) {
+                    const int mip_width = _sg_miplevel_dim(desc->width, mip_index);
+                    const int mip_height = _sg_miplevel_dim(desc->height, mip_index);
+                    const int mip_slices = (SG_IMAGETYPE_3D == desc->type) ? _sg_miplevel_dim(desc->num_slices, mip_index) : desc->num_slices;
+                    const int bytes_per_slice = _sg_surface_pitch(fmt, mip_width, mip_height, 1);
+                    expected_size += (size_t)bytes_per_slice * (size_t)mip_slices;
+                }
+                _SG_VALIDATE(expected_size == desc->data.size, VALIDATE_IMAGEDESC_DATA_SIZE);
             }
-            _SG_VALIDATE(expected_size == desc->data.size, VALIDATE_IMAGEDESC_DATA_SIZE);
         } else {
             _SG_VALIDATE(0 == desc->data.size, VALIDATE_IMAGEDESC_NO_DATA_BUT_SIZE_SET);
         }
@@ -26887,6 +26897,9 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_buffer(_sg_buffer_t* src_buf, co
             const bool dst_is_index = dst_buf->cmn.usage.index_buffer;
             _SG_VALIDATE(src_is_index == dst_is_index, VALIDATE_COPYBUFFERTOBUFFER_WEBGL2_INDEX_BUFFER);
         }
+        if (src_buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(src_buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_COPYBUFFERTOBUFFER_SRC_TRANSIENT_MISSING);
+        }
         return _sg_validate_end();
     #endif
 }
@@ -26962,6 +26975,9 @@ _SOKOL_PRIVATE bool _sg_validate_copy_buffer_to_image(_sg_buffer_t* src_buf, con
         _SG_VALIDATE((desc->dst.x + desc->size.width) <= mip_width, VALIDATE_COPYBUFFERTOIMAGE_DST_WIDTH_OVERFLOW);
         _SG_VALIDATE((desc->dst.y + desc->size.height) <= mip_height, VALIDATE_COPYBUFFERTOIMAGE_DST_HEIGHT_OVERFLOW);
         _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= mip_depth_or_slices, VALIDATE_COPYBUFFERTOIMAGE_DST_NUMSLICES_OVERFLOW);
+        if (src_buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(src_buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_COPYBUFFERTOIMAGE_SRC_TRANSIENT_MISSING);
+        }
         return _sg_validate_end();
     #endif
 }
@@ -27031,6 +27047,9 @@ _SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const
         _SG_VALIDATE((desc->dst.y + desc->size.height) <= dst_mip_height, VALIDATE_COPYIMAGETOIMAGE_DST_HEIGHT_OVERFLOW);
         _SG_VALIDATE((desc->src.slice + desc->size.num_slices) <= src_mip_depth_or_slices, VALIDATE_COPYIMAGETOIMAGE_SRC_NUMSLICES_OVERFLOW);
         _SG_VALIDATE((desc->dst.slice + desc->size.num_slices) <= dst_mip_depth_or_slices, VALIDATE_COPYIMAGETOIMAGE_DST_NUMSLICES_OVERFLOW);
+        if (src_img->cmn.usage.write_transient) {
+            _SG_VALIDATE(src_img->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_COPYIMAGETOIMAGE_SRC_TRANSIENT_MISSING);
+        }
         return _sg_validate_end();
     #endif
 }
@@ -29146,6 +29165,8 @@ SOKOL_API_IMPL void sg_copy_image_to_image(const sg_copy_image_to_image_desc* de
     }
     sg_copy_image_to_image_desc desc_def = _sg_copy_image_to_image_desc_defaults(src_img, desc);
     if (_sg_validate_copy_image_to_image(src_img, dst_img, &desc_def)) {
+        SOKOL_ASSERT((desc->src.mip_level >= 0) && (desc->src.mip_level < src_img->cmn.num_mipmaps));
+        SOKOL_ASSERT((desc->dst.mip_level >= 0) && (desc->dst.mip_level < dst_img->cmn.num_mipmaps));
         const sg_pixel_format fmt = src_img->cmn.pixel_format;
         const size_t stats_copy_size = _sg_image_copy_size(fmt,
             _sg_row_pitch(fmt, desc_def.size.width, 1),
