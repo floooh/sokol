@@ -4893,10 +4893,6 @@ typedef struct sg_frame_stats_d3d11_bindings {
     uint32_t num_om_set_rts_and_uavs;
 } sg_frame_stats_d3d11_bindings;
 
-typedef struct sg_frame_stats_d3d11_uniforms {
-    uint32_t num_update_subresource;
-} sg_frame_stats_d3d11_uniforms;
-
 typedef struct sg_frame_stats_d3d11_draw {
     uint32_t num_draw_indexed_instanced;
     uint32_t num_draw_indexed;
@@ -4908,8 +4904,9 @@ typedef struct sg_frame_stats_d3d11 {
     sg_frame_stats_d3d11_pass pass;
     sg_frame_stats_d3d11_pipeline pipeline;
     sg_frame_stats_d3d11_bindings bindings;
-    sg_frame_stats_d3d11_uniforms uniforms;
     sg_frame_stats_d3d11_draw draw;
+    uint32_t num_update_subresource;
+    uint32_t num_copy_subresource_region;
     uint32_t num_map;
     uint32_t num_unmap;
 } sg_frame_stats_d3d11;
@@ -15916,7 +15913,7 @@ _SOKOL_PRIVATE void _sg_d3d11_apply_uniforms(int ub_slot, const sg_range* data) 
     ID3D11Buffer* cbuf = shd->d3d11.all_cbufs[ub_slot];
     SOKOL_ASSERT(cbuf);
     _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, (ID3D11Resource*)cbuf, 0, NULL, data->ptr, 0, 0);
-    _sg_stats_inc(d3d11.uniforms.num_update_subresource);
+    _sg_stats_inc(d3d11.num_update_subresource);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
@@ -16023,6 +16020,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_miplevel_data(const _sg_image_t* img,
             d3d11_src_ptr,
             d3d11_src_row_pitch,
             d3d11_src_depth_pitch);
+        _sg_stats_inc(d3d11.num_update_subresource);
     }
 }
 
@@ -16077,6 +16075,7 @@ _SOKOL_PRIVATE void _sg_d3d11_write_buffer_unsealed(_sg_buffer_t* buf, const sg_
         d3d11_dst_box.back = 1;
         d3d11_dst_box.bottom = 1;
         _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_buf, 0, &d3d11_dst_box, src_ptr, 0, 0);
+        _sg_stats_inc(d3d11.num_update_subresource);
     }
 }
 
@@ -16140,6 +16139,7 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_b
         d3d11_dst_box.bottom = 1;
         const void* d3d11_src_ptr = (void*)(src_buf->d3d11.staging_ptr + desc->src.offset);
         _sg_d3d11_UpdateSubresource(_sg.d3d11.ctx, d3d11_dst_buf, 0, &d3d11_dst_box, d3d11_src_ptr, 0, 0);
+        _sg_stats_inc(d3d11.num_update_subresource);
     } else {
         ID3D11Resource* d3d11_src_buf = (ID3D11Resource*)src_buf->d3d11.buf;
         SOKOL_ASSERT(d3d11_src_buf);
@@ -16157,6 +16157,7 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_b
             d3d11_src_buf,  // pSrcResource
             0,              // SrcSubresource
             &d3d11_src_box);    // pSrcBox
+        _sg_stats_inc(d3d11.num_copy_subresource_region);
     }
 }
 
@@ -16237,6 +16238,7 @@ _SOKOL_PRIVATE void _sg_d3d11_copy_image_to_image(_sg_image_t* src_img, _sg_imag
             src_img->d3d11.res,     // pSrcResource
             d3d11_src_subres,       // SrcSubresource
             whole_subres_required ? 0 : &d3d11_src_box); // pSrcBox (0 for whole-mip copies)
+        _sg_stats_inc(d3d11.num_copy_subresource_region);
     }
 }
 
