@@ -9014,6 +9014,8 @@ _SOKOL_PRIVATE bool _sg_resource_state_valid_unsealed(sg_resource_state s) {
 
 // return size of a mipmap level
 _SOKOL_PRIVATE int _sg_miplevel_dim(int base_dim, int mip_level) {
+    SOKOL_ASSERT(base_dim >= 0);
+    SOKOL_ASSERT((mip_level >= 0) && (mip_level < _SG_MAX_MIPMAPS));
     return _sg_max(base_dim >> mip_level, 1);
 }
 
@@ -10081,6 +10083,13 @@ _SOKOL_PRIVATE void _sg_dummy_copy_buffer_to_buffer(_sg_buffer_t* src_buf, _sg_b
 _SOKOL_PRIVATE void _sg_dummy_copy_buffer_to_image(_sg_buffer_t* src_buf, _sg_image_t* dst_img, const sg_copy_buffer_to_image_desc* desc) {
     SOKOL_ASSERT(src_buf && dst_img && desc);
     _SOKOL_UNUSED(src_buf);
+    _SOKOL_UNUSED(dst_img);
+    _SOKOL_UNUSED(desc);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_copy_image_to_image(_sg_image_t* src_img, _sg_image_t* dst_img, const sg_copy_image_to_image_desc* desc) {
+    SOKOL_ASSERT(src_img && dst_img && desc);
+    _SOKOL_UNUSED(src_img);
     _SOKOL_UNUSED(dst_img);
     _SOKOL_UNUSED(desc);
 }
