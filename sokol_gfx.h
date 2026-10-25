@@ -333,6 +333,7 @@
 
             sg_copy_buffer_to_buffer(const sg_copy_buffer_to_buffer_desc* desc);
             sg_copy_buffer_to_image(const sg_copy_buffer_to_image_desc* desc);
+            sg_copy_image_to_image(const sg_copy_image_to_image_desc* desc);
 
         The source resource must have been created with usage .copy_src and
         the destination resource must have been created with usage .copy_dst.
@@ -1505,7 +1506,7 @@
         });
         ```
 
-    Likewise to copy data from a buffer into an image, call `sg_copy_buffer_to_image`:
+    To copy data from a buffer into an image, call `sg_copy_buffer_to_image`:
 
         ```c
         sg_copy_buffer_to_image(&(sg_copy_buffer_to_image_desc){
@@ -1533,9 +1534,35 @@
         });
         ```
 
-    For detailed information on the parameter structs `sg_copy_buffer_to_buffer_desc` and
-    `sg_copy_buffer_to_image_desc` (especially how default values are populated),
-    see the struct documentation headers.
+    To copy data between two images, call `sg_copy_image_to_image`:
+
+        ```c
+        sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+            .src = {
+                .image = src_img,
+                .mip_level = ...,
+                .x = ...,
+                .y = ...,
+                .slice = ...,
+            },
+            .dst = {
+                .image = dst_img,
+                .mip_level = ...,
+                .x = ...,
+                .y = ...,
+                .slice = ...,
+            },
+            .size = {
+                .width = ...,
+                .height = ...,
+                .num_slices = ...,
+            },
+        });
+        ```
+
+    For detailed information on the parameter structs `sg_copy_buffer_to_buffer_desc`,
+    `sg_copy_buffer_to_image_desc` and `sg_copy_image_to_image_desc` (especially how
+    default values are populated), see the struct documentation headers.
 
     Copying between resources comes with a lot of caveats caused by backend 3D API
     restrictions (alignments, valid resource types, etc...). These detailed
@@ -1574,6 +1601,8 @@
       when the bug would be triggered. For copying from staging buffers, the
       offset works because of a special workaround in the sokol-gfx GL backend
       (staging buffers are actually heap memory allocations).
+    - On GL versions < 4.3 and GLES version < 3.2, copying from images to images
+      is only possible when the pixel format is renderable.
 
 
     ON UPLOADING PERSISTENT DATA INTO RESOURCES
@@ -1688,6 +1717,13 @@
             },
         });
         ```
+
+    Alternatively uploading data persistently into images can also
+    be performed via a combination of `sg_write_image_transient()` followed
+    by a `sg_copy_image_to_image()` call. Uploading through a staging
+    buffer is recommended though because it is more flexible and may
+    be more efficient on some backend 3D APIs.
+
 
     ON STORAGE BUFFERS
     ==================
@@ -3992,7 +4028,8 @@ typedef struct sg_copy_buffer_to_buffer_desc {
     Caveats (all checked by the validation layer or via logged errors and warnings):
         - sg_copy_buffer_to_image() must be called outside a pass
         - for compressed image formats, .size.width and .size.height must be
-          a multiple of the compression block size
+          a multiple of the compression block size or fall on the mip level
+          width / height
         - the source buffer must have been created with .usage.copy_src
         - the destination image must have been created with .usage.copy_dst
         - the source buffer type cannot be .usage.staging_index_buffer
@@ -4025,7 +4062,48 @@ typedef struct sg_copy_buffer_to_image_desc {
 /*
     sg_copy_image_to_image_desc
 
-    FIXME
+    Describes an image-to-image copy operation via sg_copy_image_to_image().
+
+    .src
+        .image          the source image
+        .mip_level      the source mip level
+        .x, .y,         the source x,y location
+        .slice          the array or 3d slice
+    .dst
+        .image          the destination image
+        .mip_level      the destination mip level
+        .x, .y          the destination x,y location
+        .slice          the array or 3d slice
+    .size
+        .width          copy region width in pixels
+        .height         copy region height in pixels
+        .num_slices     number of array or 3d slices to copy
+
+    Note on default values:
+
+        .size
+            The size default is the 'rest after offset' for the source mip
+            level, e.g.:
+                .size.width = src_mip_width - .src.x
+                .size.height = src_mip_height - .src.y
+                .size.num_slices = src_mip_depth_or_slices - .src.slice
+
+    Caveats (all checked by the validation layer):
+        - sg_copy_image_to_image() must be called outside a pass
+        - for compressed image formats, .size.width and .size.height must be
+          a multiple of the compression block size or fall on the mip level
+          width / height
+        - the source and destination image must not be the same
+        - the source image must have been created with .usage.copy_src
+        - the destination image must have been created with .usage.copy_dst
+        - the source and destination image pixel format must be identical
+        - copying between 3D images and non-3D-images is not allowed
+        - copying between multi-samples images is not allowed
+        - when sg_features.copy_image_to_image_relaxed is false, the
+          pixel format must be renderable (this is the case on GL < 4.3)
+          and GLES < 3.2 (e.g. also on WebGL2)
+        - when copying between depth- or depth-stencil-images, only
+          entire mip levels can be copied
 */
 typedef struct sg_copy_image_to_image_desc {
     sg_image_location src;
@@ -4065,7 +4143,7 @@ typedef struct sg_copy_image_to_image_desc {
     When initial data is provided via sg_image_desc.data, it must be the complete
     and tightly packed data for all mip levels and slices in one continuous block
     of memory. For a more flexible initialization of the initial image content,
-    use sg_write_image_unsealed().
+    use sg_write_image_unsealed() instead.
 
     The size of a single surface in a mip-level for a regular 2D texture
     can be computed via:
