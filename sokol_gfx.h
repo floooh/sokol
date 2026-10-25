@@ -4041,7 +4041,7 @@ typedef struct sg_copy_image_to_image_desc {
     The default configuration is:
 
     .type               SG_IMAGETYPE_2D
-    .usage              { .texture = true }
+    .usage              all false (implies usage as regular texture)
     .width              0 (must be set to >0)
     .height             0 (must be set to >0)
     .num_slices         1 (3D textures: depth; array textures: number of layers)
