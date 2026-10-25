@@ -3894,6 +3894,53 @@ UTEST(sokol_gfx, make_buffer_storage_no_data_ok) {
     sg_shutdown();
 }
 
+// storage buffers can have initial data
+UTEST(sokol_gfx, make_buffer_storage_with_initial_data) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.storage_buffer = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// storage buffers can be written while unsealed
+UTEST(sokol_gfx, make_buffer_storage_write_unsealed) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_unsealed = true },
+        .size = sizeof(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// the write_unsealed vs initial data rule also applies to storage buffers
+UTEST(sokol_gfx, make_buffer_storage_write_unsealed_expect_no_data) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .write_unsealed = true },
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_buffer_storagebuffer_not_supported_and_size) {
     setup(&(sg_desc){0});
     const uint8_t data[10] = {0};
