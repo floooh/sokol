@@ -2395,8 +2395,8 @@ static void set_copy_image_to_image_relaxed(bool relaxed) {
     const sg_log_item expected[] = { __VA_ARGS__ }; \
     const int num_expected = (int)(sizeof(expected) / sizeof(expected[0])); \
     T(num_log_called == (num_expected + 1)); \
-    for (int i = 0; i < num_expected; i++) { \
-        T(log_items[i] == expected[i]); \
+    for (int log_idx = 0; log_idx < num_expected; log_idx++) { \
+        T(log_items[log_idx] == expected[log_idx]); \
     } \
     T(log_items[num_expected] == SG_LOGITEM_VALIDATION_FAILED); \
 }
