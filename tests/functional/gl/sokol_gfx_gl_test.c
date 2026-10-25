@@ -2784,7 +2784,7 @@ static bool blit_frame_ok(GLenum att) {
 
 UTEST(sokol_gfx_gl, copy_image_to_image_features) {
     setup();
-    T(sg_query_features().copy_image_to_image_relaxed == (TEST_HAS_COPYIMAGE_RELAXED != 0));
+    T(sg_query_features().copy_image_to_image_relaxed_pixel_format == (TEST_HAS_COPYIMAGE_RELAXED != 0));
     teardown();
 }
 

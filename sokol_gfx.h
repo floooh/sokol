@@ -2653,7 +2653,7 @@ typedef struct sg_features {
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
     bool copy_buffer_to_image_relaxed_bytes_per_row;    // if false: sg_copy_buffer_to_image .src.bytes_per_row must be a multiple of 256 (webgpu restriction)
-    bool copy_image_to_image_relaxed;   // if false: sg_copy_image_to_image only works for renderable formats
+    bool copy_image_to_image_relaxed_pixel_format;      // if false: sg_copy_image_to_image only works for renderable formats
     bool gl_texture_views;              // supports 'proper' texture views (GL 4.3+)
 } sg_features;
 
@@ -4099,7 +4099,7 @@ typedef struct sg_copy_buffer_to_image_desc {
         - the source and destination image pixel format must be identical
         - copying between 3D images and non-3D-images is not allowed
         - copying between multi-samples images is not allowed
-        - when sg_features.copy_image_to_image_relaxed is false, the
+        - when sg_features.copy_image_to_image_relaxed_pixel_format is false, the
           pixel format must be renderable (this is the case on GL < 4.3)
           and GLES < 3.2 (e.g. also on WebGL2)
         - when copying between depth- or depth-stencil-images, only
@@ -5765,7 +5765,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_COPY_DST, "sg_copy_image_to_image: destination image must have .copy_dst usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER, "sg_copy_image_to_image: cannot copy between a 3D image and non-3D image types") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT, "sg_copy_image_to_image: source and destination pixel format must be identical") \
-    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_RENDERABLE, "sg_copy_image_to_image: image pixel formats must be renderable when sg_features.copy_image_to_image_relaxed is false") \
+    _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_RENDERABLE, "sg_copy_image_to_image: image pixel formats must be renderable when sg_features.copy_image_to_image_relaxed_pixel_format is false") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_MSAA, "sg_copy_image_to_image: images cannot be multi-sampled (sg_image_desc.sample_count > 1)") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL, "sg_copy_image_to_image: when copying between depth(-stencil) images, the whole mip level must be copied") \
     _SG_LOGITEM_XMACRO(VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_SIZE, "sg_copy_image_to_image: when copying between depth(-stencil), the src and dst mip level size must be identical") \
@@ -11120,9 +11120,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
     #if defined(_SOKOL_GL_HAS_COPYIMAGE)
-        _sg.features.copy_image_to_image_relaxed = version >= 430;
+        _sg.features.copy_image_to_image_relaxed_pixel_format = version >= 430;
     #else
-        _sg.features.copy_image_to_image_relaxed = false;
+        _sg.features.copy_image_to_image_relaxed_pixel_format = false;
     #endif
 
     // scan extensions
@@ -11259,9 +11259,9 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
     #if defined(_SOKOL_GL_HAS_COPYIMAGE)
-    _sg.features.copy_image_to_image_relaxed = version >= 320;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = version >= 320;
     #else
-    _sg.features.copy_image_to_image_relaxed = false;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = false;
     #endif
 
     bool has_s3tc = false;  // BC1..BC3
@@ -13674,7 +13674,7 @@ _SOKOL_PRIVATE void _sg_gl_copy_image_to_image(_sg_image_t* src_img, _sg_image_t
 
     // simple shortcut for GL 4.3+
     #if defined(_SOKOL_GL_HAS_COPYIMAGE)
-    if (_sg.features.copy_image_to_image_relaxed) {
+    if (_sg.features.copy_image_to_image_relaxed_pixel_format) {
         const GLuint gl_src_tex = src_img->gl.tex[src_img->cmn.active_slot];
         const GLuint gl_dst_tex = dst_img->gl.tex[dst_img->cmn.active_slot];
         SOKOL_ASSERT(gl_src_tex && gl_dst_tex);
@@ -14631,7 +14631,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = false;
     // technically irrelevant since the bytes-per-row alignment rule only affects non-staging buffers
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
-    _sg.features.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = true;
 
     _sg.limits.max_image_size_2d = 16 * 1024;
     _sg.limits.max_image_size_cube = 16 * 1024;
@@ -16863,7 +16863,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
-    _sg.features.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = true;
 
     _sg.features.image_clamp_to_border = false;
     #if (MAC_OS_X_VERSION_MAX_ALLOWED >= 120000) || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 140000)
@@ -19222,7 +19222,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     // when copying from non-staging buffer, bytes-per-row must be multiple of 256
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = false;
-    _sg.features.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = true;
 
     wgpuDeviceGetLimits(_sg.wgpu.dev, &_sg.wgpu.limits);
 
@@ -23067,7 +23067,7 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
     _sg.features.copy_buffer_to_image_relaxed_bytes_per_row = true;
-    _sg.features.copy_image_to_image_relaxed = true;
+    _sg.features.copy_image_to_image_relaxed_pixel_format = true;
 
     SOKOL_ASSERT(_sg.vk.phys_dev);
     _sg.vk.descriptor_buffer_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT;
@@ -27092,7 +27092,7 @@ _SOKOL_PRIVATE bool _sg_validate_copy_image_to_image(_sg_image_t* src_img, const
         _SG_VALIDATE((src_img->cmn.type == SG_IMAGETYPE_3D) == (dst_img->cmn.type == SG_IMAGETYPE_3D), VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER);
         _SG_VALIDATE(src_fmt == dst_fmt, VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT);
         _SG_VALIDATE(src_img->cmn.sample_count == 1, VALIDATE_COPYIMAGETOIMAGE_MSAA);
-        if (!_sg.features.copy_image_to_image_relaxed) {
+        if (!_sg.features.copy_image_to_image_relaxed_pixel_format) {
             // additional restriction: pixel format must be renderable
             _SG_VALIDATE(_sg.formats[src_fmt].render, VALIDATE_COPYIMAGETOIMAGE_RENDERABLE);
         }

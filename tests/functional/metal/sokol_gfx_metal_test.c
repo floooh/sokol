@@ -2979,7 +2979,7 @@ static sg_image make_copy_src_image(sg_image_type type, int width, int height, i
 
 UTEST(sokol_gfx_metal, copy_image_to_image_features) {
     setup();
-    T(sg_query_features().copy_image_to_image_relaxed);
+    T(sg_query_features().copy_image_to_image_relaxed_pixel_format);
     teardown();
 }
 

@@ -2386,8 +2386,8 @@ static sg_image create_copy_image_2d(int width, int height) {
 }
 
 // override backend feature after resource creation (dummy backend: false)
-static void set_copy_image_to_image_relaxed(bool relaxed) {
-    _sg.features.copy_image_to_image_relaxed = relaxed;
+static void set_copy_image_to_image_relaxed_pixel_format(bool relaxed) {
+    _sg.features.copy_image_to_image_relaxed_pixel_format = relaxed;
 }
 
 // expect exactly the given validation errors, followed by VALIDATION_FAILED
@@ -2656,7 +2656,7 @@ UTEST(sokol_gfx, copy_image_to_image_validate_msaa) {
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
     T_COPYIMG_ERRORS(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_MSAA);
     // relaxed copies don't lift the MSAA restriction, and MSAA has no whole mip level rule
-    set_copy_image_to_image_relaxed(true);
+    set_copy_image_to_image_relaxed_pixel_format(true);
     reset_log_items();
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
         .src.image = src,
@@ -2678,7 +2678,7 @@ UTEST(sokol_gfx, copy_image_to_image_validate_renderable) {
     reset_log_items();
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
     T_COPYIMG_ERRORS(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_RENDERABLE);
-    set_copy_image_to_image_relaxed(true);
+    set_copy_image_to_image_relaxed_pixel_format(true);
     reset_log_items();
     sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
     T(num_log_called == 0);
@@ -2691,7 +2691,7 @@ UTEST(sokol_gfx, copy_image_to_image_validate_compressed_alignment) {
     sg_image dst = create_copy_image((sg_image_desc){ .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_BC1_RGBA });
     T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
-    set_copy_image_to_image_relaxed(true);
+    set_copy_image_to_image_relaxed_pixel_format(true);
 
     // block aligned offsets and sizes
     reset_log_items();
@@ -2737,7 +2737,7 @@ UTEST(sokol_gfx, copy_image_to_image_compressed_small_mips) {
     sg_image dst = create_copy_image((sg_image_desc){ .width = 16, .height = 16, .num_mipmaps = 4, .pixel_format = SG_PIXELFORMAT_BC1_RGBA });
     T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
-    set_copy_image_to_image_relaxed(true);
+    set_copy_image_to_image_relaxed_pixel_format(true);
 
     // whole 2x2 mip 3 => 2x2 mip 3
     reset_log_items();
@@ -3061,7 +3061,7 @@ UTEST(sokol_gfx, copy_image_to_image_stats) {
     sg_image dst_arr = create_copy_image((sg_image_desc){ .type = SG_IMAGETYPE_ARRAY, .width = 8, .height = 8, .num_slices = 4 });
     sg_image src_bc1 = create_copy_image((sg_image_desc){ .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_BC1_RGBA });
     sg_image dst_bc1 = create_copy_image((sg_image_desc){ .width = 8, .height = 8, .pixel_format = SG_PIXELFORMAT_BC1_RGBA });
-    set_copy_image_to_image_relaxed(true);
+    set_copy_image_to_image_relaxed_pixel_format(true);
     sg_enable_stats();
 
     // whole image

@@ -1623,7 +1623,7 @@ static sg_image make_copy_image(sg_image_type type, int w, int h, int num_slices
 
 UTEST(sokol_gfx_d3d11, copy_image_to_image_features) {
     setup();
-    T(sg_query_features().copy_image_to_image_relaxed);
+    T(sg_query_features().copy_image_to_image_relaxed_pixel_format);
     teardown();
 }
 
