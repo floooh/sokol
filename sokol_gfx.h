@@ -1601,7 +1601,7 @@
       when the bug would be triggered. For copying from staging buffers, the
       offset works because of a special workaround in the sokol-gfx GL backend
       (staging buffers are actually heap memory allocations).
-    - On GL versions < 4.3 and GLES version < 3.2, copying from images to images
+    - On GL versions < 4.3 and GLES version < 3.2, copying from image to image
       is only possible when the pixel format is renderable.
 
 
@@ -4067,7 +4067,7 @@ typedef struct sg_copy_buffer_to_image_desc {
     .src
         .image          the source image
         .mip_level      the source mip level
-        .x, .y,         the source x,y location
+        .x, .y          the source x,y location
         .slice          the array or 3d slice
     .dst
         .image          the destination image
@@ -4098,10 +4098,12 @@ typedef struct sg_copy_buffer_to_image_desc {
         - the destination image must have been created with .usage.copy_dst
         - the source and destination image pixel format must be identical
         - copying between 3D images and non-3D-images is not allowed
-        - copying between multi-samples images is not allowed
+        - copying between multi-sampled images is not allowed
+        - copying into pass attachments is not allowed (from pass attachments
+          is fine)
         - when sg_features.copy_image_to_image_relaxed_pixel_format is false, the
-          pixel format must be renderable (this is the case on GL < 4.3)
-          and GLES < 3.2 (e.g. also on WebGL2)
+          pixel format must be renderable (this restriction applies to GL < 4.3
+          and GLES < 3.2, e.g. also on WebGL2)
         - when copying between depth- or depth-stencil-images, only
           entire mip levels can be copied
 */
@@ -4156,7 +4158,7 @@ typedef struct sg_copy_image_to_image_desc {
 
     For 3d-images the size of a single miplevel is:
 
-        num_slices * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
+        max(1, num_slices >> mip_level) * sg_query_surface_pitch(pixel_format, mip_width, mip_height, 1);
 
     For cubemap-images the size of a single mip-level is:
 
