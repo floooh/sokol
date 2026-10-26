@@ -19908,6 +19908,9 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings_bindgroup(_sg_bindings_ptrs_t* bnd) 
         if (bg) {
             if (bg->slot.state == SG_RESOURCESTATE_VALID) {
                 _sg_wgpu_set_bindgroup(_SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, bg);
+            } else {
+                _sg_wgpu_discard_bindgroup(bg);
+                return false;
             }
             _sg_wgpu_discard_bindgroup(bg);
         } else {
