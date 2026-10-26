@@ -21702,7 +21702,7 @@ _SOKOL_PRIVATE int _sg_vk_mem_find_memory_type_index(uint32_t type_filter, VkMem
     _SG_STRUCT(VkPhysicalDeviceMemoryProperties, mem_props);
     vkGetPhysicalDeviceMemoryProperties(_sg.vk.phys_dev, &mem_props);
     for (uint32_t i = 0; i < mem_props.memoryTypeCount; i++) {
-        if ((type_filter & (1 << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
+        if ((type_filter & (1u << i)) && ((mem_props.memoryTypes[i].propertyFlags & props) == props)) {
             return (int)i;
         }
     }
@@ -25732,7 +25732,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             const sg_shader_view* view_desc = &desc->views[view_idx];
             if (view_desc->texture.stage != SG_SHADERSTAGE_NONE) {
                 const sg_shader_texture_view* tex_desc = &view_desc->texture;
-                texview_slot_mask |= (1 << view_idx);
+                texview_slot_mask |= (1u << view_idx);
                 #if defined(SOKOL_METAL)
                 _SG_VALIDATE(_sg_validate_slot_bits(msl_tex_bits, tex_desc->stage, tex_desc->msl_texture_n), VALIDATE_SHADERDESC_VIEW_TEXTURE_METAL_TEXTURE_SLOT_COLLISION);
                 msl_tex_bits = _sg_validate_set_slot_bit(msl_tex_bits, tex_desc->stage, tex_desc->msl_texture_n);
@@ -25804,7 +25804,7 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             if (smp_desc->stage == SG_SHADERSTAGE_NONE) {
                 continue;
             }
-            smp_slot_mask |= (1 << smp_idx);
+            smp_slot_mask |= (1u << smp_idx);
             #if defined(SOKOL_METAL)
             _SG_VALIDATE(_sg_validate_slot_bits(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n), VALIDATE_SHADERDESC_SAMPLER_METAL_SAMPLER_SLOT_COLLISION);
             msl_smp_bits = _sg_validate_set_slot_bit(msl_smp_bits, smp_desc->stage, smp_desc->msl_sampler_n);
@@ -25835,8 +25835,8 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
             _SG_VALIDATE(view_slot_in_range, VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_VIEW_SLOT_OUT_OF_RANGE);
             _SG_VALIDATE(smp_slot_in_range, VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_SAMPLER_SLOT_OUT_OF_RANGE);
             if (view_slot_in_range && smp_slot_in_range) {
-                ref_texview_slot_mask |= 1 << tex_smp_desc->view_slot;
-                ref_smp_slot_mask |= 1 << tex_smp_desc->sampler_slot;
+                ref_texview_slot_mask |= 1u << tex_smp_desc->view_slot;
+                ref_smp_slot_mask |= 1u << tex_smp_desc->sampler_slot;
                 const sg_shader_view* view_desc = &desc->views[tex_smp_desc->view_slot];
                 const sg_shader_sampler* smp_desc = &desc->samplers[tex_smp_desc->sampler_slot];
                 _SG_VALIDATE(view_desc->texture.stage != SG_SHADERSTAGE_NONE, VALIDATE_SHADERDESC_TEXTURE_SAMPLER_PAIR_EXPECT_TEXTURE_VIEW);
