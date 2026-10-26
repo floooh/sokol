@@ -1559,9 +1559,8 @@ UTEST(sokol_gfx_wgpu, view_attachments_array_and_cube) {
     teardown();
 }
 
-// KNOWN BUG: 3D color attachments get a 2D view of a 3D texture, WebGPU needs
-// a 3D view plus a depthSlice in the render pass color attachment
-UTEST(sokol_gfx_wgpu, view_3d_attachment_bug) {
+// 3D color attachments need a 3D view and a depthSlice in the render pass
+UTEST(sokol_gfx_wgpu, view_3d_attachment) {
     setup();
     sg_image img = sg_make_image(&(sg_image_desc){
         .type = SG_IMAGETYPE_3D,
@@ -1573,10 +1572,75 @@ UTEST(sokol_gfx_wgpu, view_3d_attachment_bug) {
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_view view = sg_make_view(&(sg_view_desc){ .color_attachment = { .image = img, .slice = 0 } });
-    T(wgpu_mock_find_error("view dimension") >= 0);
-    wgpu_mock_clear_errors();
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    const void* wgpu_view = sg_wgpu_query_view_info(view).view;
+    wgpu_mock_texture_view_info_t vinfo = {0};
+    T(wgpu_mock_texture_view_info(wgpu_view, &vinfo));
+    T(vinfo.dimension == WGPUTextureViewDimension_3D);
+    T(vinfo.base_array_layer == 0 && vinfo.array_layer_count == 1);
+    T(vinfo.base_mip_level == 0 && vinfo.mip_level_count == 1);
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = view });
+    const wgpu_mock_render_pass_info_t* rp = wgpu_mock_last_render_pass();
+    T(rp->num_color_attachments == 1);
+    T(rp->color_attachments[0].view == wgpu_view);
+    T(rp->color_attachments[0].depth_slice == 0);
+    sg_end_pass();
+    sg_commit();
     sg_destroy_view(view);
     sg_destroy_image(img);
+    teardown();
+}
+
+// non-3D color attachments must leave depthSlice undefined
+UTEST(sokol_gfx_wgpu, view_2d_attachment_depth_slice_undefined) {
+    setup();
+    sg_image img = make_color_image(16, 16, 1);
+    sg_view view = sg_make_view(&(sg_view_desc){ .color_attachment.image = img });
+    sg_begin_pass(&(sg_pass){ .attachments.colors[0] = view });
+    T(wgpu_mock_last_render_pass()->color_attachments[0].depth_slice == WGPU_DEPTH_SLICE_UNDEFINED);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_view(view);
+    sg_destroy_image(img);
+    teardown();
+}
+
+// 3D storage images need a 3D view to match the bind group layout
+UTEST(sokol_gfx_wgpu, view_3d_storage_image) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .compute_func = { .source = cs_src, .entry = "cs_main" },
+        .views[0].storage_image = { .stage = SG_SHADERSTAGE_COMPUTE, .image_type = SG_IMAGETYPE_3D, .access_format = SG_PIXELFORMAT_RGBA8, .writeonly = true, .wgsl_group1_binding_n = 0 },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .compute = true, .shader = shd });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .type = SG_IMAGETYPE_3D,
+        .usage.storage_image = true,
+        .width = 8,
+        .height = 8,
+        .num_slices = 4,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_image.image = img });
+    T(sg_query_view_state(view) == SG_RESOURCESTATE_VALID);
+    wgpu_mock_texture_view_info_t vinfo = {0};
+    T(wgpu_mock_texture_view_info(sg_wgpu_query_view_info(view).view, &vinfo));
+    T(vinfo.dimension == WGPUTextureViewDimension_3D);
+    T(vinfo.base_array_layer == 0 && vinfo.array_layer_count == 1);
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+    sg_dispatch(1, 1, 1);
+    T(wgpu_mock_compute_pass_encoder_state()->bind_groups[1].group != 0);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_view(view);
+    sg_destroy_image(img);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
     teardown();
 }
 
