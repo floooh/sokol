@@ -121,6 +121,7 @@
     #if GL_MOCK_VERSION >= 320
         #define _SOKOL_GL_HAS_COLORMASKI (1)
         #define _SOKOL_GL_HAS_BASEVERTEX (1)
+        #define _SOKOL_GL_HAS_COPYIMAGE (1)
     #endif
 #else
     #define _SOKOL_GL_HAS_COLORMASKI (1)
@@ -134,6 +135,7 @@
     #if GL_MOCK_VERSION >= 430
         #define _SOKOL_GL_HAS_COMPUTE (1)
         #define _SOKOL_GL_HAS_TEXVIEWS (1)
+        #define _SOKOL_GL_HAS_COPYIMAGE (1)
     #endif
 #endif
 
@@ -573,6 +575,7 @@ typedef uint64_t        GLuint64;
     _GLM_XMACRO(glDrawElementsInstancedBaseVertexBaseInstance, void, (GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount, GLint basevertex, GLuint baseinstance)) \
     _GLM_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
     _GLM_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
+    _GLM_XMACRO(glCopyImageSubData,                void, (GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)) \
     _GLM_XMACRO(glInvalidateFramebuffer,          void, (GLenum target, GLsizei numAttachments, const GLenum* attachments))
 
 // generate GL function prototypes

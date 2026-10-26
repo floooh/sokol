@@ -1,5 +1,66 @@
 ## Updates
 
+### 25-Oct-2026
+
+The next step of the new sokol_gfx.h resource update API, and some minor
+API cleanup breaking changes in `sg_image_desc`:
+
+- A new function `sg_copy_image_to_image()` for copying data between
+  image objects, see the new example [image-copy-sapp](https://floooh.github.io/sokol-html5/image-copy-sapp-ui.html) for how to use, and for usage restrictions and caveats
+  see the updated documentation in the doc section `ON COPYING DATA BETWEEN RESOURCES`
+  and the doc header of the new struct `sg_copy_image_to_image_desc`
+- Writing initial data into storage images in `sg_make_image()` or via
+  `sg_write_image_unsealed()` is now allowed
+- A new feature flag `sg_features.copy_image_to_image_relaxed_pixel_format` has been
+  added. When this is false, `sg_copy_image_to_image` is only allowed for
+  renderable pixel formats (this is a restriction in GL below version 4.3
+  and GLES below version 3.2)
+- breaking changes:
+    - `sg_image_desc.data` has changed from an array of per-mip-level `sg_range`
+      structs to a single `sg_range` struct. This means that the initial content
+      for images must now be provided through a single ptr/size pair as a tightly
+      packed blob including all mip levels and slices.  For situations where the
+      mip levels are not tightly packed, create the image with
+      `.usage.write_unsealed` and upload the data by calling
+      `sg_write_image_unsealed()` in a loop (one call per mip level or even one
+      call per array / depth slice). Don't forget to call `sg_seal_image()` after
+      uploading all data and before using the image.
+    - Related: the struct `sg_image_data` and the global constant
+      `SG_MAX_MIPMAPS` have been removed since they are no longer used
+      in the public API.
+    - The flag `sg_image_usage.immutable` has been removed. This was already
+      redundant before and doesn't make a behaviour difference in any
+      backend 3D API.
+- validation changes:
+    - all copy functions with transient resources as source now validate
+      that the transient resource was written in the same frame (this
+      was a validation gap in the previous resource API updates)
+    - `sg_copy_buffer_to_image()` into a depth- or depth-stencil-image
+      is now explicitly rejected (this was a gap in the validation layer)
+    - four redundant validatition check in `sg_make_view` for pass
+      attachments have been removed, those checks could never be triggered
+      because validation checks during image creation would already kick in
+- bug fixes:
+    - the data size validation for copying initial data into mipmapped
+      3D textures was broken (the size for any but the top-level mipmap
+      was computed wrongly)
+    - the validation check for read-overflow in the `sg_write_image_*()`
+      functions and some asserts in backend-functions were too strict for some
+      valid write operations
+    - in the D3D11 backend: `sg_write_image_unsealed()` and
+      `sg_copy_buffer_to_image()` failed for hardware-compressed
+      image formats and small mip levels (with dimension less than
+      the compression block size).
+    - in the GL backend: the MSAA resolve in `sg_end_pass()` was
+      clipped against an active scissor rectangle
+- other changes: the headers `sokol_gl.h`, `sokol_debugtext.h` and
+  `sokol_nuklear.h` have been fixed for the `sg_image_desc.data`
+  type change, the header `sokol_shape.h` has a workaround for
+  enabling the warning `-Wshadow` on macOS (macOS system headers
+  define a global symbol called `pi` which collided with a local
+  variable in `sokol_shape.h`)
+
+
 ### 17-Oct-2026
 
 A small fix has been applied to sokol_imgui.h for Dear ImGui v1.93.0 (backward

@@ -26,7 +26,7 @@
 
 #define GL_MOCK_MAX_OBJECTS (256)
 #define GL_MOCK_MAX_CALLS (4096)
-#define GL_MOCK_MAX_CALL_ARGS (12)
+#define GL_MOCK_MAX_CALL_ARGS (16)
 #define GL_MOCK_MAX_TEXTURE_UNITS (32)
 #define GL_MOCK_MAX_TEXTURE_TARGETS (6)
 #define GL_MOCK_MAX_IMAGE_UNITS (16)
@@ -100,6 +100,8 @@ typedef struct {
     int num_subimage;           // number of glTexSubImage* / glCompressedTexSubImage* calls
     int num_subimage_unpack_buffer; // ...of which sourced from a GL_PIXEL_UNPACK_BUFFER
     GLuint last_unpack_buffer;  // GL_PIXEL_UNPACK_BUFFER bound at the most recent such call
+    int num_copy_read;          // number of glCopyImageSubData calls reading from this texture
+    int num_copy_write;         // number of glCopyImageSubData calls writing into this texture
 } gl_mock_texture_info_t;
 
 typedef struct {

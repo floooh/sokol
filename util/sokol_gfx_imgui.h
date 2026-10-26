@@ -432,6 +432,7 @@ typedef enum {
     _SGIMGUI_CMD_SEAL_IMAGE,
     _SGIMGUI_CMD_COPY_BUFFER_TO_BUFFER,
     _SGIMGUI_CMD_COPY_BUFFER_TO_IMAGE,
+    _SGIMGUI_CMD_COPY_IMAGE_TO_IMAGE,
     _SGIMGUI_CMD_BEGIN_PASS,
     _SGIMGUI_CMD_APPLY_VIEWPORT,
     _SGIMGUI_CMD_APPLY_SCISSOR_RECT,
@@ -576,6 +577,12 @@ typedef struct {
     sg_image_location dst;
     sg_image_extent size;
 } _sgimgui_args_copy_buffer_to_image_t;
+
+typedef struct {
+    sg_image_location src;
+    sg_image_location dst;
+    sg_image_extent size;
+} _sgimgui_args_copy_image_to_image_t;
 
 typedef struct {
     sg_pass pass;
@@ -771,6 +778,7 @@ typedef union {
     _sgimgui_args_seal_image_t seal_image;
     _sgimgui_args_copy_buffer_to_buffer_t copy_buffer_to_buffer;
     _sgimgui_args_copy_buffer_to_image_t copy_buffer_to_image;
+    _sgimgui_args_copy_image_to_image_t copy_image_to_image;
     _sgimgui_args_begin_pass_t begin_pass;
     _sgimgui_args_apply_viewport_t apply_viewport;
     _sgimgui_args_apply_scissor_rect_t apply_scissor_rect;
@@ -2087,6 +2095,10 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
             _sgimgui_snprintf(&str, "%d: sg_copy_buffer_to_image(desc=...)", index);
             break;
 
+        case _SGIMGUI_CMD_COPY_IMAGE_TO_IMAGE:
+            _sgimgui_snprintf(&str, "%d: sg_copy_image_to_image(desc=...)", index);
+            break;
+
         case _SGIMGUI_CMD_BEGIN_PASS:
             {
                 _sgimgui_snprintf(&str, "%d: sg_begin_pass(pass=...)", index);
@@ -2738,6 +2750,22 @@ _SOKOL_PRIVATE void _sgimgui_copy_buffer_to_image(const sg_copy_buffer_to_image_
     }
     if (ctx->hooks.copy_buffer_to_image) {
         ctx->hooks.copy_buffer_to_image(desc, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_copy_image_to_image(const sg_copy_image_to_image_desc* desc, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_COPY_IMAGE_TO_IMAGE;
+        item->color = _SGIMGUI_COLOR_RSRC;
+        item->args.copy_image_to_image.src = desc->src;
+        item->args.copy_image_to_image.dst = desc->dst;
+        item->args.copy_image_to_image.size = desc->size;
+    }
+    if (ctx->hooks.copy_image_to_image) {
+        ctx->hooks.copy_image_to_image(desc, ctx->hooks.user_data);
     }
 }
 
@@ -3741,7 +3769,6 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("  color_attachment: %s", _sgimgui_bool_string(desc->usage.color_attachment));
             _sgimgui_igtext("  resolve_attachment: %s", _sgimgui_bool_string(desc->usage.resolve_attachment));
             _sgimgui_igtext("  depth_stencil_attachment: %s", _sgimgui_bool_string(desc->usage.depth_stencil_attachment));
-            _sgimgui_igtext("  immutable: %s", _sgimgui_bool_string(desc->usage.immutable));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(desc->usage.write_unsealed));
             _sgimgui_igtext("  write_transient: %s", _sgimgui_bool_string(desc->usage.write_transient));
             _sgimgui_igtext("  copy_src: %s", _sgimgui_bool_string(desc->usage.copy_src));
@@ -3752,11 +3779,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_panel(_sgimgui_t* ctx, sg_image img) {
             _sgimgui_igtext("Num Mipmaps:    %d", desc->num_mipmaps);
             _sgimgui_igtext("Pixel Format:   %s", _sgimgui_pixelformat_string(desc->pixel_format));
             _sgimgui_igtext("Sample Count:   %d", desc->sample_count);
-            if (!desc->usage.immutable) {
-                _sgimgui_igseparator();
-                _sgimgui_igtext("Num Slots:     %d", info.num_slots);
-                _sgimgui_igtext("Active Slot:   %d", info.active_slot);
-            }
+            _sgimgui_igseparator();
+            _sgimgui_igtext("Num Slots:     %d", info.num_slots);
+            _sgimgui_igtext("Active Slot:   %d", info.active_slot);
         } else {
             _sgimgui_igtext("Image 0x%08X not valid.", img.id);
         }
@@ -4723,6 +4748,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    vertexformat_int10_n2: %s", _sgimgui_bool_string(f.vertexformat_int10_n2));
     _sgimgui_igtext("    copy_buffer_to_image_relaxed_buffer_type: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_buffer_type));
     _sgimgui_igtext("    copy_buffer_to_image_relaxed_bytes_per_row: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_bytes_per_row));
+    _sgimgui_igtext("    copy_image_to_image_relaxed_pixel_format: %s", _sgimgui_bool_string(f.copy_image_to_image_relaxed_pixel_format));
     _sgimgui_igtext("    gl_texture_views: %s", _sgimgui_bool_string(f.gl_texture_views));
     sg_limits l = sg_query_limits();
     _sgimgui_igtext("\nLimits:\n");
@@ -4812,9 +4838,11 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(prev_frame.num_seal_image);
         _sgimgui_frame_stats(prev_frame.num_copy_buffer_to_buffer);
         _sgimgui_frame_stats(prev_frame.num_copy_buffer_to_image);
+        _sgimgui_frame_stats(prev_frame.num_copy_image_to_image);
         _sgimgui_frame_stats(prev_frame.size_apply_uniforms);
         _sgimgui_frame_stats(prev_frame.size_copy_buffer_to_buffer);
         _sgimgui_frame_stats(prev_frame.size_copy_buffer_to_image);
+        _sgimgui_frame_stats(prev_frame.size_copy_image_to_image);
         _sgimgui_frame_stats(prev_frame.buffers.allocated);
         _sgimgui_frame_stats(prev_frame.buffers.deallocated);
         _sgimgui_frame_stats(prev_frame.buffers.inited);
@@ -4937,11 +4965,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_samplers);
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_cs_set_unordered_access_views);
                 _sgimgui_frame_stats(prev_frame.d3d11.bindings.num_om_set_rts_and_uavs);
-                _sgimgui_frame_stats(prev_frame.d3d11.uniforms.num_update_subresource);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed_instanced);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw);
+                _sgimgui_frame_stats(prev_frame.d3d11.num_update_subresource);
+                _sgimgui_frame_stats(prev_frame.d3d11.num_copy_subresource_region);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_map);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_unmap);
                 break;
@@ -4954,6 +4983,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.vk.num_delete_queue_collected);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_buffer_to_image);
+                _sgimgui_frame_stats(prev_frame.vk.num_cmd_copy_image);
                 _sgimgui_frame_stats(prev_frame.vk.num_cmd_set_descriptor_buffer_offsets);
                 _sgimgui_frame_stats(prev_frame.vk.size_descriptor_buffer_writes);
                 break;
@@ -5041,6 +5071,7 @@ SOKOL_API_IMPL void sgimgui_setup(const sgimgui_desc_t* desc) {
     hooks.seal_image = _sgimgui_seal_image;
     hooks.copy_buffer_to_buffer = _sgimgui_copy_buffer_to_buffer;
     hooks.copy_buffer_to_image = _sgimgui_copy_buffer_to_image;
+    hooks.copy_image_to_image = _sgimgui_copy_image_to_image;
     hooks.begin_pass = _sgimgui_begin_pass;
     hooks.apply_viewport = _sgimgui_apply_viewport;
     hooks.apply_scissor_rect = _sgimgui_apply_scissor_rect;

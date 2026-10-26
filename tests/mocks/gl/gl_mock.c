@@ -1752,3 +1752,25 @@ void glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOff
         dst->num_copy_write++;
     }
 }
+
+// GL 4.3 / GLES 3.2
+void glCopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth) {
+    _GLM_REC(glCopyImageSubData,
+        _glm_ai(srcName), _glm_ai(srcTarget), _glm_ai(srcLevel), _glm_ai(srcX), _glm_ai(srcY), _glm_ai(srcZ),
+        _glm_ai(dstName), _glm_ai(dstTarget), _glm_ai(dstLevel), _glm_ai(dstX), _glm_ai(dstY), _glm_ai(dstZ),
+        _glm_ai(srcWidth), _glm_ai(srcHeight), _glm_ai(srcDepth));
+    // a real GL raises GL_INVALID_VALUE / GL_INVALID_OPERATION for these, the mock asserts
+    assert(_glm_valid(GL_MOCK_OBJ_TEXTURE, srcName) && _glm_valid(GL_MOCK_OBJ_TEXTURE, dstName));
+    assert((srcLevel >= 0) && (dstLevel >= 0));
+    assert((srcX >= 0) && (srcY >= 0) && (srcZ >= 0) && (dstX >= 0) && (dstY >= 0) && (dstZ >= 0));
+    assert((srcWidth > 0) && (srcHeight > 0) && (srcDepth > 0));
+    if (_glm_valid(GL_MOCK_OBJ_TEXTURE, srcName) && _glm_valid(GL_MOCK_OBJ_TEXTURE, dstName)) {
+        gl_mock_texture_info_t* src = &_glm.texture[_glm_idx(srcName)];
+        gl_mock_texture_info_t* dst = &_glm.texture[_glm_idx(dstName)];
+        assert(_glm_norm_tex_target(srcTarget) == src->target);
+        assert(_glm_norm_tex_target(dstTarget) == dst->target);
+        assert(src->samples == dst->samples);
+        src->num_copy_read++;
+        dst->num_copy_write++;
+    }
+}

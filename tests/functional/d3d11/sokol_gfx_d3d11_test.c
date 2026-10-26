@@ -252,7 +252,7 @@ UTEST(sokol_gfx_d3d11, image_2d_creates_texture2d) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(pixels),
+        .data = SG_RANGE(pixels),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     T(d3d11_mock_live_object_count() == before + 1);
@@ -345,7 +345,7 @@ UTEST(sokol_gfx_d3d11, image_compressed_bc3) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_BC3_RGBA,
-        .data.mip_levels[0] = SG_RANGE(bc3),
+        .data = SG_RANGE(bc3),
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
     sg_destroy_image(img);
@@ -362,7 +362,6 @@ UTEST(sokol_gfx_d3d11, image_inject_native_texture) {
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 16, .height = 16,
         .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .usage.immutable = true,
         .d3d11_texture = raw,
     });
     T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
@@ -649,7 +648,7 @@ UTEST(sokol_gfx_d3d11, view_texture_creates_srv) {
     uint8_t px[4 * 4 * 4] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(px),
+        .data = SG_RANGE(px),
     });
     const int before = d3d11_mock_live_object_count();
     sg_view v = sg_make_view(&(sg_view_desc){ .texture.image = img });
@@ -710,7 +709,7 @@ UTEST(sokol_gfx_d3d11, view_srv_create_fail) {
     uint8_t px[4 * 4 * 4] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = SG_RANGE(px),
+        .data = SG_RANGE(px),
     });
     d3d11_mock_fail_next_create(1);
     sg_view v = sg_make_view(&(sg_view_desc){ .texture.image = img });
@@ -1611,6 +1610,233 @@ UTEST(sokol_gfx_d3d11, copy_buffer_to_image_rejects_staging_index_buffer) {
 }
 
 //------------------------------------------------------------------------------
+//  sg_copy_image_to_image (=> CopySubresourceRegion)
+//------------------------------------------------------------------------------
+static sg_image make_copy_image(sg_image_type type, int w, int h, int num_slices, int num_mips, sg_pixel_format fmt, sg_image_usage usage) {
+    return sg_make_image(&(sg_image_desc){
+        .type = type, .width = w, .height = h, .num_slices = num_slices, .num_mipmaps = num_mips,
+        .pixel_format = fmt, .usage = usage,
+    });
+}
+#define COPY_SRC_USAGE ((sg_image_usage){ .copy_src = true, .copy_dst = true })
+#define COPY_DST_USAGE ((sg_image_usage){ .copy_dst = true })
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_features) {
+    setup();
+    T(sg_query_features().copy_image_to_image_relaxed_pixel_format);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_2d_defaults) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(no_errors());
+    T(d3d11_mock_num_calls() == 1);
+    const d3d11_mock_call_t* c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->dst == ntex(dst)) && (c->src == ntex(src)));
+    T(c && (c->dst_subres == 0) && (c->src_subres == 0));
+    T(c && (c->dst_x == 0) && (c->dst_y == 0) && (c->dst_z == 0));
+    T(c && c->has_box);
+    T(c && (c->box.left == 0) && (c->box.right == 16) && (c->box.top == 0) && (c->box.bottom == 16) && (c->box.front == 0) && (c->box.back == 1));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_2d_subrect) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 32, 32, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .x = 2, .y = 3 },
+        .dst = { .image = dst, .x = 10, .y = 20 },
+        .size = { .width = 8, .height = 4 },
+    });
+    T(no_errors());
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 1);
+    const d3d11_mock_call_t* c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->dst_x == 10) && (c->dst_y == 20) && (c->dst_z == 0));
+    T(c && (c->box.left == 2) && (c->box.right == 10) && (c->box.top == 3) && (c->box.bottom == 7) && (c->box.front == 0) && (c->box.back == 1));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_array_mip_slices) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_ARRAY, 8, 8, 4, 2, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_ARRAY, 4, 4, 3, 3, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    // src mip 1 (4x4) slices 1..2 => dst mip 0 (4x4) slices 0..1
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 1, .slice = 1 },
+        .dst = { .image = dst, .mip_level = 0, .slice = 0 },
+        .size = { .num_slices = 2 },
+    });
+    T(no_errors());
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 2);
+    const d3d11_mock_call_t* c0 = NTH(COPY_SUBRESOURCE_REGION, 0);
+    const d3d11_mock_call_t* c1 = NTH(COPY_SUBRESOURCE_REGION, 1);
+    // subresource = mip + slice * num_mips
+    T(c0 && (c0->src_subres == 3) && (c0->dst_subres == 0));
+    T(c1 && (c1->src_subres == 5) && (c1->dst_subres == 3));
+    T(c0 && (c0->box.left == 0) && (c0->box.right == 4) && (c0->box.top == 0) && (c0->box.bottom == 4) && (c0->box.front == 0) && (c0->box.back == 1));
+    T(c1 && (c1->box.right == 4) && (c1->box.bottom == 4) && (c1->dst_z == 0));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_cube_to_array) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_CUBE, 8, 8, 6, 1, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_ARRAY, 8, 8, 6, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .slice = 2 },
+        .dst = { .image = dst, .slice = 4 },
+        .size = { .num_slices = 2 },
+    });
+    T(no_errors());
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 2);
+    const d3d11_mock_call_t* c0 = NTH(COPY_SUBRESOURCE_REGION, 0);
+    const d3d11_mock_call_t* c1 = NTH(COPY_SUBRESOURCE_REGION, 1);
+    T(c0 && (c0->src_subres == 2) && (c0->dst_subres == 4));
+    T(c1 && (c1->src_subres == 3) && (c1->dst_subres == 5));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_3d) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_3D, 8, 8, 8, 2, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_3D, 8, 8, 4, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    // src mip 1 is 4x4x4
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 1, .x = 1, .slice = 1 },
+        .dst = { .image = dst, .x = 2, .y = 3, .slice = 2 },
+        .size = { .width = 3, .height = 4, .num_slices = 2 },
+    });
+    T(no_errors());
+    // 3D textures: one call, depth range in box front/back, dst slice in DstZ
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 1);
+    const d3d11_mock_call_t* c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->src_subres == 1) && (c->dst_subres == 0));
+    T(c && (c->dst_x == 2) && (c->dst_y == 3) && (c->dst_z == 2));
+    T(c && (c->box.left == 1) && (c->box.right == 4) && (c->box.top == 0) && (c->box.bottom == 4) && (c->box.front == 1) && (c->box.back == 3));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+// depth images are copied as whole subresources (no src box)
+UTEST(sokol_gfx_d3d11, copy_image_to_image_depth_whole_subresource) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_DEPTH_STENCIL, (sg_image_usage){ .depth_stencil_attachment = true, .copy_src = true });
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_DEPTH_STENCIL, COPY_DST_USAGE);
+    T(sg_query_image_state(src) == SG_RESOURCESTATE_VALID);
+    T(sg_query_image_state(dst) == SG_RESOURCESTATE_VALID);
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(no_errors());
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 1);
+    const d3d11_mock_call_t* c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->dst == ntex(dst)) && (c->src == ntex(src)) && !c->has_box);
+    T(c && (c->dst_x == 0) && (c->dst_y == 0) && (c->dst_z == 0));
+    // partial depth copies are rejected
+    reset_log();
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst, .size = { .width = 8, .height = 8 } });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_WHOLE_MIPLEVEL));
+    T(d3d11_mock_num_calls() == 0);
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+// block-compressed: the box of a partial-block mip is rounded up to block size
+UTEST(sokol_gfx_d3d11, copy_image_to_image_bc_small_mip_box_roundup) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 4, SG_PIXELFORMAT_BC1_RGBA, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 4, SG_PIXELFORMAT_BC1_RGBA, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    // mip 3 is 2x2, smaller than one 4x4 block
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .mip_level = 3 },
+        .dst = { .image = dst, .mip_level = 3 },
+    });
+    T(no_errors());
+    const d3d11_mock_call_t* c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->src_subres == 3) && (c->dst_subres == 3) && c->has_box);
+    T(c && (c->box.left == 0) && (c->box.right == 4) && (c->box.top == 0) && (c->box.bottom == 4));
+    // block-aligned subrect in mip 0
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){
+        .src = { .image = src, .x = 4, .y = 8 },
+        .dst = { .image = dst, .x = 8, .y = 4 },
+        .size = { .width = 8, .height = 4 },
+    });
+    T(no_errors());
+    c = LAST(COPY_SUBRESOURCE_REGION);
+    T(c && (c->dst_x == 8) && (c->dst_y == 4));
+    T(c && (c->box.left == 4) && (c->box.right == 12) && (c->box.top == 8) && (c->box.bottom == 12));
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_validation_rejects) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    sg_image dst_fmt = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_R8, COPY_DST_USAGE);
+    sg_image dst_3d = make_copy_image(SG_IMAGETYPE_3D, 16, 16, 2, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    d3d11_mock_clear_calls();
+    // dst has no copy_src usage
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = dst, .dst.image = src });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_COPY_SRC));
+    reset_log();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst_fmt });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_VS_DST_FORMAT));
+    reset_log();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst_3d, .size.num_slices = 1 });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_3D_VS_OTHER));
+    reset_log();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src = { .image = src, .x = 8 }, .dst.image = dst, .size.width = 16 });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_SRC_WIDTH_OVERFLOW));
+    T(d3d11_mock_num_calls() == 0);
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    sg_destroy_image(dst_fmt);
+    sg_destroy_image(dst_3d);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, copy_image_to_image_inside_pass_rejected) {
+    setup();
+    sg_image src = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_SRC_USAGE);
+    sg_image dst = make_copy_image(SG_IMAGETYPE_2D, 16, 16, 1, 1, SG_PIXELFORMAT_RGBA8, COPY_DST_USAGE);
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    begin_swapchain_pass(rtv);
+    d3d11_mock_clear_calls();
+    sg_copy_image_to_image(&(sg_copy_image_to_image_desc){ .src.image = src, .dst.image = dst });
+    T(logged(SG_LOGITEM_VALIDATE_COPYIMAGETOIMAGE_INSIDE_PASS));
+    T(COUNT(COPY_SUBRESOURCE_REGION) == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_image(src);
+    sg_destroy_image(dst);
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+//------------------------------------------------------------------------------
 //  image creation => D3D11_TEXTURE2D_DESC / D3D11_TEXTURE3D_DESC
 //------------------------------------------------------------------------------
 static const d3d11_mock_call_t* make_image_get_create(const sg_image_desc* desc, sg_image* out_img) {
@@ -1684,7 +1910,7 @@ UTEST(sokol_gfx_d3d11, image_tex2d_desc_variants) {
     sg_destroy_image(img);
     // BC3 compressed
     c = make_image_get_create(&(sg_image_desc){
-        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_BC3_RGBA, .data.mip_levels[0] = { pattern, 256 },
+        .width = 16, .height = 16, .pixel_format = SG_PIXELFORMAT_BC3_RGBA, .data = { pattern, 256 },
     }, &img);
     T(c && (c->tex2d_desc.Format == DXGI_FORMAT_BC3_UNORM) && c->has_init_data && (c->src_row_pitch == 64));
     sg_destroy_image(img);
@@ -1699,7 +1925,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // 2D with 2 mips: first subresource points at mip0 data, row pitch, no slice pitch
     const d3d11_mock_call_t* c = make_image_get_create(&(sg_image_desc){
         .width = 16, .height = 16, .num_mipmaps = 2, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels = { [0] = { pattern, 1024 }, [1] = { pattern + 1024, 256 } },
+        .data = { pattern, 1024 + 256 },
     }, &img);
     T(no_errors() && (sg_query_image_state(img) == SG_RESOURCESTATE_VALID));
     T(c && c->has_init_data && (c->src_data == pattern) && (c->src_row_pitch == 64) && (c->src_depth_pitch == 0));
@@ -1707,7 +1933,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // array: per-slice data is split out of the mip-level data
     c = make_image_get_create(&(sg_image_desc){
         .type = SG_IMAGETYPE_ARRAY, .width = 4, .height = 4, .num_slices = 3, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = { pattern, 3 * 64 },
+        .data = { pattern, 3 * 64 },
     }, &img);
     T(c && c->has_init_data && (c->src_data == pattern) && (c->src_row_pitch == 16) && (c->src_depth_pitch == 0));
     T(c && (c->tex2d_desc.ArraySize == 3));
@@ -1715,7 +1941,7 @@ UTEST(sokol_gfx_d3d11, image_init_data_pitches) {
     // 3D: slice pitch is set
     c = make_image_get_create(&(sg_image_desc){
         .type = SG_IMAGETYPE_3D, .width = 8, .height = 8, .num_slices = 4, .pixel_format = SG_PIXELFORMAT_RGBA8,
-        .data.mip_levels[0] = { pattern, 1024 },
+        .data = { pattern, 1024 },
     }, &img);
     T(no_errors() && (sg_query_image_state(img) == SG_RESOURCESTATE_VALID));
     T(c && (c->dst == sg_d3d11_query_image_info(img).tex3d) && (c->dst == ntex(img)));
@@ -2342,7 +2568,7 @@ UTEST(sokol_gfx_d3d11, apply_bindings_render_srvs_and_samplers) {
     });
     sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = { pattern, 36 } });
     sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .data = { pattern, 256 } });
-    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8, .data.mip_levels[0] = { pattern, 64 } });
+    sg_image img = sg_make_image(&(sg_image_desc){ .width = 4, .height = 4, .pixel_format = SG_PIXELFORMAT_RGBA8, .data = { pattern, 64 } });
     sg_view tex_view = sg_make_view(&(sg_view_desc){ .texture.image = img });
     sg_view sbuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
     sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){ .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR });

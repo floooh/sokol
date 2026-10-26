@@ -1196,14 +1196,16 @@ SOKOL_API_IMPL void sshape_build_sphere(sshape_state_t* state, const sshape_sphe
     }
 
     uint32_t rand_seed = 0x12345678;
-    const float pi = 3.14159265358979323846f;
-    const float two_pi = 2.0f * pi;
+    // NOTE: on macOS CarbonCore/fp.h declares 'pi' which then fails
+    // with -Wshadow
+    const float pi_ = 3.14159265358979323846f;
+    const float two_pi = 2.0f * pi_;
     const float du = 1.0f / params.slices;
     const float dv = 1.0f / params.stacks;
 
     // generate vertices
     for (uint32_t stack = 0; stack <= params.stacks; stack++) {
-        const float stack_angle = (pi * stack) / params.stacks;
+        const float stack_angle = (pi_ * stack) / params.stacks;
         const float sin_stack = sinf(stack_angle);
         const float cos_stack = cosf(stack_angle);
         for (uint32_t slice = 0; slice <= params.slices; slice++) {

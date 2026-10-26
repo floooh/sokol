@@ -216,3 +216,16 @@ removes it after -- so `nuklear.h` is never shipped in the D repo.
 A generator that adds nuklear support should follow the same
 prepare/cleanup pattern.
 
+### sokol_fontstash.h (Jai only, copy-only)
+
+`sokol_fontstash.h` has a foreign type (`FONScontext*`) in its public API.
+The generator cannot process it, so it is NOT in the `tasks` list in
+`gen_all.py`. Do not add it there.
+
+Only sokol-jai ships fontstash. `gen_jai.prepare()` copies
+`../util/sokol_fontstash.h` into `sokol-jai/sokol/c/` on each run. This
+keeps the C implementation in sync with `sokol_gfx.h`. The Jai bindings
+in `sokol-jai/sokol/fontstash/module.jai` are written by hand. Update them
+manually only when the public `sfons_*` API changes. `fontstash.h` and
+`stb_truetype.h` in the same dir are vendored and are not copied.
+
