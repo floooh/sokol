@@ -2235,10 +2235,10 @@ UTEST(sokol_gfx_wgpu, pipeline_multiple_vertex_buffers) {
     teardown();
 }
 
-// KNOWN BUG: the layout loop stops at the first vertex buffer slot with a zero
-// stride, so the layouts and attributes of buffers behind a gap are dropped
-UTEST(sokol_gfx_wgpu, pipeline_sparse_vertex_buffer_slots_bug) {
+// unused vertex buffer slots between used slots must become empty layouts
+UTEST(sokol_gfx_wgpu, pipeline_sparse_vertex_buffer_slots) {
     setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, false);
     sg_shader shd = make_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
@@ -2258,12 +2258,70 @@ UTEST(sokol_gfx_wgpu, pipeline_sparse_vertex_buffer_slots_bug) {
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     wgpu_mock_render_pipeline_info_t pi = {0};
     T(get_pip_info(pip, &pi));
-    // expected would be 3 layouts (the middle one empty) with the attribute of
-    // shader location 1 in layout 2, but only one layout is created
-    T(pi.num_vertex_buffers == 1);
+    T(pi.num_vertex_buffers == 3);
+    T(pi.vertex_buffers[0].array_stride == 16);
+    T(pi.vertex_buffers[0].step_mode == WGPUVertexStepMode_Vertex);
     T(pi.vertex_buffers[0].num_attributes == 1);
+    T(pi.vertex_buffers[0].attributes[0].shaderLocation == 0);
+    // unused slot: zero stepMode and no attributes
+    T(pi.vertex_buffers[1].step_mode == WGPUVertexStepMode_Undefined);
+    T(pi.vertex_buffers[1].num_attributes == 0);
+    T(pi.vertex_buffers[2].array_stride == 8);
+    T(pi.vertex_buffers[2].step_mode == WGPUVertexStepMode_Vertex);
+    T(pi.vertex_buffers[2].num_attributes == 1);
+    T(pi.vertex_buffers[2].attributes[0].format == WGPUVertexFormat_Float32x2);
+    T(pi.vertex_buffers[2].attributes[0].shaderLocation == 1);
+    sg_buffer vbuf0 = make_vbuf();
+    sg_buffer vbuf2 = make_vbuf();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers = { [0] = vbuf0, [2] = vbuf2 } });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 1);
+    T(num_log_items == 0);
+    sg_destroy_buffer(vbuf2);
+    sg_destroy_buffer(vbuf0);
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// an unused vertex buffer slot 0 must not drop the following slots
+UTEST(sokol_gfx_wgpu, pipeline_vertex_buffer_slot0_unused) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, false);
+    sg_shader shd = make_shader();
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0] = { .format = SG_VERTEXFORMAT_FLOAT3, .buffer_index = 1 },
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+    T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
+    wgpu_mock_render_pipeline_info_t pi = {0};
+    T(get_pip_info(pip, &pi));
+    T(pi.num_vertex_buffers == 2);
+    T(pi.vertex_buffers[0].step_mode == WGPUVertexStepMode_Undefined);
+    T(pi.vertex_buffers[0].num_attributes == 0);
+    T(pi.vertex_buffers[1].array_stride == 12);
+    T(pi.vertex_buffers[1].num_attributes == 1);
+    T(pi.vertex_buffers[1].attributes[0].shaderLocation == 0);
+    sg_buffer vbuf = make_vbuf();
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[1] = vbuf });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 1);
+    T(num_log_items == 0);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    discard_swapchain(&sc);
     teardown();
 }
 
