@@ -2075,8 +2075,10 @@ UTEST(sokol_gfx_wgpu, pipeline_defaults) {
     T(pi.depth_stencil.format == WGPUTextureFormat_Depth32FloatStencil8);
     T(pi.depth_stencil.depthWriteEnabled == WGPUOptionalBool_False);
     T(pi.depth_stencil.depthCompare == WGPUCompareFunction_Always);
-    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Always);
-    T(pi.depth_stencil.stencilFront.passOp == WGPUStencilOperation_Keep);
+    // stencil is disabled by default, so the stencil state stays zero-initialized
+    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Undefined);
+    T(pi.depth_stencil.stencilFront.passOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilWriteMask == 0);
     T(pi.num_vertex_buffers == 1);
     T(pi.vertex_buffers[0].array_stride == 12);
     T(pi.vertex_buffers[0].step_mode == WGPUVertexStepMode_Vertex);
@@ -2376,26 +2378,87 @@ UTEST(sokol_gfx_wgpu, pipeline_depth_stencil_state) {
     teardown();
 }
 
-// KNOWN WART: sg_pipeline_desc.stencil.enabled is ignored by the WebGPU
-// backend, stencil state is passed through even when 'enabled' is false
-UTEST(sokol_gfx_wgpu, pipeline_stencil_enabled_ignored_wart) {
+// stencil.enabled == false must leave the stencil state zero-initialized
+// (Undefined means compare Always and ops Keep, which disables the stencil test)
+UTEST(sokol_gfx_wgpu, pipeline_stencil_enabled) {
+    setup();
+    sg_shader shd = make_shader();
+    const sg_stencil_state stencil = {
+        .front = { .compare = SG_COMPAREFUNC_EQUAL, .pass_op = SG_STENCILOP_REPLACE },
+        .back = { .compare = SG_COMPAREFUNC_NOT_EQUAL, .fail_op = SG_STENCILOP_ZERO },
+        .read_mask = 0x0F,
+        .write_mask = 0xF0,
+    };
+    // disabled
+    sg_stencil_state disabled = stencil;
+    disabled.enabled = false;
+    sg_pipeline pip_off = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .stencil = disabled,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+    T(sg_query_pipeline_state(pip_off) == SG_RESOURCESTATE_VALID);
+    wgpu_mock_render_pipeline_info_t pi = {0};
+    T(get_pip_info(pip_off, &pi));
+    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Undefined);
+    T(pi.depth_stencil.stencilFront.failOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilFront.depthFailOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilFront.passOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilBack.compare == WGPUCompareFunction_Undefined);
+    T(pi.depth_stencil.stencilBack.failOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilBack.depthFailOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilBack.passOp == WGPUStencilOperation_Undefined);
+    T(pi.depth_stencil.stencilReadMask == 0);
+    T(pi.depth_stencil.stencilWriteMask == 0);
+    // enabled
+    sg_stencil_state enabled = stencil;
+    enabled.enabled = true;
+    sg_pipeline pip_on = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .stencil = enabled,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+    T(sg_query_pipeline_state(pip_on) == SG_RESOURCESTATE_VALID);
+    T(get_pip_info(pip_on, &pi));
+    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Equal);
+    T(pi.depth_stencil.stencilFront.passOp == WGPUStencilOperation_Replace);
+    T(pi.depth_stencil.stencilBack.compare == WGPUCompareFunction_NotEqual);
+    T(pi.depth_stencil.stencilBack.failOp == WGPUStencilOperation_Zero);
+    T(pi.depth_stencil.stencilReadMask == 0x0F);
+    T(pi.depth_stencil.stencilWriteMask == 0xF0);
+    sg_destroy_pipeline(pip_on);
+    sg_destroy_pipeline(pip_off);
+    sg_destroy_shader(shd);
+    teardown();
+}
+
+// stencil state in a desc with a depth-only format must not reach WebGPU
+// when stencil.enabled is false (teardown() checks for mock errors)
+UTEST(sokol_gfx_wgpu, pipeline_stencil_disabled_depth_only_format) {
     setup();
     sg_shader shd = make_shader();
     sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
-        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH,
         .stencil = {
             .enabled = false,
             .front = { .compare = SG_COMPAREFUNC_EQUAL, .pass_op = SG_STENCILOP_REPLACE },
+            .back = { .compare = SG_COMPAREFUNC_EQUAL, .pass_op = SG_STENCILOP_REPLACE },
         },
         .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
     });
     T(sg_query_pipeline_state(pip) == SG_RESOURCESTATE_VALID);
     wgpu_mock_render_pipeline_info_t pi = {0};
     T(get_pip_info(pip, &pi));
-    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Equal);
-    T(pi.depth_stencil.stencilFront.passOp == WGPUStencilOperation_Replace);
+    T(pi.depth_stencil.format == WGPUTextureFormat_Depth32Float);
+    T(pi.depth_stencil.stencilFront.compare == WGPUCompareFunction_Undefined);
+    T(pi.depth_stencil.stencilBack.compare == WGPUCompareFunction_Undefined);
+    T(num_log_items == 0);
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
     teardown();
@@ -3274,6 +3337,7 @@ UTEST(sokol_gfx_wgpu, pipeline_stencil_decr_wrap) {
         .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
         .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
         .stencil = {
+            .enabled = true,
             .front.pass_op = SG_STENCILOP_DECR_WRAP,
             .back.fail_op = SG_STENCILOP_DECR_WRAP,
         },
