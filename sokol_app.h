@@ -2063,6 +2063,7 @@ typedef struct sapp_metal_desc {
 
 typedef struct sapp_android_desc {
     bool (*native_event_cb)(const void* native_event);
+    void (*back_cb)(void);          // called on Back release; NULL uses system behavior
 } sapp_android_desc;
 
 typedef struct sapp_desc {
@@ -10962,12 +10963,11 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
     if (AInputEvent_getType(e) != AINPUT_EVENT_TYPE_KEY) {
         return false;
     }
-    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* FIXME: this should be hooked into a "really quit?" mechanism
-           so the app can ask the user for confirmation, this is currently
-           generally missing in sokol_app.h
-        */
-        _sapp_android_shutdown();
+    if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK && _sapp.desc.android.back_cb) {
+        // Call once on release; also consume key down and repeat events.
+        if (AKeyEvent_getAction(e) == AKEY_EVENT_ACTION_UP) {
+            _sapp.desc.android.back_cb();
+        }
         return true;
     }
     return false;
@@ -11092,7 +11092,8 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
 _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     bool is_in_front = _sapp.android.has_resumed && _sapp.android.has_focus;
     bool has_surface = _sapp.android.surface != EGL_NO_SURFACE;
-    return is_in_front && has_surface;
+    // Stop frame callbacks once the app is quitting.
+    return is_in_front && has_surface && !_sapp.quit_ordered;
 }
 
 #if __ANDROID_API__ >= 29
@@ -11151,8 +11152,14 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
     pthread_cond_broadcast(&_sapp.android.pt.cond);
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
 
+    // Shut down once, then keep handling window and input queue messages.
+    bool quit_handled = false;
     /* main loop */
     while (!_sapp.android.is_thread_stopping) {
+        if (_sapp.quit_ordered && !quit_handled) {
+            _sapp_android_shutdown();
+            quit_handled = true;
+        }
         #if __ANDROID_API__ >= 29
             if (_sapp.android.choreographer != NULL) {
                 // Posts _sapp_android_frame_callback with the choreographer to start our frame
@@ -11175,7 +11182,9 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
 
         /* process all events (or stop early if app is requested to quit) */
         bool process_events = true;
-        while (process_events && !_sapp.android.is_thread_stopping) {
+        while (process_events && !_sapp.android.is_thread_stopping &&
+            (!_sapp.quit_ordered || quit_handled))
+        {
             bool block_until_event = !_sapp.android.is_thread_stopping && !_sapp_android_should_update();
             process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
         }
