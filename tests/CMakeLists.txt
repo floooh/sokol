@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # SOKOL_GLCORE, SOKOL_GLES3, SOKOL_D3D11, SOKOL_METAL, SOKOL_WGPU, SOKOL_DUMMY
 set(SOKOL_BACKEND "SOKOL_DUMMY_BACKEND" CACHE STRING "Select 3D backend API")
-set_property(CACHE SOKOL_BACKEND PROPERTY STRINGS SOKOL_GLCORE SOKOL_METAL SOKOL_D3D11 SOKOL_VULKAN SOKOL_DUMMY_BACKEND)
+set_property(CACHE SOKOL_BACKEND PROPERTY STRINGS SOKOL_GLCORE SOKOL_METAL SOKOL_D3D11 SOKOL_WGPU SOKOL_VULKAN SOKOL_DUMMY_BACKEND)
 option(SOKOL_FORCE_EGL "Force EGL with GLCORE backend" OFF)
 option(USE_ARC "Enable/disable ARC" OFF)
 option(USE_ANALYZER "Enable/disable clang analyzer" OFF)
@@ -169,6 +169,9 @@ macro(configure_common target)
     endif()
     if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_METAL)
         target_link_libraries(${target} PRIVATE sokol_metal_mock)
+    endif()
+    if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_WGPU)
+        target_link_libraries(${target} PRIVATE sokol_wgpu_mock)
     endif()
 endmacro()
 

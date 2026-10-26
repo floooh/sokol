@@ -15,6 +15,7 @@ build d3d11_mock_debug d3d11_mock_debug
 build glcore_mock_debug glcore_mock_debug
 build gles3_mock_debug gles3_mock_debug
 build metal_mock_debug metal_mock_debug
+build wgpu_mock_debug wgpu_mock_debug
 # The Metal mock library itself is always built without ARC, only the test and
 # the sokol-gfx implementation are built with ARC enabled.
 build metal_mock_arc_debug metal_mock_arc_debug
@@ -29,3 +30,4 @@ runtest gles3_mock_debug sokol-gles32-test
 runtest gles3_mock_debug sokol-gles30-apple-test
 runtest metal_mock_debug sokol-metal-test
 runtest metal_mock_arc_debug sokol-metal-test
+runtest wgpu_mock_debug sokol-wgpu-test
