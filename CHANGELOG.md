@@ -45,7 +45,8 @@ API cleanup breaking changes in `sg_image_desc`:
       3D textures was broken (the size for any but the top-level mipmap
       was computed wrongly)
     - the validation check for read-overflow in the `sg_write_image_*()`
-      functions wass too strict for some valid calls
+      functions and some asserts in backend-functions were too strict for some
+      valid write operations
     - in the D3D11 backend: `sg_write_image_unsealed()` and
       `sg_copy_buffer_to_image()` failed for hardware-compressed
       image formats and small mip levels (with dimension less than
