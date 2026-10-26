@@ -20567,14 +20567,17 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         _SG_STRUCT(WGPUVertexBufferLayout, wgpu_vb_layouts[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
         _SG_STRUCT(WGPUVertexAttribute, wgpu_vtx_attrs[SG_MAX_VERTEXBUFFER_BINDSLOTS][SG_MAX_VERTEX_ATTRIBUTES]);
         int wgpu_vb_num = 0;
-        for (int vb_idx = 0; vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vb_idx++, wgpu_vb_num++) {
-            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
-            if (0 == vbl_state->stride) {
-                break;
+        for (int vb_idx = 0; vb_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vb_idx++) {
+            if (!pip->cmn.vertex_buffer_layout_active[vb_idx]) {
+                // NOTE: zero-initialized stepMode and attributeCount mark an unused slot
+                continue;
             }
+            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vb_idx];
+            SOKOL_ASSERT(vbl_state->stride > 0);
             wgpu_vb_layouts[vb_idx].arrayStride = (uint64_t)vbl_state->stride;
             wgpu_vb_layouts[vb_idx].stepMode = _sg_wgpu_stepmode(vbl_state->step_func);
             wgpu_vb_layouts[vb_idx].attributes = &wgpu_vtx_attrs[vb_idx][0];
+            wgpu_vb_num = vb_idx + 1;
         }
         for (int va_idx = 0; va_idx < SG_MAX_VERTEX_ATTRIBUTES; va_idx++) {
             const sg_vertex_attr_state* va_state = &desc->layout.attrs[va_idx];
@@ -23858,14 +23861,16 @@ _SOKOL_PRIVATE sg_resource_state _sg_vk_create_pipeline(_sg_pipeline_t* pip, con
 
         uint32_t num_vtx_bnds = 0;
         _SG_STRUCT(VkVertexInputBindingDescription, vtx_bnds[SG_MAX_VERTEXBUFFER_BINDSLOTS]);
-        for (uint32_t vbl_idx = 0; vbl_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vbl_idx++, num_vtx_bnds++) {
-            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vbl_idx];
-            if (0 == vbl_state->stride) {
-                break;
+        for (uint32_t vbl_idx = 0; vbl_idx < SG_MAX_VERTEXBUFFER_BINDSLOTS; vbl_idx++) {
+            if (!pip->cmn.vertex_buffer_layout_active[vbl_idx]) {
+                continue;
             }
-            vtx_bnds[vbl_idx].binding = vbl_idx;
-            vtx_bnds[vbl_idx].stride = (uint32_t)vbl_state->stride;
-            vtx_bnds[vbl_idx].inputRate = _sg_vk_vertex_input_rate(vbl_state->step_func);
+            const sg_vertex_buffer_layout_state* vbl_state = &desc->layout.buffers[vbl_idx];
+            SOKOL_ASSERT(vbl_state->stride > 0);
+            vtx_bnds[num_vtx_bnds].binding = vbl_idx;
+            vtx_bnds[num_vtx_bnds].stride = (uint32_t)vbl_state->stride;
+            vtx_bnds[num_vtx_bnds].inputRate = _sg_vk_vertex_input_rate(vbl_state->step_func);
+            num_vtx_bnds++;
         }
 
         uint32_t num_vtx_attrs = 0;
