@@ -2773,11 +2773,18 @@ UTEST(sokol_gfx_wgpu, bindgroup_cache_collisions) {
     teardown();
 }
 
-// KNOWN BUG: the invalidate key mask contains binding 0xFF but the search key
-// is built with binding 0, so only views and samplers at WGSL binding 0 are
-// found. Cached bindgroups of samplers at other bindings and of destroyed
-// pipelines are never invalidated and keep the destroyed objects alive
-UTEST(sokol_gfx_wgpu, bindgroup_cache_invalidate_key_mask_bug) {
+// one pass with a single draw, which puts a bindgroup into the cache
+static void draw_with(swapchain_t* sc, sg_pipeline pip, sg_buffer vbuf, sg_view view, sg_sampler smp) {
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+}
+
+// destroying a sampler (WGSL binding 1), pipeline or view (binding 0) must
+// discard the cached bindgroups which reference it
+UTEST(sokol_gfx_wgpu, bindgroup_cache_invalidate) {
     setup();
     sg_enable_stats();
     swapchain_t sc = make_swapchain(64, 64, 1, true);
@@ -2787,42 +2794,45 @@ UTEST(sokol_gfx_wgpu, bindgroup_cache_invalidate_key_mask_bug) {
     sg_image img = make_2d_image();
     sg_view view = make_texture_view(img);
     sg_sampler smp = make_linear_sampler();
-    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
-    sg_apply_pipeline(pip);
-    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
-    sg_draw(0, 3, 1);
-    sg_end_pass();
-    T(bstats().num_create_bindgroup == 1);
-    const int num_smp = wgpu_mock_live_objects(WGPU_MOCK_OBJ_SAMPLER);
-    T(num_smp == 1);
+    const int baseline = wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP);
 
-    // sampler is at binding 1: expected is 1 invalidation, actual is 0
-    sg_destroy_sampler(smp);
-    T(bstats().num_bindgroup_cache_invalidates == 0);
-    T(bstats().num_discard_bindgroup == 0);
-    // the stale cached bindgroup still references the destroyed sampler
+    draw_with(&sc, pip, vbuf, view, smp);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline + 1);
     T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_SAMPLER) == 1);
-
-    // pipeline: expected is 1 invalidation, actual is 0
-    sg_destroy_pipeline(pip);
-    T(bstats().num_bindgroup_cache_invalidates == 0);
-
-    // the view is at binding 0, this one works
-    sg_destroy_view(view);
+    sg_destroy_sampler(smp);
     T(bstats().num_bindgroup_cache_invalidates == 1);
     T(bstats().num_discard_bindgroup == 1);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline);
     T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_SAMPLER) == 0);
+
+    sg_sampler smp2 = make_linear_sampler();
+    draw_with(&sc, pip, vbuf, view, smp2);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline + 1);
+    sg_destroy_pipeline(pip);
+    T(bstats().num_bindgroup_cache_invalidates == 2);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline);
+
+    sg_pipeline pip2 = make_pipeline(shd);
+    draw_with(&sc, pip2, vbuf, view, smp2);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline + 1);
+    sg_destroy_view(view);
+    T(bstats().num_bindgroup_cache_invalidates == 3);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline);
+
+    // nothing cached anymore, destroying the rest must not invalidate again
+    sg_destroy_sampler(smp2);
+    T(bstats().num_bindgroup_cache_invalidates == 3);
     sg_commit();
     sg_destroy_image(img);
     sg_destroy_buffer(vbuf);
+    sg_destroy_pipeline(pip2);
     sg_destroy_shader(shd);
     discard_swapchain(&sc);
     teardown();
 }
 
-// KNOWN BUG: a failed bindgroup is never freed, the bindgroups pool (sized
-// like the cache) runs dry, and an uncached failure still lets the draw go on
-UTEST(sokol_gfx_wgpu, bindgroup_create_fail_leaks_pool_slot_bug) {
+// a failed bindgroup must free its pool slot (pool size is 2 here)
+UTEST(sokol_gfx_wgpu, bindgroup_create_fail_frees_pool_slot) {
     setup_with((setup_desc_t){ .disable_bindgroups_cache = true, .bindgroups_cache_size = 2 });
     swapchain_t sc = make_swapchain(64, 64, 1, true);
     sg_shader shd = make_tex_shader();
@@ -2834,26 +2844,21 @@ UTEST(sokol_gfx_wgpu, bindgroup_create_fail_leaks_pool_slot_bug) {
     sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
     sg_apply_pipeline(pip);
     wgpu_mock_fail_next(WGPU_MOCK_OBJ_BIND_GROUP, 100);
-    bool exhausted = false;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 6; i++) {
         reset_log();
+        // a failed apply_bindings invalidates the next draw until the pipeline is applied again
+        sg_apply_pipeline(pip);
         sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
-        if (logged(SG_LOGITEM_WGPU_BINDGROUPS_POOL_EXHAUSTED)) {
-            exhausted = true;
-            break;
-        }
         T(logged(SG_LOGITEM_WGPU_CREATEBINDGROUP_FAILED));
+        T(!logged(SG_LOGITEM_WGPU_BINDGROUPS_POOL_EXHAUSTED));
     }
-    T(exhausted);
-    // the backend works again, but the leaked pool slots stay lost
     wgpu_mock_fail_next(WGPU_MOCK_OBJ_BIND_GROUP, 0);
     reset_log();
     sg_apply_pipeline(pip);
     sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
-    T(logged(SG_LOGITEM_WGPU_BINDGROUPS_POOL_EXHAUSTED));
+    T(num_log_items == 0);
     sg_end_pass();
     sg_commit();
-    wgpu_mock_clear_errors();
     sg_destroy_sampler(smp);
     sg_destroy_view(view);
     sg_destroy_image(img);
@@ -2864,10 +2869,81 @@ UTEST(sokol_gfx_wgpu, bindgroup_create_fail_leaks_pool_slot_bug) {
     teardown();
 }
 
-// NOTE: a failed bindgroup creation with the cache enabled is not tested, the
-// FAILED bindgroup is stored in the cache, and the next sg_destroy_*() of a
-// view, sampler or pipeline trips SOKOL_ASSERT(state == VALID) in
-// _sg_wgpu_bindgroups_cache_invalidate() (debug) and aborts the process.
+// a failed bindgroup skips the draw also with the cache disabled
+UTEST(sokol_gfx_wgpu, bindgroup_create_fail_uncached) {
+    setup_with((setup_desc_t){ .disable_bindgroups_cache = true });
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_shader shd = make_tex_shader();
+    sg_pipeline pip = make_pipeline(shd);
+    sg_buffer vbuf = make_vbuf();
+    sg_image img = make_2d_image();
+    sg_view view = make_texture_view(img);
+    sg_sampler smp = make_linear_sampler();
+    const int baseline = wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    wgpu_mock_fail_next(WGPU_MOCK_OBJ_BIND_GROUP, 1);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
+    T(logged(SG_LOGITEM_WGPU_CREATEBINDGROUP_FAILED));
+    sg_draw(0, 3, 1);
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 0);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline);
+    // retry works
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
+    sg_draw(0, 3, 1);
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 1);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_sampler(smp);
+    sg_destroy_view(view);
+    sg_destroy_image(img);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// a failed bindgroup is not cached: the draw is skipped, a retry works
+UTEST(sokol_gfx_wgpu, bindgroup_cache_create_fail) {
+    setup();
+    sg_enable_stats();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_shader shd = make_tex_shader();
+    sg_pipeline pip = make_pipeline(shd);
+    sg_buffer vbuf = make_vbuf();
+    sg_image img = make_2d_image();
+    sg_view view = make_texture_view(img);
+    sg_sampler smp = make_linear_sampler();
+    const int baseline = wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    wgpu_mock_fail_next(WGPU_MOCK_OBJ_BIND_GROUP, 1);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
+    T(logged(SG_LOGITEM_WGPU_CREATEBINDGROUP_FAILED));
+    sg_draw(0, 3, 1);
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 0);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline);
+    // retry with the same bindings: cache miss again, bindgroup is created
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .views[0] = view, .samplers[0] = smp });
+    sg_draw(0, 3, 1);
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 1);
+    T(bstats().num_bindgroup_cache_misses == 2);
+    T(bstats().num_bindgroup_cache_hits == 0);
+    T(wgpu_mock_live_objects(WGPU_MOCK_OBJ_BIND_GROUP) == baseline + 1);
+    sg_end_pass();
+    sg_commit();
+    sg_destroy_sampler(smp);
+    sg_destroy_view(view);
+    sg_destroy_image(img);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_pipeline(pip);
+    sg_destroy_shader(shd);
+    discard_swapchain(&sc);
+    teardown();
+}
 
 UTEST(sokol_gfx_wgpu, bindings_vertex_and_index_buffers) {
     setup_with((setup_desc_t){ .disable_validation = true });
