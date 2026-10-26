@@ -20633,27 +20633,25 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_pipeline(_sg_pipeline_t* pip, c
         wgpu_pip_desc.multisample.count = (uint32_t)desc->sample_count;
         wgpu_pip_desc.multisample.mask = 0xFFFFFFFF;
         wgpu_pip_desc.multisample.alphaToCoverageEnabled = desc->alpha_to_coverage_enabled;
-        if (desc->color_count > 0) {
-            wgpu_frag_state.module = shd->wgpu.fragment_func.module;
-            wgpu_frag_state.entryPoint = _sg_wgpu_stringview(shd->wgpu.fragment_func.entry.buf);
-            wgpu_frag_state.targetCount = (size_t)desc->color_count;
-            wgpu_frag_state.targets = &wgpu_ctgt_state[0];
-            for (int i = 0; i < desc->color_count; i++) {
-                SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
-                wgpu_ctgt_state[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
-                wgpu_ctgt_state[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
-                if (desc->colors[i].blend.enabled) {
-                    wgpu_ctgt_state[i].blend = &wgpu_blend_state[i];
-                    wgpu_blend_state[i].color.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
-                    wgpu_blend_state[i].color.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
-                    wgpu_blend_state[i].color.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
-                    wgpu_blend_state[i].alpha.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
-                    wgpu_blend_state[i].alpha.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
-                    wgpu_blend_state[i].alpha.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
-                }
+        wgpu_frag_state.module = shd->wgpu.fragment_func.module;
+        wgpu_frag_state.entryPoint = _sg_wgpu_stringview(shd->wgpu.fragment_func.entry.buf);
+        wgpu_frag_state.targetCount = (size_t)desc->color_count;
+        wgpu_frag_state.targets = &wgpu_ctgt_state[0];
+        for (int i = 0; i < desc->color_count; i++) {
+            SOKOL_ASSERT(i < SG_MAX_COLOR_ATTACHMENTS);
+            wgpu_ctgt_state[i].format = _sg_wgpu_textureformat(desc->colors[i].pixel_format);
+            wgpu_ctgt_state[i].writeMask = _sg_wgpu_colorwritemask(desc->colors[i].write_mask);
+            if (desc->colors[i].blend.enabled) {
+                wgpu_ctgt_state[i].blend = &wgpu_blend_state[i];
+                wgpu_blend_state[i].color.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_rgb);
+                wgpu_blend_state[i].color.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_rgb);
+                wgpu_blend_state[i].color.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_rgb);
+                wgpu_blend_state[i].alpha.operation = _sg_wgpu_blendop(desc->colors[i].blend.op_alpha);
+                wgpu_blend_state[i].alpha.srcFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.src_factor_alpha);
+                wgpu_blend_state[i].alpha.dstFactor = _sg_wgpu_blendfactor(desc->colors[i].blend.dst_factor_alpha);
             }
-            wgpu_pip_desc.fragment = &wgpu_frag_state;
         }
+        wgpu_pip_desc.fragment = &wgpu_frag_state;
         pip->wgpu.rpip = wgpuDeviceCreateRenderPipeline(_sg.wgpu.dev, &wgpu_pip_desc);
         wgpuPipelineLayoutRelease(wgpu_pip_layout);
         if (0 == pip->wgpu.rpip) {
