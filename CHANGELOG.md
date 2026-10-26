@@ -3,7 +3,7 @@
 ### 25-Oct-2026
 
 The next step of the new sokol_gfx.h resource update API, and some minor
-breaking changes:
+API cleanup breaking changes in `sg_image_desc`:
 
 - A new function `sg_copy_image_to_image()` for copying data between
   image objects, see the new example [image-copy-sapp](https://floooh.github.io/sokol-html5/image-copy-sapp-ui.html) for how to use, and for usage restrictions and caveats
@@ -18,13 +18,13 @@ breaking changes:
 - breaking changes:
     - `sg_image_desc.data` has changed from an array of per-mip-level `sg_range`
       structs to a single `sg_range` struct. This means that the initial content
-      for images must now be provided through a single ptr/size pair as a
-      tightly packed blob including all mip levels and slices.  For situations
-      where the mip levels are not tightly packed, create the image with
+      for images must now be provided through a single ptr/size pair as a tightly
+      packed blob including all mip levels and slices.  For situations where the
+      mip levels are not tightly packed, create the image with
       `.usage.write_unsealed` and upload the data by calling
-      `sg_write_image_unsealed()` in a loop (one call per mip level). Don't forget
-      to call `sg_seal_image()` after uploading all data and before using the
-      image.
+      `sg_write_image_unsealed()` in a loop (one call per mip level or even one
+      call per array / depth slice). Don't forget to call `sg_seal_image()` after
+      uploading all data and before using the image.
     - Related: the struct `sg_image_data` and the global constant
       `SG_MAX_MIPMAPS` have been removed since they are no longer used
       in the public API.
@@ -33,7 +33,8 @@ breaking changes:
       backend 3D API.
 - validation changes:
     - all copy functions with transient resources as source now validate
-      that the transient resource was written in the same frame
+      that the transient resource was written in the same frame (this
+      was a validation gap in the previous resource API updates)
     - `sg_copy_buffer_to_image()` into a depth- or depth-stencil-image
       is now explicitly rejected (this was a gap in the validation layer)
     - four redundant validatition check in `sg_make_view` for pass
@@ -44,7 +45,7 @@ breaking changes:
       3D textures was broken (the size for any but the top-level mipmap
       was computed wrongly)
     - the validation check for read-overflow in the `sg_write_image_*()`
-      functions might have been too strict for some valid calls
+      functions wass too strict for some valid calls
     - in the D3D11 backend: `sg_write_image_unsealed()` and
       `sg_copy_buffer_to_image()` failed for hardware-compressed
       image formats and small mip levels (with dimension less than
