@@ -1017,7 +1017,7 @@
                 (in HLSL, readonly storage buffers and texture share the same bind space)
                 - Metal/MSL: the texture bind slot N (`[[texture(N)]]`) where N is 0..31
                 (the bind slot must not collide with storage image bindings on the same stage)
-                - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
+                - WebGPU/WGSL: the binding N in `@group(1) @binding(N)` where N is 0..127
 
         2. Storage buffer bindings with the following properties:
             - the shader stage of the storage buffer
@@ -1039,7 +1039,7 @@
                     by the number of color attachments (e.g. for the normal
                     case of 1 color attachment, N must be 1..31)
                 - Metal/MSL: the buffer bind slot N (`[[buffer(N)]]`) where N is 8..23
-                - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
+                - WebGPU/WGSL: the binding N in `@group(1) @binding(N)` where N is 0..127
                 - GL/GLSL: the buffer binding N in `layout(binding=N)`
                   where N is 0..sg_limits.max_storage_buffer_bindings_per_stage
             - note that storage buffer bindings are not supported on all backends
@@ -1080,7 +1080,7 @@
         - a backend-specific bind slot:
             - D3D11/HLSL: the sampler register N (`register(sN)`) where N is 0..SG_MAX_SAMPLER_BINDINGS
             - Metal/MSL: the sampler bind slot N (`[[sampler(N)]]`) where N is 0..SG_MAX_SAMPLER_BINDINGS
-            - WebGPU/WGSL: the binding N in `@group(0) @binding(N)` where N is 0..127
+            - WebGPU/WGSL: the binding N in `@group(1) @binding(N)` where N is 0..127
 
     - An array of 'texture-sampler-pairs' used by the shader to sample textures,
       for D3D11, Metal and WebGPU this is used for validation purposes to check
@@ -1905,7 +1905,7 @@
             - in WGSL, textures, samplers and storage buffers all use a shared
               bindspace across all shader stages on bindgroup 1:
 
-              `@group(1) @binding(0..127)
+              `@group(1) @binding(0..127)`
 
     ON STORAGE IMAGES:
     ==================
@@ -4364,7 +4364,7 @@ typedef struct sg_sampler_desc {
         - backend specific bindslots:
             - HLSL: the sampler register `register(s0..11)`
             - MSL: the sampler attribute `[[sampler(0..11)]]`
-            - WGSL: the binding in `@group(0) @binding(0..127)`
+            - WGSL: the binding in `@group(1) @binding(0..127)`
 
     - reflection information for each texture-sampler pair used by
       the shader:
@@ -4480,7 +4480,7 @@ typedef struct sg_shader_storage_image_view {
     bool writeonly;                 // false means read/write access
     uint8_t hlsl_register_u_n;      // HLSL register(un) bind slot
     uint8_t msl_texture_n;          // MSL [[texture(n)]] bind slot
-    uint8_t wgsl_group1_binding_n;  // WGSL @group(2) @binding(n) bind slot
+    uint8_t wgsl_group1_binding_n;  // WGSL @group(1) @binding(n) bind slot
     uint8_t spirv_set1_binding_n;   // Vulkan GLSL layout(set=1, binding=0)
     uint8_t glsl_binding_n;         // GLSL layout(binding=n)
 } sg_shader_storage_image_view;
