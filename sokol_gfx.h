@@ -18881,7 +18881,7 @@ _SOKOL_PRIVATE WGPUTextureViewDimension _sg_wgpu_attachment_view_dimension(sg_im
     switch (t) {
         case SG_IMAGETYPE_2D:       return WGPUTextureViewDimension_2D;
         case SG_IMAGETYPE_CUBE:     return WGPUTextureViewDimension_2DArray; // not a bug
-        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_2D; // not a bug
+        case SG_IMAGETYPE_3D:       return WGPUTextureViewDimension_3D;
         case SG_IMAGETYPE_ARRAY:    return WGPUTextureViewDimension_2DArray;
         default: SOKOL_UNREACHABLE; return WGPUTextureViewDimension_Force32;
     }
@@ -18920,6 +18920,7 @@ _SOKOL_PRIVATE WGPUAddressMode _sg_wgpu_sampler_address_mode(sg_wrap m) {
         case SG_WRAP_REPEAT:
             return WGPUAddressMode_Repeat;
         case SG_WRAP_CLAMP_TO_EDGE:
+        // NOTE: WebGPU has no clamp-to-border
         case SG_WRAP_CLAMP_TO_BORDER:
             return WGPUAddressMode_ClampToEdge;
         case SG_WRAP_MIRRORED_REPEAT:
@@ -19172,7 +19173,7 @@ _SOKOL_PRIVATE WGPUBlendFactor _sg_wgpu_blendfactor(sg_blend_factor f) {
         case SG_BLENDFACTOR_SRC_ALPHA_SATURATED:    return WGPUBlendFactor_SrcAlphaSaturated;
         case SG_BLENDFACTOR_BLEND_COLOR:            return WGPUBlendFactor_Constant;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_COLOR:  return WGPUBlendFactor_OneMinusConstant;
-        // FIXME: separate blend alpha value not supported?
+        // NOTE: separate blend alpha value not supported on WebGPU
         case SG_BLENDFACTOR_BLEND_ALPHA:            return WGPUBlendFactor_Constant;
         case SG_BLENDFACTOR_ONE_MINUS_BLEND_ALPHA:  return WGPUBlendFactor_OneMinusConstant;
         case SG_BLENDFACTOR_SRC1_COLOR:             return WGPUBlendFactor_Src1 ;
@@ -20046,12 +20047,15 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_buffer(_sg_buffer_t* buf) {
     SOKOL_ASSERT(buf);
     if (buf->wgpu.mapped_ptr) {
         wgpuBufferUnmap(buf->wgpu.buf);
+        buf->wgpu.mapped_ptr = 0;
     }
     if (buf->wgpu.staging_ptr) {
         _sg_free(buf->wgpu.staging_ptr);
+        buf->wgpu.staging_ptr = 0;
     }
     if (buf->wgpu.buf) {
         wgpuBufferRelease(buf->wgpu.buf);
+        buf->wgpu.buf = 0;
     }
 }
 
@@ -20077,8 +20081,9 @@ _SOKOL_PRIVATE void _sg_wgpu_copy_buffer_data(const _sg_buffer_t* buf, uint64_t 
         SOKOL_ASSERT(buf->wgpu.buf);
         // WebGPU's write-buffer requires the size to be a multiple of four, so we may need to split the copy
         // operation into two writeBuffer calls
-        uint64_t clamped_size = copy_size & ~3UL;
-        uint64_t extra_size = copy_size & 3UL;
+        // NOTE: 3UL is actually 32 bits on Windows x64, use a cast instead
+        uint64_t clamped_size = copy_size & ~(uint64_t)3;
+        uint64_t extra_size = copy_size & (uint64_t)3;
         SOKOL_ASSERT(extra_size < 4);
         wgpuQueueWriteBuffer(_sg.wgpu.queue, buf->wgpu.buf, dst_offset, src_ptr, clamped_size);
         if (extra_size > 0) {
@@ -20678,8 +20683,13 @@ _SOKOL_PRIVATE sg_resource_state _sg_wgpu_create_view(_sg_view_t* view, const sg
         wgpu_texview_desc.label = _sg_wgpu_stringview(desc->label);
         wgpu_texview_desc.baseMipLevel = (uint32_t)view->cmn.img.mip_level;
         wgpu_texview_desc.mipLevelCount = (uint32_t)view->cmn.img.mip_level_count;
-        wgpu_texview_desc.baseArrayLayer = (uint32_t)view->cmn.img.slice;
-        wgpu_texview_desc.arrayLayerCount = (uint32_t)view->cmn.img.slice_count;
+        if (img->cmn.type == SG_IMAGETYPE_3D) {
+            wgpu_texview_desc.baseArrayLayer = 0;
+            wgpu_texview_desc.arrayLayerCount = 1;
+        } else {
+            wgpu_texview_desc.baseArrayLayer = (uint32_t)view->cmn.img.slice;
+            wgpu_texview_desc.arrayLayerCount = (uint32_t)view->cmn.img.slice_count;
+        }
         if (view->cmn.type == SG_VIEWTYPE_TEXTURE) {
             wgpu_texview_desc.dimension = _sg_wgpu_texture_view_dimension(img->cmn.type);
         } else {
@@ -20710,8 +20720,8 @@ _SOKOL_PRIVATE void _sg_wgpu_discard_view(_sg_view_t* view) {
     }
 }
 
-_SOKOL_PRIVATE void _sg_wgpu_init_color_att(WGPURenderPassColorAttachment* wgpu_att, const sg_color_attachment_action* action, WGPUTextureView color_view, WGPUTextureView resolve_view) {
-    wgpu_att->depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+_SOKOL_PRIVATE void _sg_wgpu_init_color_att(WGPURenderPassColorAttachment* wgpu_att, const sg_color_attachment_action* action, WGPUTextureView color_view, WGPUTextureView resolve_view, uint32_t depth_slice) {
+    wgpu_att->depthSlice = depth_slice;
     wgpu_att->view = color_view;
     wgpu_att->resolveTarget = resolve_view;
     wgpu_att->loadOp = _sg_wgpu_load_op(color_view, action->load_action);
@@ -20767,7 +20777,12 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
             if (atts->resolve_views[i]) {
                 wgpu_resolve_view = atts->resolve_views[i]->wgpu.view;
             }
-            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], wgpu_color_view, wgpu_resolve_view);
+            const _sg_image_t* img = _sg_image_ref_ptr(&atts->color_views[i]->cmn.img.ref);
+            uint32_t depth_slice = WGPU_DEPTH_SLICE_UNDEFINED;
+            if (img->cmn.type == SG_IMAGETYPE_3D) {
+                depth_slice = (uint32_t)atts->color_views[i]->cmn.img.slice;
+            }
+            _sg_wgpu_init_color_att(&wgpu_color_att[i], &action->colors[i], wgpu_color_view, wgpu_resolve_view, depth_slice);
         }
         wgpu_pass_desc.colorAttachmentCount = (size_t)atts->num_color_views;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
@@ -20782,7 +20797,7 @@ _SOKOL_PRIVATE void _sg_wgpu_begin_render_pass(const sg_pass* pass, const _sg_at
         WGPUTextureView wgpu_color_view = (WGPUTextureView) swapchain->wgpu.render_view;
         WGPUTextureView wgpu_resolve_view = (WGPUTextureView) swapchain->wgpu.resolve_view;
         WGPUTextureView wgpu_depth_stencil_view = (WGPUTextureView) swapchain->wgpu.depth_stencil_view;
-        _sg_wgpu_init_color_att(&wgpu_color_att[0], &action->colors[0], wgpu_color_view, wgpu_resolve_view);
+        _sg_wgpu_init_color_att(&wgpu_color_att[0], &action->colors[0], wgpu_color_view, wgpu_resolve_view, WGPU_DEPTH_SLICE_UNDEFINED);
         wgpu_pass_desc.colorAttachmentCount = 1;
         wgpu_pass_desc.colorAttachments = &wgpu_color_att[0];
         if (wgpu_depth_stencil_view) {
