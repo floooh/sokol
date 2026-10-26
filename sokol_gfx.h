@@ -19680,7 +19680,7 @@ _SOKOL_PRIVATE _sg_wgpu_bindgroup_t* _sg_wgpu_create_bindgroup(_sg_bindings_ptrs
 _SOKOL_PRIVATE void _sg_wgpu_discard_bindgroup(_sg_wgpu_bindgroup_t* bg) {
     SOKOL_ASSERT(bg);
     _sg_stats_inc(wgpu.bindings.num_discard_bindgroup);
-    if (bg->slot.state == SG_RESOURCESTATE_VALID) {
+    if ((bg->slot.state == SG_RESOURCESTATE_VALID) || (bg->slot.state == SG_RESOURCESTATE_FAILED)) {
         if (bg->bindgroup) {
             wgpuBindGroupRelease(bg->bindgroup);
             bg->bindgroup = 0;
@@ -19890,13 +19890,18 @@ _SOKOL_PRIVATE bool _sg_wgpu_apply_bindings_bindgroup(_sg_bindings_ptrs_t* bnd) 
         if (bg == 0) {
             // either no cache entry yet, or cache collision, create new bindgroup and store in cache
             bg = _sg_wgpu_create_bindgroup(bnd);
-            _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
+            if (bg == 0) {
+                return false;
+            }
+            if (bg->slot.state == SG_RESOURCESTATE_VALID) {
+                _sg_wgpu_bindgroups_cache_set(key.hash, bg->slot.id);
+            } else {
+                _sg_wgpu_discard_bindgroup(bg);
+                return false;
+            }
         }
-        if (bg && bg->slot.state == SG_RESOURCESTATE_VALID) {
-            _sg_wgpu_set_bindgroup(_SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, bg);
-        } else {
-            return false;
-        }
+        SOKOL_ASSERT(bg && (bg->slot.state == SG_RESOURCESTATE_VALID));
+        _sg_wgpu_set_bindgroup(_SG_WGPU_VIEW_SMP_BINDGROUP_INDEX, bg);
     } else {
         // bindgroups cache disabled, create and destroy bindgroup on the fly (expensive!)
         _sg_wgpu_bindgroup_t* bg = _sg_wgpu_create_bindgroup(bnd);
