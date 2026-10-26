@@ -2467,7 +2467,8 @@ UTEST(sokol_gfx_wgpu, pipeline_stencil_disabled_depth_only_format) {
 UTEST(sokol_gfx_wgpu, pipeline_depth_only_and_no_depth) {
     setup();
     sg_shader shd = make_shader();
-    // depth-only: no color target means no fragment state
+    // depth-only: the fragment state has no targets, but the fragment
+    // shader must still run (for discard and frag_depth writes)
     sg_pipeline depth_only = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
         .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
@@ -2477,12 +2478,34 @@ UTEST(sokol_gfx_wgpu, pipeline_depth_only_and_no_depth) {
     T(sg_query_pipeline_state(depth_only) == SG_RESOURCESTATE_VALID);
     wgpu_mock_render_pipeline_info_t pi = {0};
     T(get_pip_info(depth_only, &pi));
-    T(!pi.has_fragment);
+    T(pi.has_fragment);
+    T(pi.fragment_module != 0);
+    T(0 == strcmp(pi.fragment_entry_point, "fs_main"));
     T(pi.num_targets == 0);
     T(pi.has_depth_stencil);
     T(pi.depth_stencil.format == WGPUTextureFormat_Depth32Float);
     T(pi.depth_stencil.depthWriteEnabled == WGPUOptionalBool_True);
     T(pi.depth_stencil.depthCompare == WGPUCompareFunction_Less);
+    // draw in a depth-only pass
+    sg_image depth = sg_make_image(&(sg_image_desc){
+        .usage.depth_stencil_attachment = true,
+        .width = 32,
+        .height = 32,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    sg_view depth_view = sg_make_view(&(sg_view_desc){ .depth_stencil_attachment.image = depth });
+    sg_buffer vbuf = make_vbuf();
+    sg_begin_pass(&(sg_pass){ .attachments.depth_stencil = depth_view });
+    sg_apply_pipeline(depth_only);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    sg_commit();
+    T(wgpu_mock_render_pass_encoder_state()->num_draws == 1);
+    T(num_log_items == 0);
+    sg_destroy_buffer(vbuf);
+    sg_destroy_view(depth_view);
+    sg_destroy_image(depth);
     // color-only
     sg_pipeline color_only = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = shd,
