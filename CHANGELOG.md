@@ -1,5 +1,15 @@
 ## Updates
 
+### 26-Oct-2026
+
+The `./tests/` directory now contains a new (LLM generated) mock library for the
+WebGPU API surface used by the sokol_gfx.h WebGPU backend, along with
+a new test (also LLM generated) which focuses on code coverage in the WebGPU
+backend. With this test, a couple of minor issues were discovered that
+were fixed (manually).
+
+PR: https://github.com/floooh/sokol/pull/1632
+
 ### 25-Oct-2026
 
 The next step of the new sokol_gfx.h resource update API, and some minor

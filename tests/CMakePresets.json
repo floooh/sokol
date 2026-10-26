@@ -38,6 +38,16 @@
             }
         },
         {
+            "name": "wgpu_mock_debug",
+            "generator": "Ninja",
+            "binaryDir": "build/wgpu_mock_debug",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_WGPU",
+                "BACKEND_MOCK_ONLY": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
             "name": "glcore_mock_debug",
             "generator": "Ninja",
             "binaryDir": "build/glcore_mock_debug",
@@ -617,6 +627,14 @@
             }
         },
         {
+            "name": "win_wgpu_mock",
+            "binaryDir": "build/win_wgpu_mock",
+            "cacheVariables": {
+                "SOKOL_BACKEND": "SOKOL_WGPU",
+                "BACKEND_MOCK_ONLY": "ON"
+            }
+        },
+        {
             "name": "win_glcore_mock",
             "binaryDir": "build/win_glcore_mock",
             "cacheVariables": {
@@ -645,6 +663,10 @@
         {
             "name": "metal_mock_arc_debug",
             "configurePreset": "metal_mock_arc_debug"
+        },
+        {
+            "name": "wgpu_mock_debug",
+            "configurePreset": "wgpu_mock_debug"
         },
         {
             "name": "glcore_mock_debug",
@@ -875,6 +897,11 @@
         {
             "name": "win_d3d11_mock_debug",
             "configurePreset": "win_d3d11_mock",
+            "configuration": "Debug"
+        },
+        {
+            "name": "win_wgpu_mock_debug",
+            "configurePreset": "win_wgpu_mock",
             "configuration": "Debug"
         },
         {

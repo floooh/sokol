@@ -76,3 +76,22 @@ endif()
 add_library(sokol_gl_mock INTERFACE)
 target_include_directories(sokol_gl_mock INTERFACE gl)
 target_sources(sokol_gl_mock INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/gl/gl_mock.c)
+
+# WebGPU mock library. Provides a stubbed <webgpu/webgpu.h> plus linkable
+# implementations of every WebGPU function which the sokol_gfx.h WebGPU
+# backend calls, so it can be built and unit-tested without Dawn, wgpu-native
+# or Emscripten. Works on any host.
+add_library(sokol_wgpu_mock STATIC
+    wgpu/wgpu_mock.c
+    wgpu/wgpu_mock.h
+    wgpu/webgpu/webgpu.h)
+
+# Callers get the mock webgpu/webgpu.h from this include dir. BEFORE keeps it
+# ahead of every other include path, so `#include <webgpu/webgpu.h>` cannot
+# reach a real WebGPU SDK.
+target_include_directories(sokol_wgpu_mock BEFORE PUBLIC wgpu)
+
+if (NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_options(sokol_wgpu_mock PRIVATE
+        -Wall -Wextra -Werror -Wstrict-prototypes)
+endif()

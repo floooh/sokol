@@ -15,6 +15,7 @@ build linux_gl_egl_release linux_gl_egl_release
 build d3d11_mock_debug d3d11_mock_debug
 build glcore_mock_debug glcore_mock_debug
 build gles3_mock_debug gles3_mock_debug
+build wgpu_mock_debug wgpu_mock_debug
 runtest linux_gl_debug
 runtest d3d11_mock_debug sokol-d3d11-test
 runtest glcore_mock_debug sokol-gl41-test
@@ -24,3 +25,4 @@ runtest gles3_mock_debug sokol-gles30-test
 runtest gles3_mock_debug sokol-gles31-test
 runtest gles3_mock_debug sokol-gles32-test
 runtest gles3_mock_debug sokol-gles30-apple-test
+runtest wgpu_mock_debug sokol-wgpu-test

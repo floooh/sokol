@@ -43,4 +43,9 @@ if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_METAL AND OSX_MACOS)
     add_subdirectory(metal)
 endif()
 
+# WebGPU backend tests. Only built in mock mode with SOKOL_WGPU selected.
+if (BACKEND_MOCK_ONLY AND SOKOL_BACKEND STREQUAL SOKOL_WGPU)
+    add_subdirectory(wgpu)
+endif()
+
 endif()
