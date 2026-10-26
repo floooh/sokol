@@ -8,7 +8,7 @@ a new test (also LLM generated) which focuses on code coverage in the WebGPU
 backend. With this test, a couple of minor issues were discovered that
 were fixed (manually).
 
-PR: https://github.com/floooh/sokol/pull/1632
+Fixed issues are listed in the PR description: https://github.com/floooh/sokol/pull/1632
 
 ### 25-Oct-2026
 
