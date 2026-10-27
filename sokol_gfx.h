@@ -1673,7 +1673,7 @@
         ```
 
     For images the process is similar: the destination image must be created
-    with `usage.copy_dst` and no initial data:
+    with `usage.copy_dst`:
 
         ```c
         sg_image dst_img = sg_make_image(&(sg_image_desc){
@@ -25436,8 +25436,8 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(usg->depth_stencil_attachment || usg->copy_dst, VALIDATE_IMAGEDESC_DEPTHFORMAT_ATTACHMENT_OR_COPYDST);
             _SG_VALIDATE(!usg->write_unsealed, VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_WRITEUNSEALED);
-            _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTHFORMAT_3D_IMAGE);
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_INITIALDATA);
+            _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTHFORMAT_3D_IMAGE);
         }
         switch (desc->type) {
             case SG_IMAGETYPE_2D:
