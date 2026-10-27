@@ -1,5 +1,22 @@
 ## Updates
 
+### 27-Oct-2026
+
+A small followup update to the recent sokol-gfx resource API updates: it's now
+valid to write initial data into `.usage.copy_dst` resources either
+via `sg_buffer/image_desc.data` or combined with `.usage.write_unsealed`
+and then writing via calls to `sg_write_buffer/image_unsealed()`.
+The only exception are depth- and depth-stencil images, those cannot
+be initialized with CPU-side data (which is caught with new validation
+checks).
+
+This change only required relaxing the validation layer and the restriction
+was an accidential leftover from the old `sg_update_*()` functions.
+
+Issue: https://github.com/floooh/sokol/issues/1631
+PR: https://github.com/floooh/sokol/pull/1633
+
+
 ### 26-Oct-2026
 
 The `./tests/` directory now has a new (LLM generated) mock library for the
