@@ -3807,16 +3807,32 @@ UTEST(sokol_gfx, make_buffer_usage_write_unsealed_expect_no_data) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_buffer_usage_copy_dst_expect_no_data) {
+// copy_dst buffers can have initial data
+UTEST(sokol_gfx, make_buffer_usage_copy_dst_with_initial_data_ok) {
     setup(&(sg_desc){0});
     const uint32_t data[16] = {0};
     sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
         .usage.copy_dst = true,
         .data = SG_RANGE(data),
     });
-    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// copy_dst buffers can be written while unsealed
+UTEST(sokol_gfx, make_buffer_usage_write_unsealed_copy_dst_ok) {
+    setup(&(sg_desc){0});
+    const uint32_t data[16] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .write_unsealed = true, .copy_dst = true },
+        .size = sizeof(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_UNSEALED);
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(data), .dst.buffer = buf });
+    sg_seal_buffer(buf);
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
@@ -3832,8 +3848,7 @@ UTEST(sokol_gfx, make_buffer_usage_staging_validation) {
     T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_COPYDST);
     T(log_items[2] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_COPYSRC);
     T(log_items[3] == SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA);
-    T(log_items[4] == SG_LOGITEM_VALIDATE_BUFFERDESC_COPYDST_VS_INITIALDATA);
-    T(log_items[5] == SG_LOGITEM_VALIDATION_FAILED);
+    T(log_items[4] == SG_LOGITEM_VALIDATION_FAILED);
     sg_shutdown();
 }
 
@@ -4097,6 +4112,41 @@ UTEST(sokol_gfx, make_image_depth_format_copy_dst_ok) {
     T(sg_query_image_state(img0) == SG_RESOURCESTATE_VALID);
     T(sg_query_image_state(img1) == SG_RESOURCESTATE_VALID);
     T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_depth_format_vs_initial_data) {
+    setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage.copy_dst = true,
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+        .data = SG_RANGE(pixels),
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_INITIALDATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_image_validate_depth_format_vs_write_unsealed) {
+    setup(&(sg_desc){0});
+    sg_image img = sg_make_image(&(sg_image_desc){
+        .usage = {
+            .write_unsealed = true,
+            .copy_dst = true,
+        },
+        .width = 8,
+        .height = 8,
+        .pixel_format = SG_PIXELFORMAT_DEPTH,
+    });
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_WRITEUNSEALED);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
     sg_shutdown();
 }
 
@@ -4425,8 +4475,10 @@ UTEST(sokol_gfx, make_image_validate_write_unsealed_vs_write_transient) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_write_unsealed_vs_copy_dst) {
+// copy_dst images can be written while unsealed
+UTEST(sokol_gfx, make_image_write_unsealed_copy_dst_ok) {
     setup(&(sg_desc){0});
+    const uint32_t pixels[8][8] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .usage = {
             .write_unsealed = true,
@@ -4435,10 +4487,11 @@ UTEST(sokol_gfx, make_image_validate_write_unsealed_vs_copy_dst) {
         .width = 8,
         .height = 8,
     });
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_COPYDST);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 2);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_UNSEALED);
+    sg_write_image_unsealed(&(sg_write_image_desc){ .src.data = SG_RANGE(pixels), .dst.image = img });
+    sg_seal_image(img);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
@@ -4491,19 +4544,18 @@ UTEST(sokol_gfx, make_image_validate_write_transient_vs_initial_data) {
     sg_shutdown();
 }
 
-UTEST(sokol_gfx, make_image_validate_copy_dst_vs_initial_data) {
+// copy_dst images can have initial data
+UTEST(sokol_gfx, make_image_copy_dst_with_initial_data_ok) {
     setup(&(sg_desc){0});
-    uint32_t pixels[8][8] = {0};
+    const uint32_t pixels[8][8] = {0};
     sg_image img = sg_make_image(&(sg_image_desc){
         .usage.copy_dst = true,
         .width = 8,
         .height = 8,
         .data = SG_RANGE(pixels),
     });
-    T(sg_query_image_state(img) == SG_RESOURCESTATE_FAILED);
-    T(log_items[0] == SG_LOGITEM_VALIDATE_IMAGEDESC_COPYDST_VS_INITIALDATA);
-    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
-    T(num_log_called == 2);
+    T(sg_query_image_state(img) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
