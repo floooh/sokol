@@ -5366,7 +5366,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_COPYSRC, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer must be combined with .copy_src") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_SEPARATE_BUFFER_TYPES, "sg_buffer_desc.usage: on WebGL2, only one of .vertex_buffer or .index_buffer can be true (check sg_features.separate_buffer_types)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_WRITETRANSIENT, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .write_transient") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_COPYDST, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_STAGING, "sg_buffer_desc.usage: .write_unsealed cannot be combined with .staging_buffer or .staging_index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_INITIALDATA, "sg_buffer_desc.usage: .write_unsealed buffers cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_WRITETRANSIENT_VS_COPYDST, "sg_buffer_desc.usage: .write_transient cannot be combined with .copy_dst") \
@@ -5387,6 +5386,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_COLOR_ATTACHMENT_VS_DEPTHSTENCIL_ATTACHMENT, "sg_image_desc.usage: .color_attachment cannot be combined with .depth_stencil_attachment") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RESOLVE_ATTACHMENT_EXPECT_NO_MSAA, "sg_image_desc: resolve attachments cannot be multisampled") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_RESOLVE_ATTACHMENT_VS_DEPTHSTENCIL_ATTACHMENT, "sg_image_desc.usage: .resolve_attachment cannot be combined with .depth_stencil_attachment") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_INITIALDATA, "sg_image_desc: depth- or depth-stencil images cannot have initial data") \
+    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_WRITEUNSEALED, "sg_image_desc: depth- or depth-stencil images cannot have .usage.write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHFORMAT_3D_IMAGE, "sg_image_desc.type: 3D images cannot have a depth- or depth-stencil pixel format") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHFORMAT_ATTACHMENT_OR_COPYDST, "sg_image_desc: images with depth- or depth-stencil format must have .usage.depth_stencil_attachment or .usage.copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DEPTHSTENCIL_ATTACHMENT_PIXELFORMAT, "sg_image_desc.pixel_format: the image's pixel format isn't a valid depth- or depth-stencil format") \
@@ -5395,7 +5396,6 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_COPYDST, "sg_image_desc.usage: .write_transient cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_INITIALDATA, "sg_image_desc: images with .usage.write_transient cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITETRANSIENT_VS_INJECTED, "sg_image_desc.usage: cannot inject backend-native textures for .write_transient usage") \
-    _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_COPYDST, "sg_image_desc.usage: .write_unsealed cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_INITIALDATA, "sg_image_desc: images with .usage.write_unsealed cannot have initial data") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_WRITETRANSIENT, "sg_image_desc.usage: .write_unsealed cannot be combined with .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_INITIAL_DATA_REQUIRED, "sg_image_desc.data: the image's usage flag combination requires initial data to be provided") \
@@ -25333,8 +25333,6 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         if (desc->usage.write_unsealed) {
             // write_unsealed cannot be combined with write_transient
             _SG_VALIDATE(!desc->usage.write_transient, VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_WRITETRANSIENT);
-            // write_unsealed cannot be combined with copy_dst
-            _SG_VALIDATE(!desc->usage.copy_dst, VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_COPYDST);
             // write_unsealed cannot be combined with staging
             _SG_VALIDATE(!(desc->usage.staging_buffer || desc->usage.staging_index_buffer), VALIDATE_BUFFERDESC_WRITEUNSEALED_VS_STAGING);
             // write_unsealed buffers cannot have initial data
@@ -25424,7 +25422,6 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         if (usg->write_unsealed) {
             requires_initial_data = false;
             _SG_VALIDATE(!usg->write_transient, VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_WRITETRANSIENT);
-            _SG_VALIDATE(!usg->copy_dst, VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_COPYDST);
             _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_IMAGEDESC_WRITEUNSEALED_VS_INITIALDATA);
         }
         if (usg->write_transient) {
@@ -25438,7 +25435,9 @@ _SOKOL_PRIVATE bool _sg_validate_image_desc(const sg_image_desc* desc) {
         }
         if (_sg_is_depth_or_depth_stencil_format(fmt)) {
             _SG_VALIDATE(usg->depth_stencil_attachment || usg->copy_dst, VALIDATE_IMAGEDESC_DEPTHFORMAT_ATTACHMENT_OR_COPYDST);
+            _SG_VALIDATE(!usg->write_unsealed, VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_WRITEUNSEALED);
             _SG_VALIDATE(desc->type != SG_IMAGETYPE_3D, VALIDATE_IMAGEDESC_DEPTHFORMAT_3D_IMAGE);
+            _SG_VALIDATE(0 == desc->data.ptr, VALIDATE_IMAGEDESC_DEPTHFORMAT_VS_INITIALDATA);
         }
         switch (desc->type) {
             case SG_IMAGETYPE_2D:
