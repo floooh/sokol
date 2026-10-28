@@ -22,6 +22,8 @@
     SOKOL_API_IMPL      - public function implementation prefix (default: -)
 
     SAUDIO_RING_MAX_SLOTS - max number of slots in the push-audio ring buffer (default 1024)
+    SAUDIO_USE_ALSA     - force the ALSA backend on Linux
+                          (otherwise the PulseAudio backend is used)
 
     If sokol_audio.h is compiled as a DLL, define the following before
     including the declaration or implementation:
@@ -374,19 +376,25 @@
     so you shouldn't need to add additional linker libs in the build process
     (otherwise this is a bug which should be fixed in sokol_audio.h).
 
+    THE PULSEAUDIO BACKEND
+    ======================
+    The PulseAudio backend is automatically selected when compiling
+    on Linux or FreeBSD.
+
+    You need to link with the 'pulse-simple' and 'pulse' libraries,
+    and the header <pulse/simple.h> must be present (on Ubuntu, those
+    are installed via the libpulse-dev package).
+
     THE ALSA BACKEND
     ================
-    The ALSA backend is automatically selected when compiling on Linux
-    ('linux' is defined).
+    NOTE: the ALSA backend is deprecated.
 
-    For thread synchronisation, the pthread_mutex_* functions are used.
-
-    Samples are directly forwarded to ALSA in 32-bit float format, no
-    further conversion is taking place.
+    To build the ALSA backend on Linux/FreeBSD, define SAUDIO_USE_ALSA before
+    including the sokol_audio.h implementation.
 
     You need to link with the 'asound' library, and the <alsa/asoundlib.h>
-    header must be present (usually both are installed with some sort
-    of ALSA development package).
+    header must be present (on Ubuntu, those are installed via the
+    `libasound2-dev` package).
 
     THE VITA BACKEND
     ================
