@@ -49,7 +49,7 @@
     Sokol Audio feeds into platform-specific audio backends:
 
     - Windows: WASAPI
-    - Linux/FreeBSK: PulseAudio (default) or ALSA
+    - Linux/FreeBSD: PulseAudio (default) or ALSA
     - macOS: CoreAudio
     - iOS: CoreAudio+AVAudioSession
     - emscripten: WebAudio with ScriptProcessorNode
@@ -868,7 +868,6 @@ inline void saudio_setup(const saudio_desc& desc) { return saudio_setup(&desc); 
     #include <pthread.h>
     #if defined(_SAUDIO_PULSEAUDIO)
         #include <pulse/simple.h>
-        #include <pulse/error.h>
     #else
         #if !defined(__FreeBSD__)
             #include <alloca.h>
@@ -945,7 +944,7 @@ typedef struct {
     bool thread_stop;
 } _saudio_pulseaudio_backend_t;
 
-#elif defines(_SAUDIO_ALSA)
+#elif defined(_SAUDIO_ALSA)
 
 typedef struct {
     snd_pcm_t* device;
@@ -1032,7 +1031,7 @@ typedef _saudio_wasapi_backend_t _saudio_backend_t;
 typedef _saudio_aaudio_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_PULSEAUDIO)
 typedef _saudio_pulseaudio_backend_t _saudio_backend_t;
-#elif defined(_SAUDIO_ALSA
+#elif defined(_SAUDIO_ALSA)
 typedef _saudio_alsa_backend_t _saudio_backend_t;
 #elif defined(_SAUDIO_VITA)
 typedef _saudio_vita_backend_t _saudio_backend_t;
@@ -1421,7 +1420,7 @@ _SOKOL_PRIVATE void _saudio_dummy_backend_shutdown(void) { }
 _SOKOL_PRIVATE void* _saudio_pulseaudio_cb(void* param) {
     _SOKOL_UNUSED(param);
     float* buf_ptr = _saudio.backend.buffer;
-    const size_t buf_size = _saudio.backend.buffer_byte_size;
+    const int buf_size = _saudio.backend.buffer_byte_size;
     while (!_saudio.backend.thread_stop) {
         // fill streaming buffer with new data
         if (_saudio_has_callback()) {
@@ -1429,13 +1428,13 @@ _SOKOL_PRIVATE void* _saudio_pulseaudio_cb(void* param) {
         } else {
             if (0 == _saudio_fifo_read(&_saudio.fifo, (uint8_t*)buf_ptr, buf_size)) {
                 // not enough read data available, fill the entire buffer with silence
-                _saudio_clear(buf_ptr, buf_size);
+                _saudio_clear(buf_ptr, (size_t)buf_size);
             }
         }
         // pa_simple_write blocks until the server has space for the data,
         // underruns are handled by the server and an error means that the
         // connection to the server is lost
-        int res = pa_simple_write(_saudio.backend.device, buf_ptr, buf_size, 0);
+        int res = pa_simple_write(_saudio.backend.device, buf_ptr, (size_t)buf_size, 0);
         if (res < 0) {
             _SAUDIO_ERROR(PULSEAUDIO_SIMPLE_WRITE_FAILED);
             break;
@@ -1492,20 +1491,14 @@ _SOKOL_PRIVATE bool _saudio_pulseaudio_backend_init(void) {
 
 _SOKOL_PRIVATE void _saudio_pulseaudio_backend_shutdown(void) {
     SOKOL_ASSERT(_saudio.backend.device);
-    if (_saudio.backend.thread) {
-        _saudio.backend.thread_stop = true;
-        pthread_join(_saudio.backend.thread, 0);
-        _saudio.backend.thread = 0;
-    }
-    if (_saudio.backend.device) {
-        pa_simple_drain(_saudio.backend.device, 0);
-        pa_simple_free(_saudio.backend.device);
-        _saudio.backend.device = 0;
-    }
-    if (_saudio.backend.buffer) {
-        _saudio_free(_saudio.backend.buffer);
-        _saudio.backend.buffer = 0;
-    }
+    SOKOL_ASSERT(_saudio.backend.buffer);
+    _saudio.backend.thread_stop = true;
+    pthread_join(_saudio.backend.thread, 0);
+    pa_simple_drain(_saudio.backend.device, 0);
+    pa_simple_free(_saudio.backend.device);
+    _saudio.backend.device = 0;
+    _saudio_free(_saudio.backend.buffer);
+    _saudio.backend.buffer = 0;
 }
 
 // >>alsa
