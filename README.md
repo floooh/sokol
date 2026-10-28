@@ -259,7 +259,7 @@ A minimal audio-streaming API:
 - platform backends:
     - Windows: WASAPI
     - macOS/iOS: CoreAudio
-    - Linux: ALSA
+    - Linux: PulseAudio or ALSA
     - emscripten: WebAudio + ScriptProcessorNode (doesn't use the emscripten-provided OpenAL or SDL Audio wrappers)
 
 A simple mono square-wave generator using the callback model:
