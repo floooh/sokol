@@ -23,6 +23,8 @@ Also: The old ALSA backend is still in sokol_audio.h. To continue using this,
 add a `#define SAUDIO_USE_ALSA (1)` before including the `sokol_audio.h`
 implementation. Please consider the ALSA backend as deprecated though.
 
+PR: https://github.com/floooh/sokol/pull/1635
+
 ### 27-Oct-2026
 
 A small followup update to the recent sokol-gfx resource API updates: it's now
