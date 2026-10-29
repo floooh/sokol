@@ -1,5 +1,30 @@
 ## Updates
 
+### 29-Oct-2026
+
+sokol_audio.h linux: sokol-audio on Linux (and FreeBSD) has a new backend which
+talks to the PulseAudio libraries instead of ALSA, and the PulseAudio backend is
+now the default (which automatically gets rid of a couple of old bugs with the
+ALSA backend on some Linux configs).
+
+You need to fix your build setup:
+
+- install the PulseAudio dev-package (e.g. on Debian/Ubuntu: `libpulse-dev`)
+- in the link step, replace `-lasound` with `-lpulse-simple -lpulse`
+
+NOTE: pretty much all Linux desktop systems should support PulseAudio
+out of the box, even when the latest fashion item is called 'PipeWire'.
+On such systems, PulseAudio (and ALSA) compatibility is achieved via
+shim libraries on top of PipeWire. Think of PulseAudio or ALSA as
+the client API, and PipeWire as the actual audio system. On
+FreeBSD the compatibility situation might be a bit more complicated though.
+
+Also: The old ALSA backend is still in sokol_audio.h. To continue using this,
+add a `#define SAUDIO_USE_ALSA (1)` before including the `sokol_audio.h`
+implementation. Please consider the ALSA backend as deprecated though.
+
+PR: https://github.com/floooh/sokol/pull/1635
+
 ### 27-Oct-2026
 
 A small followup update to the recent sokol-gfx resource API updates: it's now

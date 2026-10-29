@@ -49,7 +49,7 @@ system_libs = {
             'gl': '#system_library,link_always "AudioToolbox";',
         },
         'linux': {
-            'gl': '#system_library,link_always "asound"; #system_library,link_always "dl"; #system_library,link_always "pthread";',
+            'gl': '#system_library,link_always "pulse-simple"; #system_library,link_always "pulse"; #system_library,link_always "dl"; #system_library,link_always "pthread";',
         }
     }
 }

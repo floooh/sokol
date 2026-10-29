@@ -51,7 +51,7 @@ system_libs = {
             'gl': '"system:AudioToolbox.framework"',
         },
         'linux': {
-            'gl': '"system:asound", "system:dl", "system:pthread"',
+            'gl': '"system:pulse-simple", "system:pulse", "system:dl", "system:pthread"',
             'gldll': '"system:dl", "system:pthread"',
         }
     }

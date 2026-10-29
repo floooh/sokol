@@ -560,7 +560,7 @@ def gen_extra(inp):
         l('  {.passL:"-framework AudioToolbox".}')
         l('elif defined linux:')
         l('  when not defined emscripten:')
-        l('    {.passL:"-lasound -lm -lpthread".}')
+        l('    {.passL:"-lpulse-simple -lpulse -lm -lpthread".}')
         l('else:')
         l('  error("unsupported platform")')
         l('')
