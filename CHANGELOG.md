@@ -1,5 +1,17 @@
 ## Updates
 
+### 31-Oct-2026
+
+- sokol_app.h d3d11/dxgi: when vsync is disabled via `sapp_desc.disable_vsync`,
+  presentation will now happen with `DXGI_PRESENT_ALLOW_TEARING` instead of
+  `DXGI_PRESENT_DO_NOT_WAIT` (with the exception that during the modal window
+  movemenet/resize loop `DXGI_PRESENT_DO_NOT_WAIT` is used, since only this
+  specific mode avoids window system stuttering on NVIDIA drivers).
+
+  Original PR by @sk0pega: https://github.com/floooh/sokol/pull/1628
+
+  Final PR on top of that: https://github.com/floooh/sokol/pull/1636
+
 ### 29-Oct-2026
 
 sokol_audio.h linux: sokol-audio on Linux (and FreeBSD) has a new backend which
