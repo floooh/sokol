@@ -2936,6 +2936,7 @@ typedef struct {
     IDXGIFactory2* opt_factory2;    // OPTIONAL! supported since Win8 or Win7 Platform Update
     IDXGIFactory5* opt_factory5;    // OPTIONAL! supported since Win10
     bool scaling_none;          // swapchain uses DXGI_SCALING_NONE (can be bigger than window)
+    double last_resize_time;    // time in seconds of last ResizeBuffers call
 } _sapp_dxgi_t;
 #endif
 
@@ -8795,7 +8796,9 @@ _SOKOL_PRIVATE void _sapp_win32_init_keytable(void) {
 
 #define _SAPP_SAFE_RELEASE(obj) if (obj) { _sapp_d3d11_Release(obj); obj=0; }
 // window resize grows in chunks to prevent per-frame 'resize spam' (must be 2^N)
-#define _SAPP_DXGI_SWAPCHAIN_RESIZE_HEADROOM (512)
+#define _SAPP_DXGI_SWAPCHAIN_RESIZE_HEADROOM (256)
+// min time in seconds between two swapchain resize during the window resize loop
+#define _SAPP_DXGI_SWAPCHAIN_RESIZE_COOLDOWN (0.2)
 
 static const IID _sapp_IID_ID3D11Texture2D = { 0x6f15aaf2,0xd208,0x4e89, {0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c} };
 static const IID _sapp_IID_IDXGIDevice1    = { 0x77db970f,0x6276,0x48ba, {0xba,0x28,0x07,0x01,0x43,0xb4,0x39,0x2c} };
@@ -9229,17 +9232,21 @@ _SOKOL_PRIVATE UINT _sapp_d3d11_grow_swapchain_size(UINT cur_size, UINT new_size
     return size;
 }
 
-_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(bool grow_only) {
+_SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(UINT width, UINT height, bool from_winproc) {
     if (0 == _sapp.dxgi.swap_chain) {
         return;
     }
     DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.dxgi.swap_chain_desc;
-    // new required size
-    UINT width = (UINT)_sapp.framebuffer_width;
-    UINT height = (UINT)_sapp.framebuffer_height;
+    const double now = _sapp_timestamp_now(&_sapp.timing.timestamp);
     // during the window resize loop, grow the swapchain in chunks and
     // never shrink (it will be trimmed down at the end of the resize loop)
-    if (grow_only && _sapp.dxgi.scaling_none) {
+    if (from_winproc && _sapp.dxgi.scaling_none) {
+        // additionally rate-limit the resize so that very fast resizes
+        // are spaced out to avoid memory spikes, this may cause some
+        // black uncovered area for a short time, which is ok
+        if ((now - _sapp.dxgi.last_resize_time) < _SAPP_DXGI_SWAPCHAIN_RESIZE_COOLDOWN) {
+            return;
+        }
         width = _sapp_d3d11_grow_swapchain_size(sc_desc->BufferDesc.Width, width);
         height = _sapp_d3d11_grow_swapchain_size(sc_desc->BufferDesc.Height, height);
     }
@@ -9247,6 +9254,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(bool grow_only) {
         // no resize needed
         return;
     }
+    _sapp.dxgi.last_resize_time = now;
 
     // keep track of current actual swapchain width/height
     sc_desc->BufferDesc.Width = width;
@@ -9618,7 +9626,8 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 }
 
 /* updates current window and framebuffer size from the window's client rect, returns true if size has changed */
-_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
+_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(bool grow_only) {
+    _SOKOL_UNUSED(grow_only);
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
         float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
@@ -9636,6 +9645,19 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
         #if !defined(SOKOL_VULKAN)
             int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
             int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
+            #if defined(SOKOL_D3D11)
+            if (_sapp.dxgi.swap_chain) {
+                _sapp_d3d11_resize_default_render_target((UINT)fb_width, (UINT)fb_height, grow_only);
+                const int sc_width = (int)_sapp.dxgi.swap_chain_desc.BufferDesc.Width;
+                const int sc_height = (int)_sapp.dxgi.swap_chain_desc.BufferDesc.Height;
+                if (fb_width > sc_width) {
+                    fb_width = sc_width;
+                }
+                if (fb_height > sc_height) {
+                    fb_height = sc_height;
+                }
+            }
+            #endif
             if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
                 _sapp.framebuffer_width = fb_width;
                 _sapp.framebuffer_height = fb_height;
@@ -10295,21 +10317,23 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_EXITSIZEMOVE:
                 KillTimer(_sapp.win32.hwnd, 1);
                 #if defined(SOKOL_D3D11)
-                _sapp_d3d11_resize_default_render_target(false);
+                if (_sapp_win32_update_dimensions(false)) {
+                    _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+                }
                 _sapp_d3d11_trim();
                 #endif
                 break;
             case WM_TIMER:
-                _sapp_timing_update(&_sapp.timing, 0.0);
-                if (_sapp_win32_update_dimensions()) {
-                    #if defined(SOKOL_D3D11)
-                    _sapp_d3d11_resize_default_render_target(true);
-                    #elif defined(SOKOL_WGPU)
-                    _sapp_wgpu_swapchain_size_changed();
-                    #endif
-                    _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+                {
+                    _sapp_timing_update(&_sapp.timing, 0.0);
+                    if (_sapp_win32_update_dimensions(true)) {
+                        #if defined(SOKOL_WGPU)
+                        _sapp_wgpu_swapchain_size_changed();
+                        #endif
+                        _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
+                    }
+                    _sapp_win32_frame(true);
                 }
-                _sapp_win32_frame(true);
                 break;
             case WM_NCLBUTTONDOWN:
                 /* workaround for half-second pause when starting to move window
@@ -10383,10 +10407,10 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
        current window rectangle, which then might be used later to
        restore the window position when switching back to windowed
     */
-    _sapp_win32_update_dimensions();
+    _sapp_win32_update_dimensions(false);
     if (_sapp.fullscreen) {
         _sapp_win32_set_fullscreen(_sapp.fullscreen, SWP_HIDEWINDOW);
-        _sapp_win32_update_dimensions();
+        _sapp_win32_update_dimensions(false);
     }
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     DragAcceptFiles(_sapp.win32.hwnd, 1);
@@ -10730,10 +10754,8 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         }
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
         // instead the resize-event is fixed by the swapchain management code
-        if (_sapp_win32_update_dimensions()) {
-            #if defined(SOKOL_D3D11)
-            _sapp_d3d11_resize_default_render_target(false);
-            #elif defined(SOKOL_WGPU)
+        if (_sapp_win32_update_dimensions(false)) {
+            #if defined(SOKOL_WGPU)
             _sapp_wgpu_swapchain_size_changed();
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
