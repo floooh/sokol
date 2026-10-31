@@ -8911,7 +8911,7 @@ static inline HRESULT _sapp_dxgi_CreateSwapChain(IDXGIFactory* self, IUnknown* p
 }
 
 static inline HRESULT _sapp_dxgi_CheckFeatureSupport(IDXGIFactory5* self, DXGI_FEATURE Feature, void* pFeatureSupportData, UINT FeatureSupportDataSize) {
-    #if defined(__cplusplug)
+    #if defined(__cplusplus)
         return self->CheckFeatureSupport(Feature, pFeatureSupportData, FeatureSupportDataSize);
     #else
         return self->lpVtbl->CheckFeatureSupport(self, Feature, pFeatureSupportData, FeatureSupportDataSize);
@@ -8982,6 +8982,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         extra_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
     #endif
     hr = _sapp_d3d11_create_device(extra_device_flags);
+    #if defined(SOKOL_DEBUG)
     if (!SUCCEEDED(hr)) {
         // if initialization with D3D11_CREATE_DEVICE_DEBUG fails, this could be because the
         // 'D3D11 debug layer' stopped working, indicated by the error message:
@@ -8993,9 +8994,10 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         //
         // ...just retry with the DEBUG flag switched off
         _SAPP_ERROR(WIN32_D3D11_CREATE_DEVICE_WITH_DEBUG_FAILED);
-        extra_device_flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        extra_device_flags &= ~(UINT)D3D11_CREATE_DEVICE_DEBUG;
         hr = _sapp_d3d11_create_device(extra_device_flags);
     }
+    #endif
     if (!SUCCEEDED(hr)) {
         _SAPP_PANIC(WIN32_D3D11_CREATE_DEVICE_FAILED);
     }
@@ -9023,10 +9025,6 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (!SUCCEEDED(hr)) {
         _sapp.dxgi.opt_factory5 = 0;
     }
-
-    // minimize frame latency, disable Alt-Enter
-    _sapp_dxgi_SetMaximumFrameLatency(_sapp.dxgi.device1, 1);
-    _sapp_dxgi_MakeWindowAssociation(_sapp.dxgi.factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
 
     // create swapchain
     // FIXME: drop Win7 support and switch to DXGI_SWAP_CHAIN_DESC1
@@ -9060,6 +9058,11 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
         _SAPP_PANIC(WIN32_D3D11_CREATE_SWAPCHAIN_FAILED);
     }
     SOKOL_ASSERT(_sapp.dxgi.swap_chain);
+
+    // minimize frame latency, disable Alt-Enter
+    // NOTE: at least MakeWindowAssociation *MUST* run after creating the swapchain
+    _sapp_dxgi_SetMaximumFrameLatency(_sapp.dxgi.device1, 1);
+    _sapp_dxgi_MakeWindowAssociation(_sapp.dxgi.factory, _sapp.win32.hwnd, DXGI_MWA_NO_ALT_ENTER|DXGI_MWA_NO_PRINT_SCREEN);
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
