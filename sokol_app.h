@@ -2549,6 +2549,8 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
         #include <dxgi.h>
         // DXGI_SWAP_EFFECT_FLIP_DISCARD is only defined in newer Windows SDKs, so don't depend on it
         #define _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD (4)
+        #define _SAPP_DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING (2048)
+        #define _SAPP_DXGI_PRESENT_ALLOW_TEARING (0x00000200)
     #endif
     #ifndef WM_MOUSEHWHEEL /* see https://github.com/floooh/sokol/issues/138 */
         #define WM_MOUSEHWHEEL (0x020E)
@@ -8934,6 +8936,9 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     if (_sapp.win32.is_win10_or_greater) {
         sc_desc->BufferCount = 2;
         sc_desc->SwapEffect = (DXGI_SWAP_EFFECT) _SAPP_DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        if (_sapp.desc.disable_vsync) {
+            sc_desc->Flags |= _SAPP_DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        }
     } else {
         sc_desc->BufferCount = 1;
         sc_desc->SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
@@ -8989,6 +8994,22 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
             &_sapp.d3d11.device_context);   /* ppImmediateContext */
     }
     #endif
+    if (FAILED(hr) && (sc_desc->Flags & _SAPP_DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
+        sc_desc->Flags &= ~(UINT)_SAPP_DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+        hr = D3D11CreateDeviceAndSwapChain(
+            NULL,                           /* pAdapter (use default) */
+            D3D_DRIVER_TYPE_HARDWARE,       /* DriverType */
+            NULL,                           /* Software */
+            create_flags,                   /* Flags */
+            requested_feature_levels,       /* pFeatureLevels */
+            2,                              /* FeatureLevels */
+            D3D11_SDK_VERSION,              /* SDKVersion */
+            sc_desc,                        /* pSwapChainDesc */
+            &_sapp.d3d11.swap_chain,        /* ppSwapChain */
+            &_sapp.d3d11.device,            /* ppDevice */
+            &result_feature_level,          /* pFeatureLevel */
+            &_sapp.d3d11.device_context);   /* ppImmediateContext */
+    }
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.swap_chain && _sapp.d3d11.device && _sapp.d3d11.device_context);
 
     // minimize frame latency, disable Alt-Enter
@@ -9095,7 +9116,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_destroy_default_render_target(void) {
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
     if (_sapp.d3d11.swap_chain) {
         _sapp_d3d11_destroy_default_render_target();
-        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+        _sapp_dxgi_ResizeBuffers(_sapp.d3d11.swap_chain, _sapp.d3d11.swap_chain_desc.BufferCount, (UINT)_sapp.framebuffer_width, (UINT)_sapp.framebuffer_height, DXGI_FORMAT_B8G8R8A8_UNORM, _sapp.d3d11.swap_chain_desc.Flags);
         _sapp_d3d11_create_default_render_target();
     }
 }
@@ -9109,8 +9130,12 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
             // NOTE: disabled vsync-throttling when called from the winproc modal window
             // resize/movement loop avoids window system stuttering on some drivers
             // (notably: NVIDIA)
-            flags |= DXGI_PRESENT_DO_NOT_WAIT;
             swap_interval = 0;
+            if (!from_winproc && (_sapp.d3d11.swap_chain_desc.Flags & _SAPP_DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
+                flags |= _SAPP_DXGI_PRESENT_ALLOW_TEARING;
+            } else {
+                flags |= DXGI_PRESENT_DO_NOT_WAIT;
+            }
         }
     }
     _sapp_dxgi_Present(_sapp.d3d11.swap_chain, swap_interval, flags);
