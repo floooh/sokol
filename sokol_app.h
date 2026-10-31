@@ -9162,14 +9162,15 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
     UINT flags = 0;
     UINT swap_interval = (UINT)_sapp.desc.swap_interval;
     if (_sapp.win32.is_win10_or_greater && (_sapp.desc.disable_vsync || from_winproc)) {
-        // NOTE: disabled vsync-throttling when called from the winproc modal window
+        // NOTE: DXGI_PRESENT_DO_NOT_WAIT when called from the winproc modal window
         // resize/movement loop avoids window system stuttering on some drivers
-        // (notably: NVIDIA)
+        // (notably: NVIDIA), also note that the stutter is still present with
+        // DXGI_PRESENT_ALLOW_TEARING.
         swap_interval = 0;
-        if (_sapp.dxgi.swap_chain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) {
-            flags |= DXGI_PRESENT_ALLOW_TEARING;
-        } else {
-            flags |= DXGI_PRESENT_DO_NOT_WAIT;
+        flags = DXGI_PRESENT_DO_NOT_WAIT;
+        // outside winproc, prefer allow-tearing when vsync is disabled
+        if (!from_winproc && (_sapp.dxgi.swap_chain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
+            flags = DXGI_PRESENT_ALLOW_TEARING;
         }
     }
     _sapp_dxgi_Present(_sapp.dxgi.swap_chain, swap_interval, flags);
@@ -10187,6 +10188,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 _sapp_win32_frame(true);
                 /*
                 * NOTE: resizing each frame explodes memory usage
+                * ALSO SEE: https://github.com/floooh/sokol/pull/1579
                 *
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
