@@ -9539,10 +9539,6 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 }
 
 // updates current window and framebuffer size from the window's client rect,
-// the function updates the internal window_width and window_height items
-// on each call, but throttles updating the frame buffer width and height
-// (e.g. every N frames) to prevent swapchain surfaces to pile up in the
-// presentation queue.
 //
 // NOTE: Vulkan has a special swapchain size update path not
 // handled in this function.
