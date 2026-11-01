@@ -15,7 +15,7 @@
   test that code path anymore, and I guess it's about time to slowly
   deprecate it - Microsoft has ended support in 2020 too after all).
 
-  Side effect for other backends: the RESIZE event is now also called
+  Side effect for other backends: the RESIZE event is now also fired
   during the modal window resize for GL and WebGPU.
 
   PR: https://github.com/floooh/sokol/pull/1638
