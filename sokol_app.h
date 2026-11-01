@@ -2038,9 +2038,11 @@ typedef struct sapp_win32_desc {
     bool console_utf8;          // if true, set the output console codepage to UTF-8
     bool console_create;        // if true, attach stdout/stderr to a new console window
     bool console_attach;        // if true, attach stdout/stderr to parent process
-    uint8_t resize_throttle_frames; // number of frames between framebuffer size updates during window resize (default: 8)
+    int resize_throttle_frames;     // number of frames between framebuffer size updates during window resize (default: 8)
                                     // NOTE: lowering this values may cause extreme video memory spikes during window resize,
                                     // make sure check in a memory profiler.
+                                    // NOTE: remember that a value of zero means 'default', to disable throttling,
+                                    // set the value to 1 (but be aware that this causes memory spikes during resizing!)
 } sapp_win32_desc;
 
 typedef struct sapp_html5_desc {
@@ -2931,8 +2933,8 @@ typedef struct {
 } _sapp_d3d11_t;
 
 typedef struct {
-    DXGI_SWAP_CHAIN_DESC swap_chain_desc;
-    IDXGISwapChain* swap_chain;
+    DXGI_SWAP_CHAIN_DESC swapchain_desc;
+    IDXGISwapChain* swapchain;
     IDXGIAdapter* adapter;
     IDXGIDevice1* device1;          // NOTE: supported since Win7
     IDXGIDevice3* opt_device3;      // OPTIONAL! supported since Win8.1
@@ -3568,7 +3570,9 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
 }
 
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc && ((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn)));
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    SOKOL_ASSERT(desc->win32.resize_throttle_frames >= 0);
     sapp_desc res = *desc;
     res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
     res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
@@ -8805,13 +8809,11 @@ static const IID _sapp_IID_IDXGIDevice3    = { 0x6007896c,0x3244,0x4afd, {0xbf,0
 static const IID _sapp_IID_IDXGIFactory    = { 0x7b7166ec,0x21c7,0x44ae, {0xb2,0x1a,0xc9,0xae,0x32,0x1a,0xe3,0x69} };
 static const IID _sapp_IID_IDXGIFactory5   = { 0x7632e1f5,0xee65,0x4dca, {0x87,0xfd,0x84,0xcd,0x75,0xf8,0x83,0x8d} };
 
-static inline HRESULT _sapp_d3d11_QueryInterface(ID3D11Device* self, REFIID riid, void** ppvObject) {
-    #if defined(__cplusplus)
-        return self->QueryInterface(riid, ppvObject);
-    #else
-        return self->lpVtbl->QueryInterface(self, riid, ppvObject);
-    #endif
-}
+#if defined(__cplusplus)
+#define _SAPP_WIN32_QUERY_INTERFACE(self, riid, ppvObject) self->QueryInterface(riid, ppvObject)
+#else
+#define _SAPP_WIN32_QUERY_INTERFACE(self, riid, ppvObject) self->lpVtbl->QueryInterface(self, riid, ppvObject)
+#endif
 
 static inline HRESULT _sapp_d3d11_CreateRenderTargetView(ID3D11Device* self, ID3D11Resource *pResource, const D3D11_RENDER_TARGET_VIEW_DESC* pDesc, ID3D11RenderTargetView** ppRTView) {
     #if defined(__cplusplus)
@@ -8866,14 +8868,6 @@ static inline HRESULT _sapp_dxgi_GetBuffer(IDXGISwapChain* self, UINT Buffer, RE
         return self->GetBuffer(Buffer, riid, ppSurface);
     #else
         return self->lpVtbl->GetBuffer(self, Buffer, riid, ppSurface);
-    #endif
-}
-
-static inline HRESULT _sapp_dxgi_QueryInterface(IDXGIFactory* self, REFIID riid, void **ppvObject) {
-    #if defined(__cplusplus)
-        return self->QueryInterface(riid, ppvObject);
-    #else
-        return self->lpVtbl->QueryInterface(self, riid, ppvObject);
     #endif
 }
 
@@ -9035,7 +9029,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     SOKOL_ASSERT(_sapp.d3d11.device && _sapp.d3d11.device_context);
 
     // lookup dxgi device, adapter and dxgi factory interfaces
-    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.dxgi.device1);
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice1), (void**)&_sapp.dxgi.device1);
     if (!SUCCEEDED(hr)) {
         _SAPP_PANIC(WIN32_D3D11_QUERY_INTERFACE_IDXGIDEVICE1_FAILED);
     }
@@ -9052,18 +9046,18 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     SOKOL_ASSERT(_sapp.dxgi.factory);
 
     // lookup optional DXGI interfaces
-    hr = _sapp_d3d11_QueryInterface(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice3), (void**)&_sapp.dxgi.opt_device3);
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.d3d11.device, _sapp_win32_refiid(_sapp_IID_IDXGIDevice3), (void**)&_sapp.dxgi.opt_device3);
     if (!SUCCEEDED(hr)) {
         _sapp.dxgi.opt_device3 = 0;
     }
-    hr = _sapp_dxgi_QueryInterface(_sapp.dxgi.factory, _sapp_win32_refiid(_sapp_IID_IDXGIFactory5), (void**)&_sapp.dxgi.opt_factory5);
+    hr = _SAPP_WIN32_QUERY_INTERFACE(_sapp.dxgi.factory, _sapp_win32_refiid(_sapp_IID_IDXGIFactory5), (void**)&_sapp.dxgi.opt_factory5);
     if (!SUCCEEDED(hr)) {
         _sapp.dxgi.opt_factory5 = 0;
     }
 
     // create swapchain
     // FIXME: drop Win7 support and switch to DXGI_SWAP_CHAIN_DESC1
-    DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.dxgi.swap_chain_desc;
+    DXGI_SWAP_CHAIN_DESC* sc_desc = &_sapp.dxgi.swapchain_desc;
     sc_desc->BufferDesc.Width = (UINT)_sapp.framebuffer_width;
     sc_desc->BufferDesc.Height = (UINT)_sapp.framebuffer_height;
     sc_desc->BufferDesc.Format = _sapp_d3d11_swapchain_color_format();
@@ -9088,11 +9082,11 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
     sc_desc->SampleDesc.Count = 1;
     sc_desc->SampleDesc.Quality = 0;
     sc_desc->BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    hr = _sapp_dxgi_CreateSwapChain(_sapp.dxgi.factory, (IUnknown*)_sapp.dxgi.device1, sc_desc, &_sapp.dxgi.swap_chain);
+    hr = _sapp_dxgi_CreateSwapChain(_sapp.dxgi.factory, (IUnknown*)_sapp.dxgi.device1, sc_desc, &_sapp.dxgi.swapchain);
     if (!SUCCEEDED(hr)) {
         _SAPP_PANIC(WIN32_D3D11_CREATE_SWAPCHAIN_FAILED);
     }
-    SOKOL_ASSERT(_sapp.dxgi.swap_chain);
+    SOKOL_ASSERT(_sapp.dxgi.swapchain);
 
     // minimize frame latency, disable Alt-Enter
     // NOTE: at least MakeWindowAssociation *MUST* run after creating the swapchain
@@ -9101,7 +9095,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_device_and_swapchain(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_destroy_device_and_swapchain(void) {
-    _SAPP_SAFE_RELEASE(_sapp.dxgi.swap_chain);
+    _SAPP_SAFE_RELEASE(_sapp.dxgi.swapchain);
     _SAPP_SAFE_RELEASE(_sapp.dxgi.opt_factory5);
     _SAPP_SAFE_RELEASE(_sapp.dxgi.opt_device3);
     _SAPP_SAFE_RELEASE(_sapp.dxgi.factory);
@@ -9125,7 +9119,7 @@ _SOKOL_PRIVATE void _sapp_d3d11_create_default_render_target(void) {
     bool wants_depth = _sapp.desc.depth_format != SAPP_PIXELFORMAT_NONE;
 
     // view for the swapchain-created framebuffer
-    hr = _sapp_dxgi_GetBuffer(_sapp.dxgi.swap_chain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
+    hr = _sapp_dxgi_GetBuffer(_sapp.dxgi.swapchain, 0, _sapp_win32_refiid(_sapp_IID_ID3D11Texture2D), (void**)&_sapp.d3d11.rt);
     SOKOL_ASSERT(SUCCEEDED(hr) && _sapp.d3d11.rt);
 
     // when SRGB is requested, the view needs a different format than the surface
@@ -9190,17 +9184,20 @@ _SOKOL_PRIVATE void _sapp_d3d11_flush_and_trim(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_resize_default_render_target(void) {
-    if (_sapp.dxgi.swap_chain) {
-        _sapp_d3d11_destroy_default_render_target();
-        _sapp_d3d11_flush_and_trim();
-        _sapp_dxgi_ResizeBuffers(_sapp.dxgi.swap_chain,
-            _sapp.dxgi.swap_chain_desc.BufferCount,
-            (UINT)_sapp.framebuffer_width,
-            (UINT)_sapp.framebuffer_height,
-            _sapp.dxgi.swap_chain_desc.BufferDesc.Format,
-            _sapp.dxgi.swap_chain_desc.Flags);
-        _sapp_d3d11_create_default_render_target();
+    if (!_sapp.dxgi.swapchain) {
+        return;
     }
+    _sapp_d3d11_destroy_default_render_target();
+    _sapp_d3d11_flush_and_trim();
+    _sapp.dxgi.swapchain_desc.BufferDesc.Width = (UINT)_sapp.framebuffer_width;
+    _sapp.dxgi.swapchain_desc.BufferDesc.Height = (UINT)_sapp.framebuffer_height;
+    _sapp_dxgi_ResizeBuffers(_sapp.dxgi.swapchain,
+        _sapp.dxgi.swapchain_desc.BufferCount,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Width,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Height,
+        _sapp.dxgi.swapchain_desc.BufferDesc.Format,
+        _sapp.dxgi.swapchain_desc.Flags);
+    _sapp_d3d11_create_default_render_target();
 }
 
 _SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
@@ -9214,11 +9211,11 @@ _SOKOL_PRIVATE void _sapp_d3d11_present(bool from_winproc) {
         swap_interval = 0;
         flags = DXGI_PRESENT_DO_NOT_WAIT;
         // outside winproc, prefer allow-tearing when vsync is disabled
-        if (!from_winproc && (_sapp.dxgi.swap_chain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
+        if (!from_winproc && (_sapp.dxgi.swapchain_desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING)) {
             flags = DXGI_PRESENT_ALLOW_TEARING;
         }
     }
-    _sapp_dxgi_Present(_sapp.dxgi.swap_chain, swap_interval, flags);
+    _sapp_dxgi_Present(_sapp.dxgi.swapchain, swap_interval, flags);
 }
 
 #endif /* SOKOL_D3D11 */
@@ -15132,7 +15129,7 @@ SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
 SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
     SOKOL_ASSERT(_sapp.valid);
 #if defined(SOKOL_D3D11)
-    return _sapp.dxgi.swap_chain;
+    return _sapp.dxgi.swapchain;
 #else
     return 0;
 #endif
