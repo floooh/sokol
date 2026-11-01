@@ -6,7 +6,7 @@
   window resizing like on other platforms. This was disabled so far because
   of an excessive memory spike when changing the window size
   quickly (or rather: resizing like a madman). I have now finally
-  found a good solution to the fix (TL;DR: during every resize do a
+  found a good and simple solution (TL;DR: during every resize do a
   ClearState => Flush => IDXGIDevice3::Trim, with the Trim being the
   important part). The IDXGIDevice3::Trim method is only supported since
   Win8.1, and I didn't bother with a specific fallback plan for Win7
