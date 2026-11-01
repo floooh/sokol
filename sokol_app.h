@@ -9538,7 +9538,7 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
     }
 }
 
-// updates current window and framebuffer size from the window's client rect,
+// updates current window and framebuffer size from the window's client rect
 //
 // NOTE: Vulkan has a special swapchain size update path not
 // handled in this function.
@@ -10651,9 +10651,9 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             }
         }
         _sapp_win32_frame(false);
-        // check for window resized (also called in WinProc during modal resize loop)
+        // check for window resized (also called in WndProc during modal resize loop)
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
-        // instead the resize-event is fixed by the swapchain management code
+        // instead the resize-event is fired by the swapchain management code
         if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
