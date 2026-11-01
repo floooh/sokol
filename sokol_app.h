@@ -10223,6 +10223,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 break;
             case WM_TIMER:
                 _sapp_timing_update(&_sapp.timing, 0.0);
+                _sapp_win32_frame(true);
                 if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
@@ -10231,7 +10232,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     #endif
                     _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
                 }
-                _sapp_win32_frame(true);
                 break;
             case WM_NCLBUTTONDOWN:
                 /* workaround for half-second pause when starting to move window
@@ -10650,6 +10650,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
+        _sapp_win32_frame(false);
         // check for window resized (also called in WndProc during modal resize loop)
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
         // instead the resize-event is fired by the swapchain management code
@@ -10661,7 +10662,6 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
             #endif
             _sapp_win32_app_event(SAPP_EVENTTYPE_RESIZED);
         }
-        _sapp_win32_frame(false);
         if (_sapp.quit_requested) {
             PostMessage(_sapp.win32.hwnd, WM_CLOSE, 0, 0);
         }
