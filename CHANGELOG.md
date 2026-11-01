@@ -20,6 +20,8 @@
 
   PR: https://github.com/floooh/sokol/pull/1638
 
+  Fixes: https://github.com/floooh/sokol/issues/853 and https://github.com/floooh/sokol/issues/414
+
 ### 31-Oct-2026
 
 - sokol_app.h d3d11/dxgi: when vsync is disabled via `sapp_desc.disable_vsync`,
