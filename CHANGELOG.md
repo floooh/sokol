@@ -1,5 +1,25 @@
 ## Updates
 
+### 01-Nov-2026
+
+- sokol_app.h d3d11: The DXGI swapchain buffers are now resized during
+  window resizing like on other platforms. This was disabled so far because
+  of an excessive memory spike when changing the window size
+  quickly (or rather: resizing like a madman). I have now finally
+  found a good solution to the fix (TL;DR: during every resize do a
+  ClearState => Flush => IDXGIDevice3::Trim, with the Trim being the
+  important part). The IDXGIDevice3::Trim method is only supported since
+  Win8.1, and I didn't bother with a specific fallback plan for Win7
+  except simply not calling the Trim method.
+  (Win7 is technically still supported by the sokol header, but can't
+  test that code path anymore, and I guess it's about time to slowly
+  deprecate it - Microsoft has ended support in 2020 too after all).
+
+  Side effect for other backends: the RESIZE event is now also called
+  during the modal window resize for GL and WebGPU.
+
+  PR: https://github.com/floooh/sokol/pull/1638
+
 ### 31-Oct-2026
 
 - sokol_app.h d3d11/dxgi: when vsync is disabled via `sapp_desc.disable_vsync`,

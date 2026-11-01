@@ -10650,6 +10650,9 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
                 DispatchMessageW(&msg);
             }
         }
+        // NOTE: keep the frame callback before the resize event,
+        // otherwise it could happen that the app receives a resize
+        // event before init had been called
         _sapp_win32_frame(false);
         // check for window resized (also called in WndProc during modal resize loop)
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
