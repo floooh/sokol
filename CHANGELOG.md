@@ -11,7 +11,7 @@
   important part). The IDXGIDevice3::Trim method is only supported since
   Win8.1, and I didn't bother with a specific fallback plan for Win7
   except simply not calling the Trim method.
-  (Win7 is technically still supported by the sokol header, but can't
+  (Win7 is technically still supported by the sokol header, but I can't
   test that code path anymore, and I guess it's about time to slowly
   deprecate it - Microsoft has ended support in 2020 too after all).
 
