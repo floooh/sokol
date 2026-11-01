@@ -2038,11 +2038,6 @@ typedef struct sapp_win32_desc {
     bool console_utf8;          // if true, set the output console codepage to UTF-8
     bool console_create;        // if true, attach stdout/stderr to a new console window
     bool console_attach;        // if true, attach stdout/stderr to parent process
-    int resize_throttle_frames;     // number of frames between framebuffer size updates during window resize (default: 8)
-                                    // NOTE: lowering this values may cause extreme video memory spikes during window resize,
-                                    // make sure check in a memory profiler.
-                                    // NOTE: remember that a value of zero means 'default', to disable throttling,
-                                    // set the value to 1 (but be aware that this causes memory spikes during resizing!)
 } sapp_win32_desc;
 
 typedef struct sapp_html5_desc {
@@ -2346,7 +2341,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #define _SAPP_MAX_TITLE_LENGTH (128)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_WIDTH (640)
 #define _SAPP_FALLBACK_DEFAULT_WINDOW_HEIGHT (480)
-#define _SAPP_WIN32_RESIZE_THROTTLE_FRAMES_DEFAULT (8)
 
 // check if the config defines are alright
 #if defined(__APPLE__)
@@ -2977,7 +2971,6 @@ typedef struct {
     UINT orig_codepage;
     WCHAR surrogate;
     RECT stored_window_rect;    // used to restore window pos/size when toggling fullscreen => windowed
-    uint64_t last_fb_resize_frame_count;
     bool is_win10_or_greater;
     bool in_create_window;
     bool iconified;
@@ -3572,7 +3565,6 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
 _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
-    SOKOL_ASSERT(desc->win32.resize_throttle_frames >= 0);
     sapp_desc res = *desc;
     res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
     res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
@@ -3595,7 +3587,6 @@ _SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
             #endif
         #endif
     }
-    res.win32.resize_throttle_frames = _sapp_def(res.win32.resize_throttle_frames, _SAPP_WIN32_RESIZE_THROTTLE_FRAMES_DEFAULT);
     res.html5.canvas_selector = _sapp_def(res.html5.canvas_selector, "#canvas");
     res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
     res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
@@ -9557,10 +9548,7 @@ _SOKOL_PRIVATE bool _sapp_win32_wide_to_utf8(const wchar_t* src, char* dst, int 
 // handled in this function.
 //
 // Returns true if framebuffer size has changed.
-_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(bool force_fb_update) {
-
-    const uint64_t resize_throttle_frames = _sapp.desc.win32.resize_throttle_frames;
-
+_SOKOL_PRIVATE bool _sapp_win32_update_dimensions(void) {
     RECT rect;
     if (GetClientRect(_sapp.win32.hwnd, &rect)) {
         float window_width = (float)(rect.right - rect.left) / _sapp.win32.dpi.window_scale;
@@ -9576,12 +9564,6 @@ _SOKOL_PRIVATE bool _sapp_win32_update_dimensions(bool force_fb_update) {
         // NOTE: on Vulkan, updating the framebuffer dimensions and firing the resize-event
         // is handled entirely by the swapchain management code
         #if !defined(SOKOL_VULKAN)
-            // throttle framebuffer size updates (also wrap-around safe)
-            if (!force_fb_update && ((_sapp.win32.last_fb_resize_frame_count + resize_throttle_frames) > _sapp.frame_count)) {
-                return false;
-            }
-            _sapp.win32.last_fb_resize_frame_count = _sapp.frame_count;
-
             int fb_width = _sapp_roundf_gzero(window_width * _sapp.win32.dpi.content_scale);
             int fb_height = _sapp_roundf_gzero(window_height * _sapp.win32.dpi.content_scale);
             if ((fb_width != _sapp.framebuffer_width) || (fb_height != _sapp.framebuffer_height)) {
@@ -10246,7 +10228,7 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
             case WM_TIMER:
                 _sapp_timing_update(&_sapp.timing, 0.0);
                 _sapp_win32_frame(true);
-                if (_sapp_win32_update_dimensions(false)) {
+                if (_sapp_win32_update_dimensions()) {
                     #if defined(SOKOL_D3D11)
                     _sapp_d3d11_resize_default_render_target();
                     #elif defined(SOKOL_WGPU)
@@ -10327,10 +10309,10 @@ _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
        current window rectangle, which then might be used later to
        restore the window position when switching back to windowed
     */
-    _sapp_win32_update_dimensions(true);
+    _sapp_win32_update_dimensions();
     if (_sapp.fullscreen) {
         _sapp_win32_set_fullscreen(_sapp.fullscreen, SWP_HIDEWINDOW);
-        _sapp_win32_update_dimensions(true);
+        _sapp_win32_update_dimensions();
     }
     ShowWindow(_sapp.win32.hwnd, SW_SHOW);
     DragAcceptFiles(_sapp.win32.hwnd, 1);
@@ -10676,7 +10658,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         // check for window resized (also called in WinProc during modal resize loop)
         // NOTE: when Vulkan is active, _sapp_win32_update_dimensions() will never return true,
         // instead the resize-event is fixed by the swapchain management code
-        if (_sapp_win32_update_dimensions(false)) {
+        if (_sapp_win32_update_dimensions()) {
             #if defined(SOKOL_D3D11)
             _sapp_d3d11_resize_default_render_target();
             #elif defined(SOKOL_WGPU)
