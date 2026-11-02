@@ -2995,6 +2995,10 @@ static sgl_context_desc_t _sgl_context_desc_defaults(const sgl_context_desc_t* d
     sgl_context_desc_t res = *desc;
     res.max_vertices = _sgl_def(desc->max_vertices, _SGL_DEFAULT_MAX_VERTICES);
     res.max_commands = _sgl_def(desc->max_commands, _SGL_DEFAULT_MAX_COMMANDS);
+    const sg_desc sgdesc = sg_query_desc();
+    res.color_format = _sgl_def(desc->color_format, sgdesc.environment.defaults.color_format);
+    res.depth_format = _sgl_def(desc->depth_format, sgdesc.environment.defaults.depth_format);
+    res.sample_count = _sgl_def(desc->sample_count, sgdesc.environment.defaults.sample_count);
     return res;
 }
 
