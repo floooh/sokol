@@ -1,5 +1,12 @@
 ## Updates
 
+### 02-Nov-2026
+
+- sokol_gl.h: now works out-of-the-box when sokol_app.h has
+  been initialized without depth buffer.
+
+  PR: https://github.com/floooh/sokol/pull/1639
+
 ### 01-Nov-2026
 
 - sokol_app.h d3d11: The DXGI swapchain buffers are now resized during
