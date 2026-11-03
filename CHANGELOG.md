@@ -1,5 +1,15 @@
 ## Updates
 
+### 03-Nov-2026
+
+- sokol_app.h macOS: the mouse click to activate an inactive window is
+  now also forwarded to the application, this harmonizes behaviour
+  with Windows and Linux.
+
+  PR: https://github.com/floooh/sokol/pull/1640
+
+  Many thanks to @kkushtel!
+
 ### 02-Nov-2026
 
 - sokol_gl.h: now works out-of-the-box when sokol_app.h has

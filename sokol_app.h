@@ -6468,7 +6468,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 #endif
-
 - (BOOL)isOpaque {
     return _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
 }
@@ -6476,6 +6475,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     return YES;
 }
 - (BOOL)acceptsFirstResponder {
+    return YES;
+}
+// clicking an inactive window also sends a mouse button event
+// (same behaviour as on Windows and Linux)
+- (BOOL)acceptsFirstMouse:(NSEvent*)event {
+    _SOKOL_UNUSED(event);
     return YES;
 }
 - (void)updateTrackingAreas {
