@@ -6478,6 +6478,13 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (BOOL)acceptsFirstResponder {
     return YES;
 }
+// deliver the mouse click which activates an inactive window to the app,
+// instead of only activating the window (this matches the behaviour
+// of the other desktop platforms)
+- (BOOL)acceptsFirstMouse:(NSEvent*)event {
+    _SOKOL_UNUSED(event);
+    return YES;
+}
 - (void)updateTrackingAreas {
     if (_sapp.macos.tracking_area != nil) {
         [self removeTrackingArea:_sapp.macos.tracking_area];
