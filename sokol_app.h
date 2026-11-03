@@ -6468,7 +6468,6 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 #endif
-
 - (BOOL)isOpaque {
     return _sapp.desc.composite_mode == SAPP_COMPOSITEMODE_OPAQUE;
 }
@@ -6478,9 +6477,8 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 - (BOOL)acceptsFirstResponder {
     return YES;
 }
-// deliver the mouse click which activates an inactive window to the app,
-// instead of only activating the window (this matches the behaviour
-// of the other desktop platforms)
+// clicking an inactive window also sends a mouse button event
+// (same behaviour as on Windows and Linux)
 - (BOOL)acceptsFirstMouse:(NSEvent*)event {
     _SOKOL_UNUSED(event);
     return YES;
