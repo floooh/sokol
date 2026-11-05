@@ -143,7 +143,7 @@
     iconifed/restored   | YES     | YES   | YES    | ---   | ---     | ---
     focused/unfocused   | YES     | YES   | YES    | ---   | ---     | YES
     suspended/resumed   | ---     | ---   | ---    | YES   | YES     | TODO
-    programmatic quit   | YES     | YES   | YES    | ---   | ---     | YES
+    programmatic quit   | YES     | YES   | YES    | ---   | YES     | YES
     key repeat flag     | YES     | YES   | YES    | ---   | ---     | YES
     windowed            | YES     | YES   | YES    | ---   | ---     | YES
     fullscreen          | YES     | YES   | YES    | YES   | YES     | YES(3)
@@ -807,7 +807,7 @@
     'Graceful exit' means that the application-provided cleanup callback will
     be called before the application quits.
 
-    On native desktop platforms sokol_app.h provides more control over the
+    On native desktop platforms and Android sokol_app.h provides more control over the
     application-quit-process. It's possible to initiate a 'programmatic quit'
     from the application code, and a quit initiated by the application user can
     be intercepted (for instance to show a custom dialog box).
@@ -874,6 +874,25 @@
     when running on the web platform:
 
         https://floooh.github.io/sokol-html5/wasm/imgui-highdpi-sapp.html
+
+    On Android, pressing the Back button or performing the 'Back Gesture'
+    sends an SAPP_EVENTTYPE_ANDROID_BACK event. If the event isn't consumed
+    via sapp_consume_event(), Android's default Back button behaviour is
+    invoked (since Android 12 this moves the app into the background and
+    in older Android versions the app is quit). To implement a custom
+    Back button behaviour (for instance a 'Really Quit?' dialog), first
+    call `sapp_consume_event()` in the sokol-app event handler on the
+    `SAPP_EVENTTYPE_ANDROID_BACK` event to switch off the default behaviour,
+    then call either `sapp_request_quit()` which will trigger the regular
+    quit-requested flow described above (this may be more useful for
+    cross-platform apps), or open the dialog directly and then call
+    `sapp_quit()` in its Ok button handler.
+
+    NOTE: when targeting Android 16 (API level 36) or later, the Back button
+    is no longer delivered as key event unless 'predictive back' is disabled
+    in the AndroidManifest.xml via:
+
+        <application ... android:enableOnBackInvokedCallback="false">
 
     FULLSCREEN
     ==========
@@ -1404,6 +1423,7 @@ typedef enum sapp_event_type {
     SAPP_EVENTTYPE_QUIT_REQUESTED,
     SAPP_EVENTTYPE_CLIPBOARD_PASTED,
     SAPP_EVENTTYPE_FILES_DROPPED,
+    SAPP_EVENTTYPE_ANDROID_BACK,
     _SAPP_EVENTTYPE_NUM,
     _SAPP_EVENTTYPE_FORCE_U32 = 0x7FFFFFFF,
 } sapp_event_type;
@@ -10925,11 +10945,13 @@ _SOKOL_PRIVATE void _sapp_android_cleanup_egl_surface(void) {
     }
 }
 
-_SOKOL_PRIVATE void _sapp_android_app_event(sapp_event_type type) {
+_SOKOL_PRIVATE bool _sapp_android_app_event(sapp_event_type type) {
+    bool event_consumed = false;
     if (_sapp_events_enabled()) {
         _sapp_init_event(type);
-        _sapp_call_event(&_sapp.event);
+        event_consumed = _sapp_call_event(&_sapp.event);
     }
+    return event_consumed;
 }
 
 _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool force_update) {
@@ -11065,12 +11087,14 @@ _SOKOL_PRIVATE bool _sapp_android_key_event(const AInputEvent* e) {
         return false;
     }
     if (AKeyEvent_getKeyCode(e) == AKEYCODE_BACK) {
-        /* FIXME: this should be hooked into a "really quit?" mechanism
-           so the app can ask the user for confirmation, this is currently
-           generally missing in sokol_app.h
-        */
-        _sapp_android_shutdown();
-        return true;
+        bool key_up = AKeyEvent_getAction(e) == AKEY_EVENT_ACTION_UP;
+        bool cancelled = 0 != (AKeyEvent_getFlags(e) & AKEY_EVENT_FLAG_CANCELED);
+        // return whether event was consumed, if not consumed
+        // this invokes Android's default Back button behaviour
+        // (on Android <12: quit, Android >=12: switch to background)
+        if (key_up && !cancelled) {
+            return _sapp_android_app_event(SAPP_EVENTTYPE_ANDROID_BACK);
+        }
     }
     return false;
 }
@@ -11194,6 +11218,9 @@ _SOKOL_PRIVATE int _sapp_android_main_cb(int fd, int events, void* data) {
 _SOKOL_PRIVATE bool _sapp_android_should_update(void) {
     bool is_in_front = _sapp.android.has_resumed && _sapp.android.has_focus;
     bool has_surface = _sapp.android.surface != EGL_NO_SURFACE;
+    if (_sapp.quit_ordered) {
+        return false;
+    }
     return is_in_front && has_surface;
 }
 
@@ -11254,7 +11281,18 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
     pthread_mutex_unlock(&_sapp.android.pt.mutex);
 
     /* main loop */
+    bool quit_handled = false;
     while (!_sapp.android.is_thread_stopping) {
+        if (_sapp.quit_requested && !_sapp.quit_ordered) {
+            _sapp_android_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+            if (_sapp.quit_requested) {
+                _sapp.quit_ordered = true;
+            }
+        }
+        if (_sapp.quit_ordered && !quit_handled) {
+            _sapp_android_shutdown();
+            quit_handled = true;
+        }
         #if __ANDROID_API__ >= 29
             if (_sapp.android.choreographer != NULL) {
                 // Posts _sapp_android_frame_callback with the choreographer to start our frame
@@ -11278,7 +11316,8 @@ _SOKOL_PRIVATE void* _sapp_android_loop(void* arg) {
         /* process all events (or stop early if app is requested to quit) */
         bool process_events = true;
         while (process_events && !_sapp.android.is_thread_stopping) {
-            bool block_until_event = !_sapp.android.is_thread_stopping && !_sapp_android_should_update();
+            const bool quit_pending = !quit_handled && (_sapp.quit_requested || _sapp.quit_ordered);
+            const bool block_until_event = !_sapp.android.is_thread_stopping && !quit_pending && !_sapp_android_should_update();
             process_events = ALooper_pollOnce(block_until_event ? -1 : 0, NULL, NULL, NULL) == ALOOPER_POLL_CALLBACK;
         }
     }
