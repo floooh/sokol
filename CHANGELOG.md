@@ -1,5 +1,18 @@
 ## Updates
 
+### 06-Nov-2026
+
+- sokol_app.h android: the sokol-app Android backend now properly
+  handles the Back button/gesture via a new event `SAPP_EVENTTYPE_ANDROID_BACK`,
+  and additionally the 'programmatic quit' protocol of the dektop backends
+  is implemented. More details on how this all works is in the header
+  documentation at the end of the `APPLICATION QUIT` section.
+
+  PR: https://github.com/floooh/sokol/pull/1641
+
+  Many thanks to @jiangbo and @skylersaleh for the discussion
+  and providing potential solutions!
+
 ### 03-Nov-2026
 
 - sokol_app.h macOS: the mouse click to activate an inactive window is
