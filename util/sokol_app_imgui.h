@@ -470,6 +470,7 @@ _SOKOL_PRIVATE const char* _sappimgui_eventtype_string(sapp_event_type ev_type) 
         case SAPP_EVENTTYPE_QUIT_REQUESTED: return "QUIT_REQUESTED";
         case SAPP_EVENTTYPE_CLIPBOARD_PASTED: return "CLIPBOARD_PASTED";
         case SAPP_EVENTTYPE_FILES_DROPPED: return "FILES_DROPPED";
+        case SAPP_EVENTTYPE_ANDROID_BACK: return "ANDROID_BACK";
         default: return "???";
     }
 }
