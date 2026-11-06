@@ -447,6 +447,55 @@ UTEST(sokol_gfx, make_destroy_samplers) {
     sg_shutdown();
 }
 
+UTEST(sokol_gfx, shader_texture_without_sampler) {
+    setup(&(sg_desc){0});
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .views[0].texture = { .stage = SG_SHADERSTAGE_VERTEX, .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
+        .views[1].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_ARRAY,
+            .sample_type = SG_IMAGESAMPLETYPE_UINT },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    const _sg_shader_t* shader = _sg_lookup_shader(shd.id);
+    T(shader->cmn.views[0].view_type == SG_VIEWTYPE_TEXTURE);
+    T(shader->cmn.views[1].view_type == SG_VIEWTYPE_TEXTURE);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_texture_load_and_sample) {
+    setup(&(sg_desc){0});
+    sg_shader_desc desc = {
+        .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT },
+        .views[1].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 1, .sampler_slot = 0 },
+    };
+    sg_shader shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_destroy_shader(shd);
+    // Sampling the unfilterable texture must still fail.
+    desc.texture_sampler_pairs[0].view_slot = 0;
+    shd = sg_make_shader(&desc);
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SHADERDESC_NONFILTERING_SAMPLER_REQUIRED);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, shader_unused_sampler_rejected) {
+    setup(&(sg_desc){0});
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_TEXTURE_SAMPLER_PAIRS);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_destroy_shaders) {
     setup(&(sg_desc){
         .shader_pool_size = 3

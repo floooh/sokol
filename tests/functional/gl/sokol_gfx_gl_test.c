@@ -797,6 +797,19 @@ UTEST(sokol_gfx_gl, shader_with_uniform_block_queries_locations) {
     teardown();
 }
 
+UTEST(sokol_gfx_gl, shader_texture_without_pair_rejected) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs",
+        .fragment_func.source = "fs",
+        .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_SHADERDESC_TEXVIEW_NOT_REFERENCED_BY_TEXTURE_SAMPLER_PAIRS));
+    teardown();
+}
+
 UTEST(sokol_gfx_gl, shader_with_texture_sampler_pair) {
     setup();
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
