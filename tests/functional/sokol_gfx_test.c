@@ -6578,13 +6578,16 @@ UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_write_transient) {
 
 // An error in sg_apply_pipeline(), sg_apply_bindings() or sg_apply_uniforms(),
 // or an invalid resource in sg_apply_bindings(), must skip draws only until
-// the next successful call of the same type (see issue #1644). A successful
+// the next successful call of the same type (see issue #1644). Uniforms are
+// tracked per uniform block slot, an sg_apply_uniforms() error in one slot
+// is not cleared by a successful call in another slot. A successful
 // sg_apply_pipeline() also clears earlier bindings and uniforms errors.
 // The tests run all op sequences which start with an apply-pipeline op,
 // followed by NDV_SEQ_LEN ops, and check the draw state before each draw
 // or dispatch against the expected state.
 #define NDV_SEQ_LEN (5)
 #define NDV_MAX_PRINTED_FAILURES (8)
+#define NDV_UB_LAST (SG_MAX_UNIFORMBLOCK_BINDSLOTS - 1)
 
 typedef enum {
     NDV_PIP_OK,
@@ -6592,8 +6595,10 @@ typedef enum {
     NDV_BND_OK,
     NDV_BND_ERR,
     NDV_BND_INVRES,
-    NDV_UB_OK,
-    NDV_UB_ERR,
+    NDV_UB0_OK,
+    NDV_UB0_ERR,
+    NDV_UBN_OK,     // last uniform block slot
+    NDV_UBN_ERR,
     NDV_DRAW,
     NDV_DRAW_EX,
     NDV_DISPATCH,
@@ -6601,7 +6606,7 @@ typedef enum {
 } ndv_op_t;
 
 static const char* ndv_op_names[NDV_NUM_OPS] = {
-    "pip_ok", "pip_err", "bnd_ok", "bnd_err", "bnd_invres", "ub_ok", "ub_err", "draw", "draw_ex", "dispatch",
+    "pip_ok", "pip_err", "bnd_ok", "bnd_err", "bnd_invres", "ub0_ok", "ub0_err", "ubN_ok", "ubN_err", "draw", "draw_ex", "dispatch",
 };
 
 typedef struct {
@@ -6616,12 +6621,12 @@ typedef struct {
 typedef struct {
     bool pip;
     bool bnd;
-    bool ub;
+    bool ub0;
+    bool ubn;
 } ndv_state_t;
 
-// NOTE: update this when the fix replaces _sg.next_draw_valid
 static bool ndv_next_draw_enabled(void) {
-    return _sg.next_draw_valid;
+    return !_sg_skipdraw_any();
 }
 
 static const sg_pass* ndv_render_pass(void) {
@@ -6649,7 +6654,10 @@ static ndv_setup_t ndv_create_render_setup(void) {
     sg_fail_buffer(failed_vbuf);
     s.pip_ok = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(&(sg_shader_desc){
-            .uniform_blocks[0] = { .stage = SG_SHADERSTAGE_VERTEX, .size = 16 },
+            .uniform_blocks = {
+                [0] = { .stage = SG_SHADERSTAGE_VERTEX, .size = 16 },
+                [NDV_UB_LAST] = { .stage = SG_SHADERSTAGE_FRAGMENT, .size = 32 },
+            },
         }),
         .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
     });
@@ -6677,7 +6685,10 @@ static ndv_setup_t ndv_create_compute_setup(void) {
         .shader = sg_make_shader(&(sg_shader_desc){
             .compute_func.source = "cs",
             .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true },
-            .uniform_blocks[0] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 16 },
+            .uniform_blocks = {
+                [0] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 16 },
+                [NDV_UB_LAST] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 32 },
+            },
         }),
     });
     s.pip_err = sg_alloc_pipeline();
@@ -6694,11 +6705,12 @@ static bool ndv_is_draw_op(ndv_op_t op) {
 }
 
 static void ndv_apply_op(const ndv_setup_t* s, ndv_op_t op, ndv_state_t* state) {
-    static const float ub_data[4] = {0};
+    // slot 0 has 16 bytes, the last slot 32 bytes
+    static const float ub_data[8] = {0};
     switch (op) {
         case NDV_PIP_OK:
             sg_apply_pipeline(s->pip_ok);
-            state->pip = state->bnd = state->ub = true;
+            state->pip = state->bnd = state->ub0 = state->ubn = true;
             break;
         case NDV_PIP_ERR:
             sg_apply_pipeline(s->pip_err);
@@ -6716,14 +6728,23 @@ static void ndv_apply_op(const ndv_setup_t* s, ndv_op_t op, ndv_state_t* state) 
             sg_apply_bindings(&s->bnd_invres);
             state->bnd = false;
             break;
-        case NDV_UB_OK:
-            sg_apply_uniforms(0, &SG_RANGE(ub_data));
-            state->ub = true;
+        case NDV_UB0_OK:
+            sg_apply_uniforms(0, &(sg_range){ .ptr = ub_data, .size = 16 });
+            state->ub0 = true;
             break;
-        case NDV_UB_ERR:
+        case NDV_UB0_ERR:
             // wrong uniform block size
             sg_apply_uniforms(0, &(sg_range){ .ptr = ub_data, .size = 8 });
-            state->ub = false;
+            state->ub0 = false;
+            break;
+        case NDV_UBN_OK:
+            sg_apply_uniforms(NDV_UB_LAST, &(sg_range){ .ptr = ub_data, .size = 32 });
+            state->ubn = true;
+            break;
+        case NDV_UBN_ERR:
+            // wrong uniform block size
+            sg_apply_uniforms(NDV_UB_LAST, &(sg_range){ .ptr = ub_data, .size = 16 });
+            state->ubn = false;
             break;
         case NDV_DRAW:
             sg_draw(0, 3, 1);
@@ -6769,7 +6790,7 @@ static int ndv_run_sequences(const ndv_setup_t* s, const sg_pass* pass, const nd
         sg_begin_pass(pass);
         for (int i = 0; i < (1 + NDV_SEQ_LEN); i++) {
             if (ndv_is_draw_op(seq[i]) && (fail_idx < 0)) {
-                const bool expected = state.pip && state.bnd && state.ub;
+                const bool expected = state.pip && state.bnd && state.ub0 && state.ubn;
                 if (ndv_next_draw_enabled() != expected) {
                     fail_idx = i;
                     fail_expected = expected;
@@ -6807,12 +6828,14 @@ UTEST(sokol_gfx, next_draw_valid_render_pass) {
     sg_begin_pass(ndv_render_pass());
     T(ndv_check_op(&s, NDV_PIP_OK, false));
     T(ndv_check_op(&s, NDV_BND_OK, false));
-    T(ndv_check_op(&s, NDV_UB_OK, false));
+    T(ndv_check_op(&s, NDV_UB0_OK, false));
+    T(ndv_check_op(&s, NDV_UBN_OK, false));
     T(ndv_check_op(&s, NDV_DRAW, false));
     T(ndv_check_op(&s, NDV_DRAW_EX, false));
     T(ndv_check_op(&s, NDV_BND_INVRES, false));
     T(ndv_check_op(&s, NDV_BND_ERR, true));
-    T(ndv_check_op(&s, NDV_UB_ERR, true));
+    T(ndv_check_op(&s, NDV_UB0_ERR, true));
+    T(ndv_check_op(&s, NDV_UBN_ERR, true));
     T(ndv_check_op(&s, NDV_PIP_ERR, true));
     sg_end_pass();
     sg_commit();
@@ -6820,7 +6843,8 @@ UTEST(sokol_gfx, next_draw_valid_render_pass) {
     const ndv_op_t ops[] = {
         NDV_PIP_OK, NDV_PIP_ERR,
         NDV_BND_OK, NDV_BND_ERR, NDV_BND_INVRES,
-        NDV_UB_OK, NDV_UB_ERR,
+        NDV_UB0_OK, NDV_UB0_ERR,
+        NDV_UBN_OK, NDV_UBN_ERR,
         NDV_DRAW, NDV_DRAW_EX,
     };
     const int num_failed = ndv_run_sequences(&s, ndv_render_pass(), ops, (int)(sizeof(ops) / sizeof(ops[0])));
@@ -6839,11 +6863,13 @@ UTEST(sokol_gfx, next_draw_valid_compute_pass) {
     sg_begin_pass(ndv_compute_pass());
     T(ndv_check_op(&s, NDV_PIP_OK, false));
     T(ndv_check_op(&s, NDV_BND_OK, false));
-    T(ndv_check_op(&s, NDV_UB_OK, false));
+    T(ndv_check_op(&s, NDV_UB0_OK, false));
+    T(ndv_check_op(&s, NDV_UBN_OK, false));
     T(ndv_check_op(&s, NDV_DISPATCH, false));
     T(ndv_check_op(&s, NDV_BND_INVRES, false));
     T(ndv_check_op(&s, NDV_BND_ERR, true));
-    T(ndv_check_op(&s, NDV_UB_ERR, true));
+    T(ndv_check_op(&s, NDV_UB0_ERR, true));
+    T(ndv_check_op(&s, NDV_UBN_ERR, true));
     T(ndv_check_op(&s, NDV_PIP_ERR, true));
     sg_end_pass();
     sg_commit();
@@ -6851,7 +6877,8 @@ UTEST(sokol_gfx, next_draw_valid_compute_pass) {
     const ndv_op_t ops[] = {
         NDV_PIP_OK, NDV_PIP_ERR,
         NDV_BND_OK, NDV_BND_ERR, NDV_BND_INVRES,
-        NDV_UB_OK, NDV_UB_ERR,
+        NDV_UB0_OK, NDV_UB0_ERR,
+        NDV_UBN_OK, NDV_UBN_ERR,
         NDV_DISPATCH,
     };
     const int num_failed = ndv_run_sequences(&s, ndv_compute_pass(), ops, (int)(sizeof(ops) / sizeof(ops[0])));
