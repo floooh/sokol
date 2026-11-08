@@ -47,10 +47,7 @@ static void reset_log(void) {
 }
 
 static void capture_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* msg, uint32_t line_nr, const char* file, void* ud) {
-    (void)tag; (void)file; (void)ud;
-    if (getenv("D3D11_TEST_VERBOSE")) {
-        printf("  [log] level=%u item=%u line=%u: %s\n", log_level, log_item_id, line_nr, msg ? msg : "");
-    }
+    (void)tag; (void)msg; (void)line_nr; (void)file; (void)ud;
     if (num_log_items < MAX_LOG_ITEMS) {
         log_levels[num_log_items] = log_level;
         log_items[num_log_items++] = (sg_log_item)log_item_id;
