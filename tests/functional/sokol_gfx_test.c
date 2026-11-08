@@ -29,9 +29,6 @@ static void test_logger(const char* tag, uint32_t log_level, uint32_t log_item_i
     if (num_log_called < MAX_LOGITEMS) {
         log_items[num_log_called++] = log_item_id;
     }
-    if (message_or_null) {
-        printf("%s\n", message_or_null);
-    }
 }
 
 static void reset_log_items(void) {
@@ -6576,5 +6573,315 @@ UTEST(sokol_gfx, apply_bindings_sbuf_readwrite_write_transient) {
     T(num_log_called == 2);
     sg_end_pass();
     sg_commit();
+    sg_shutdown();
+}
+
+// An error in sg_apply_pipeline(), sg_apply_bindings() or sg_apply_uniforms(),
+// or an invalid resource in sg_apply_bindings(), must skip draws only until
+// the next successful call of the same type (see issue #1644). Uniforms are
+// tracked per uniform block slot, an sg_apply_uniforms() error in one slot
+// is not cleared by a successful call in another slot. A successful
+// sg_apply_pipeline() also clears earlier bindings and uniforms errors.
+// The tests run all op sequences which start with an apply-pipeline op,
+// followed by NDV_SEQ_LEN ops, and check the draw state before each draw
+// or dispatch against the expected state.
+#define NDV_SEQ_LEN (5)
+#define NDV_MAX_PRINTED_FAILURES (8)
+#define NDV_UB_LAST (SG_MAX_UNIFORMBLOCK_BINDSLOTS - 1)
+
+typedef enum {
+    NDV_PIP_OK,
+    NDV_PIP_ERR,
+    NDV_BND_OK,
+    NDV_BND_ERR,
+    NDV_BND_INVRES,
+    NDV_UB0_OK,
+    NDV_UB0_ERR,
+    NDV_UBN_OK,     // last uniform block slot
+    NDV_UBN_ERR,
+    NDV_DRAW,
+    NDV_DRAW_EX,
+    NDV_DISPATCH,
+    NDV_NUM_OPS,
+} ndv_op_t;
+
+static const char* ndv_op_names[NDV_NUM_OPS] = {
+    "pip_ok", "pip_err", "bnd_ok", "bnd_err", "bnd_invres", "ub0_ok", "ub0_err", "ubN_ok", "ubN_err", "draw", "draw_ex", "dispatch",
+};
+
+typedef struct {
+    sg_pipeline pip_ok;
+    sg_pipeline pip_err;        // a failed pipeline, fails validation
+    sg_bindings bnd_ok;
+    sg_bindings bnd_err;        // fails validation
+    sg_bindings bnd_invres;     // an invalid resource, no validation error
+} ndv_setup_t;
+
+// expected per-type draw state
+typedef struct {
+    bool pip;
+    bool bnd;
+    bool ub0;
+    bool ubn;
+} ndv_state_t;
+
+static bool ndv_next_draw_enabled(void) {
+    return !_sg_skipdraw_any();
+}
+
+static const sg_pass* ndv_render_pass(void) {
+    static const sg_pass pass = {
+        .swapchain = {
+            .width = 64,
+            .height = 64,
+            .sample_count = 1,
+            .color_format = SG_PIXELFORMAT_RGBA8,
+        },
+    };
+    return &pass;
+}
+
+static const sg_pass* ndv_compute_pass(void) {
+    static const sg_pass pass = { .compute = true };
+    return &pass;
+}
+
+static ndv_setup_t ndv_create_render_setup(void) {
+    ndv_setup_t s = {0};
+    const float vertices[12] = {0};
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(vertices) });
+    sg_buffer failed_vbuf = sg_alloc_buffer();
+    sg_fail_buffer(failed_vbuf);
+    s.pip_ok = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .uniform_blocks = {
+                [0] = { .stage = SG_SHADERSTAGE_VERTEX, .size = 16 },
+                [NDV_UB_LAST] = { .stage = SG_SHADERSTAGE_FRAGMENT, .size = 32 },
+            },
+        }),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    s.pip_err = sg_alloc_pipeline();
+    sg_fail_pipeline(s.pip_err);
+    s.bnd_ok = (sg_bindings){ .vertex_buffers[0] = vbuf };
+    // the pipeline is not indexed, and vbuf is no index buffer
+    s.bnd_err = (sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = vbuf };
+    s.bnd_invres = (sg_bindings){ .vertex_buffers[0] = failed_vbuf };
+    return s;
+}
+
+static ndv_setup_t ndv_create_compute_setup(void) {
+    ndv_setup_t s = {0};
+    const float vertices[12] = {0};
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(vertices) });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    // a view on a destroyed buffer
+    sg_buffer dead_sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view dead_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = dead_sbuf });
+    sg_destroy_buffer(dead_sbuf);
+    s.pip_ok = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true },
+            .uniform_blocks = {
+                [0] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 16 },
+                [NDV_UB_LAST] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 32 },
+            },
+        }),
+    });
+    s.pip_err = sg_alloc_pipeline();
+    sg_fail_pipeline(s.pip_err);
+    s.bnd_ok = (sg_bindings){ .views[0] = view };
+    // vertex buffers are not allowed in compute passes
+    s.bnd_err = (sg_bindings){ .views[0] = view, .vertex_buffers[0] = vbuf };
+    s.bnd_invres = (sg_bindings){ .views[0] = dead_view };
+    return s;
+}
+
+static bool ndv_is_draw_op(ndv_op_t op) {
+    return (op == NDV_DRAW) || (op == NDV_DRAW_EX) || (op == NDV_DISPATCH);
+}
+
+static void ndv_apply_op(const ndv_setup_t* s, ndv_op_t op, ndv_state_t* state) {
+    // slot 0 has 16 bytes, the last slot 32 bytes
+    static const float ub_data[8] = {0};
+    switch (op) {
+        case NDV_PIP_OK:
+            sg_apply_pipeline(s->pip_ok);
+            state->pip = state->bnd = state->ub0 = state->ubn = true;
+            break;
+        case NDV_PIP_ERR:
+            sg_apply_pipeline(s->pip_err);
+            state->pip = false;
+            break;
+        case NDV_BND_OK:
+            sg_apply_bindings(&s->bnd_ok);
+            state->bnd = true;
+            break;
+        case NDV_BND_ERR:
+            sg_apply_bindings(&s->bnd_err);
+            state->bnd = false;
+            break;
+        case NDV_BND_INVRES:
+            sg_apply_bindings(&s->bnd_invres);
+            state->bnd = false;
+            break;
+        case NDV_UB0_OK:
+            sg_apply_uniforms(0, &(sg_range){ .ptr = ub_data, .size = 16 });
+            state->ub0 = true;
+            break;
+        case NDV_UB0_ERR:
+            // wrong uniform block size
+            sg_apply_uniforms(0, &(sg_range){ .ptr = ub_data, .size = 8 });
+            state->ub0 = false;
+            break;
+        case NDV_UBN_OK:
+            sg_apply_uniforms(NDV_UB_LAST, &(sg_range){ .ptr = ub_data, .size = 32 });
+            state->ubn = true;
+            break;
+        case NDV_UBN_ERR:
+            // wrong uniform block size
+            sg_apply_uniforms(NDV_UB_LAST, &(sg_range){ .ptr = ub_data, .size = 16 });
+            state->ubn = false;
+            break;
+        case NDV_DRAW:
+            sg_draw(0, 3, 1);
+            break;
+        case NDV_DRAW_EX:
+            sg_draw_ex(0, 3, 1, 0, 0);
+            break;
+        case NDV_DISPATCH:
+            sg_dispatch(1, 1, 1);
+            break;
+        default:
+            break;
+    }
+}
+
+// check that each op works as intended in a simple context
+static bool ndv_check_op(const ndv_setup_t* s, ndv_op_t op, bool expect_log) {
+    ndv_state_t state = {0};
+    reset_log_items();
+    ndv_apply_op(s, op, &state);
+    return (num_log_called > 0) == expect_log;
+}
+
+// returns number of failed sequences
+static int ndv_run_sequences(const ndv_setup_t* s, const sg_pass* pass, const ndv_op_t* ops, int num_ops) {
+    int num_tail_seqs = 1;
+    for (int i = 0; i < NDV_SEQ_LEN; i++) {
+        num_tail_seqs *= num_ops;
+    }
+    const ndv_op_t first_ops[2] = { NDV_PIP_OK, NDV_PIP_ERR };
+    int num_failed = 0;
+    for (int seq_idx = 0; seq_idx < 2 * num_tail_seqs; seq_idx++) {
+        ndv_op_t seq[1 + NDV_SEQ_LEN];
+        seq[0] = first_ops[seq_idx / num_tail_seqs];
+        int rem = seq_idx % num_tail_seqs;
+        for (int i = 0; i < NDV_SEQ_LEN; i++) {
+            seq[1 + i] = ops[rem % num_ops];
+            rem /= num_ops;
+        }
+        ndv_state_t state = {0};
+        int fail_idx = -1;
+        bool fail_expected = false;
+        sg_begin_pass(pass);
+        for (int i = 0; i < (1 + NDV_SEQ_LEN); i++) {
+            if (ndv_is_draw_op(seq[i]) && (fail_idx < 0)) {
+                const bool expected = state.pip && state.bnd && state.ub0 && state.ubn;
+                if (ndv_next_draw_enabled() != expected) {
+                    fail_idx = i;
+                    fail_expected = expected;
+                }
+            }
+            ndv_apply_op(s, seq[i], &state);
+        }
+        sg_end_pass();
+        sg_commit();
+        if (fail_idx >= 0) {
+            if (num_failed < NDV_MAX_PRINTED_FAILURES) {
+                printf("FAILED:");
+                for (int i = 0; i < (1 + NDV_SEQ_LEN); i++) {
+                    printf(" %s", ndv_op_names[seq[i]]);
+                }
+                printf(" => op %d (%s) expected %s\n", fail_idx, ndv_op_names[seq[fail_idx]], fail_expected ? "enabled" : "disabled");
+            }
+            num_failed++;
+        }
+    }
+    if (num_failed > 0) {
+        printf("%d of %d sequences failed\n", num_failed, 2 * num_tail_seqs);
+    }
+    return num_failed;
+}
+
+UTEST(sokol_gfx, next_draw_valid_render_pass) {
+    setup_with_compute(&(sg_desc){0});
+    const ndv_setup_t s = ndv_create_render_setup();
+    T(sg_query_pipeline_state(s.pip_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.pip_err) == SG_RESOURCESTATE_FAILED);
+    T(num_log_called == 0);
+
+    // the error ops must cause validation errors, the other ops not
+    sg_begin_pass(ndv_render_pass());
+    T(ndv_check_op(&s, NDV_PIP_OK, false));
+    T(ndv_check_op(&s, NDV_BND_OK, false));
+    T(ndv_check_op(&s, NDV_UB0_OK, false));
+    T(ndv_check_op(&s, NDV_UBN_OK, false));
+    T(ndv_check_op(&s, NDV_DRAW, false));
+    T(ndv_check_op(&s, NDV_DRAW_EX, false));
+    T(ndv_check_op(&s, NDV_BND_INVRES, false));
+    T(ndv_check_op(&s, NDV_BND_ERR, true));
+    T(ndv_check_op(&s, NDV_UB0_ERR, true));
+    T(ndv_check_op(&s, NDV_UBN_ERR, true));
+    T(ndv_check_op(&s, NDV_PIP_ERR, true));
+    sg_end_pass();
+    sg_commit();
+
+    const ndv_op_t ops[] = {
+        NDV_PIP_OK, NDV_PIP_ERR,
+        NDV_BND_OK, NDV_BND_ERR, NDV_BND_INVRES,
+        NDV_UB0_OK, NDV_UB0_ERR,
+        NDV_UBN_OK, NDV_UBN_ERR,
+        NDV_DRAW, NDV_DRAW_EX,
+    };
+    const int num_failed = ndv_run_sequences(&s, ndv_render_pass(), ops, (int)(sizeof(ops) / sizeof(ops[0])));
+    T(num_failed == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, next_draw_valid_compute_pass) {
+    setup_with_compute(&(sg_desc){0});
+    const ndv_setup_t s = ndv_create_compute_setup();
+    T(sg_query_pipeline_state(s.pip_ok) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.pip_err) == SG_RESOURCESTATE_FAILED);
+    T(num_log_called == 0);
+
+    // the error ops must cause validation errors, the other ops not
+    sg_begin_pass(ndv_compute_pass());
+    T(ndv_check_op(&s, NDV_PIP_OK, false));
+    T(ndv_check_op(&s, NDV_BND_OK, false));
+    T(ndv_check_op(&s, NDV_UB0_OK, false));
+    T(ndv_check_op(&s, NDV_UBN_OK, false));
+    T(ndv_check_op(&s, NDV_DISPATCH, false));
+    T(ndv_check_op(&s, NDV_BND_INVRES, false));
+    T(ndv_check_op(&s, NDV_BND_ERR, true));
+    T(ndv_check_op(&s, NDV_UB0_ERR, true));
+    T(ndv_check_op(&s, NDV_UBN_ERR, true));
+    T(ndv_check_op(&s, NDV_PIP_ERR, true));
+    sg_end_pass();
+    sg_commit();
+
+    const ndv_op_t ops[] = {
+        NDV_PIP_OK, NDV_PIP_ERR,
+        NDV_BND_OK, NDV_BND_ERR, NDV_BND_INVRES,
+        NDV_UB0_OK, NDV_UB0_ERR,
+        NDV_UBN_OK, NDV_UBN_ERR,
+        NDV_DISPATCH,
+    };
+    const int num_failed = ndv_run_sequences(&s, ndv_compute_pass(), ops, (int)(sizeof(ops) / sizeof(ops[0])));
+    T(num_failed == 0);
     sg_shutdown();
 }

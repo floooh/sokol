@@ -5,7 +5,7 @@
 //  For best results, run with ASAN and UBSAN.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
-#include "sokol_log.h"
+#include "capture_log.h"
 #define SOKOL_FRAMEBUFFER_IMPL
 #include "sokol_framebuffer.h"
 #include "utest.h"
@@ -13,8 +13,8 @@
 #define T(b) EXPECT_TRUE(b)
 
 static void init(void) {
-    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
-    sfb_setup(&(sfb_desc){ .logger = { .func = slog_func }});
+    sg_setup(&(sg_desc){ .logger = { .func = capture_log }});
+    sfb_setup(&(sfb_desc){ .logger = { .func = capture_log }});
 }
 
 static void init_with(const sfb_desc* desc) {

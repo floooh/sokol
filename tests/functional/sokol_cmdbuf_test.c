@@ -5,7 +5,7 @@
 //  For best results, run with ASAN and UBSAN.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
-#include "sokol_log.h"
+#include "capture_log.h"
 #define SOKOL_CMDBUF_IMPL
 #include "sokol_cmdbuf.h"
 #include "utest.h"
@@ -33,8 +33,8 @@ static uint64_t read_le_u64(const uint8_t* p) {
 }
 
 static void init(void) {
-    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
-    scb_setup(&(scb_desc){ .logger = { .func = slog_func }});
+    sg_setup(&(sg_desc){ .logger = { .func = capture_log }});
+    scb_setup(&(scb_desc){ .logger = { .func = capture_log }});
 }
 
 static void init_with(const scb_desc* desc) {
@@ -149,7 +149,7 @@ UTEST(sokol_cmdbuf, make_cmdbuf_label_truncated) {
 UTEST(sokol_cmdbuf, cmdbuf_pool_exhausted) {
     init_with(&(scb_desc){
         .cmdbuf_pool_size = 4,
-        .logger.func = slog_func,
+        .logger.func = capture_log,
     });
     scb_cmdbuf cbs[4];
     for (int i = 0; i < 4; i++) {
@@ -196,7 +196,7 @@ UTEST(sokol_cmdbuf, stale_handle_after_destroy) {
 UTEST(sokol_cmdbuf, generation_counter_bumps_on_reuse) {
     init_with(&(scb_desc){
         .cmdbuf_pool_size = 1,
-        .logger.func = slog_func,
+        .logger.func = capture_log,
     });
     scb_cmdbuf a = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
     T(a.id != SCB_INVALID_ID);
@@ -929,7 +929,7 @@ static void submit_test_init(void) {
     tcalls_reset();
     num_scb_log_items = 0;
     memset(scb_log_items, 0, sizeof(scb_log_items));
-    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
+    sg_setup(&(sg_desc){ .logger = { .func = capture_log }});
     scb_setup(&(scb_desc){ .logger = { .func = scb_test_logger }});
     install_capture_hooks();
 }

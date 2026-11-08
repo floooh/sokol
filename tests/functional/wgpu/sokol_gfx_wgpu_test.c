@@ -54,9 +54,6 @@ static void reset_log(void) {
 
 static void capture_log(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* msg, uint32_t line_nr, const char* file, void* user_data) {
     (void)tag; (void)log_level; (void)msg; (void)line_nr; (void)file; (void)user_data;
-    if (getenv("WGPU_TEST_LOG")) {
-        printf("sokol log: %s\n", msg);
-    }
     if (num_log_items < MAX_LOG_ITEMS) {
         log_items[num_log_items++] = (sg_log_item)log_item_id;
     }

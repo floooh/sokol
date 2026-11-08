@@ -6,7 +6,7 @@
 //  For best results, run with ASAN and UBSAN.
 //------------------------------------------------------------------------------
 #include "sokol_gfx.h"
-#include "sokol_log.h"
+#include "capture_log.h"
 #define SOKOL_DEBUGTEXT_IMPL
 #include "sokol_debugtext.h"
 #include "utest.h"
@@ -15,8 +15,8 @@
 #define TFLT(f0,f1) {T(fabs((f0)-(f1))<=(0.000001));}
 
 static void init(void) {
-    sg_setup(&(sg_desc){ .logger = { .func = slog_func }});
-    sdtx_setup(&(sdtx_desc_t){ .logger = { .func = slog_func }});
+    sg_setup(&(sg_desc){ .logger = { .func = capture_log }});
+    sdtx_setup(&(sdtx_desc_t){ .logger = { .func = capture_log }});
 }
 
 static void init_with(const sdtx_desc_t* desc) {

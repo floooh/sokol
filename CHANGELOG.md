@@ -1,5 +1,21 @@
 ## Updates
 
+### 08-Nov-2026
+
+- sokol_gfx.h: Fix a behaviour bug caused by a too broad implementation of the idea
+  that 'sokol-gfx skips draw calls involving invalid resources'. The buggy behaviour
+  was that an `sg_apply_bindings()` with invalid resources, or an invalid
+  `sg_apply_uniforms()` call would skip *all* draw calls until the next
+  `sg_apply_pipeline()`, instead of recovering already with the next
+  valid `sg_apply_bindings()` or `sg_apply_uniforms()` call. The new
+  implementation fixes the problem via separate 'skip-draw-flags' for
+  the applied pipeline, bindings and each uniform block slot.
+
+  Issue: https://github.com/floooh/sokol/issues/1644
+  PR: https://github.com/floooh/sokol/pull/1646
+
+  Many thanks to @jiangbo for discovering and reporting the issue!
+
 ### 06-Nov-2026
 
 - sokol_app.h android: the sokol-app Android backend now properly
