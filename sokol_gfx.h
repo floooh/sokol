@@ -8303,6 +8303,13 @@ typedef struct {
     bool write;
 } _sg_pixelformat_info_t;
 
+typedef enum {
+    _SG_SKIPDRAW_PIPELINE = (1<<0),
+    _SG_SKIPDRAW_BINDINGS = (1<<1),
+    _SG_SKIPDRAW_UB = (1<<2),
+    // following bits reserved for UB1..UBN
+} _sg_skipdraw_t;
+
 typedef struct {
     bool valid;
     sg_desc desc;       // original desc with default values patched in
@@ -8322,7 +8329,7 @@ typedef struct {
         } swapchain;
     } cur_pass;
     _sg_pipeline_ref_t cur_pip;
-    bool next_draw_valid;
+    int skipdraw_flags; // combination of _SG_SKIPDRAW_*
     bool use_indexed_draw;
     bool use_instanced_draw;
     struct {
@@ -9042,6 +9049,57 @@ _SG_IMPL_RES_PTR_OR_NULL(_sg_view_ref_ptr_or_null, _sg_view_ref_t, _sg_view_t)
 #define _sg_stats_add(key,val) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key+=val;}}
 #define _sg_stats_inc(key) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key++;}}
 #define _sg_resource_stats_inc(key) {if(_sg.stats_enabled){ _sg.stats.cur_frame.key++; _sg.stats.total.key++;}}
+
+_SOKOL_PRIVATE void _sg_skipdraw_reset(void) {
+    _sg.skipdraw_flags = 0;
+}
+
+_SOKOL_PRIVATE void _sg_skipdraw_set_pip(void) {
+    _sg.skipdraw_flags |= _SG_SKIPDRAW_PIPELINE;
+}
+
+_SOKOL_PRIVATE void _sg_skipdraw_clr_bnd(void) {
+    _sg.skipdraw_flags &= ~_SG_SKIPDRAW_BINDINGS;
+}
+
+_SOKOL_PRIVATE void _sg_skipdraw_set_bnd(void) {
+    _sg.skipdraw_flags |= _SG_SKIPDRAW_BINDINGS;
+}
+
+_SOKOL_PRIVATE void _sg_skipdraw_clr_ub(int ub_slot) {
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    _sg.skipdraw_flags &= ~(_SG_SKIPDRAW_UB << ub_slot);
+}
+
+_SOKOL_PRIVATE void _sg_skipdraw_set_ub(int ub_slot) {
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    _sg.skipdraw_flags |= (_SG_SKIPDRAW_UB << ub_slot);
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_pip(void) {
+    return 0 != (_sg.skipdraw_flags & _SG_SKIPDRAW_PIPELINE);
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_bnd(void) {
+    return 0 != (_sg.skipdraw_flags & _SG_SKIPDRAW_BINDINGS);
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_ub(int ub_slot) {
+    SOKOL_ASSERT((ub_slot >= 0) && (ub_slot < SG_MAX_UNIFORMBLOCK_BINDSLOTS));
+    return 0 != (_sg.skipdraw_flags & (_SG_SKIPDRAW_UB << ub_slot));
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_pip_bnd(void) {
+    return _sg_skipdraw_pip() || _sg_skipdraw_bnd();
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_pip_ub(int ub_slot) {
+    return _sg_skipdraw_pip() || _sg_skipdraw_ub(ub_slot);
+}
+
+_SOKOL_PRIVATE bool _sg_skipdraw_any(void) {
+    return 0 != _sg.skipdraw_flags;
+}
 
 _SOKOL_PRIVATE void _sg_update_alive_free_resource_stats(sg_total_resource_stats* stats, const _sg_pool_t* pool) {
     SOKOL_ASSERT(stats && pool);
@@ -24373,7 +24431,7 @@ _SOKOL_PRIVATE void _sg_vk_apply_uniforms(int ub_slot, const sg_range* data) {
     const VkDeviceSize ubuf_offset = _sg_vk_uniform_copy(data);
     if (_sg.vk.uniforms.dbuf.overflown) {
         _SG_ERROR(VULKAN_UNIFORM_BUFFER_OVERFLOW);
-        _sg.next_draw_valid = false;
+        _sg_skipdraw_set_ub(ub_slot);
         return;
     }
     _sg.vk.uniforms.addr_info[ub_slot].range = data->size;
@@ -28757,6 +28815,7 @@ SOKOL_API_IMPL void sg_begin_pass(const sg_pass* pass) {
     SOKOL_ASSERT(pass);
     SOKOL_ASSERT((pass->_start_canary == 0) && (pass->_end_canary == 0));
     _sg.cur_pass.in_pass = true;
+    _sg_skipdraw_set_pip();
     const sg_pass pass_def = _sg_pass_defaults(pass);
     _SG_TRACE_ARGS(begin_pass, &pass_def);
     if (!_sg_validate_pass_attachment_limits(&pass_def)) {
@@ -28835,24 +28894,23 @@ SOKOL_API_IMPL void sg_apply_pipeline(sg_pipeline pip_id) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_apply_pipeline);
     _SG_TRACE_ARGS(apply_pipeline, pip_id);
+    _sg_skipdraw_reset();
     if (!_sg.cur_pass.valid) {
         return;
     }
     if (!_sg_validate_apply_pipeline(pip_id)) {
-        _sg.next_draw_valid = false;
+        _sg_skipdraw_set_pip();
         return;
     }
     _sg_pipeline_t* pip = _sg_lookup_pipeline(pip_id.id);
     SOKOL_ASSERT(pip);
     _sg.cur_pip = _sg_pipeline_ref(pip);
-
-    _sg.next_draw_valid = (SG_RESOURCESTATE_VALID == pip->slot.state);
-    if (!_sg.next_draw_valid) {
+    if (SG_RESOURCESTATE_VALID != pip->slot.state) {
+        _sg_skipdraw_set_pip();
         return;
     }
     _sg.use_indexed_draw = pip->cmn.index_type != SG_INDEXTYPE_NONE;
     _sg.use_instanced_draw = pip->cmn.use_instanced_draw;
-
     _sg_apply_pipeline(pip);
 }
 
@@ -28864,14 +28922,15 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
     if (!_sg.cur_pass.valid) {
         return;
     }
+    _sg_skipdraw_clr_bnd();
     if (!_sg_validate_apply_bindings(bindings)) {
-        _sg.next_draw_valid = false;
+        _sg_skipdraw_set_bnd();
     }
     SOKOL_ASSERT((bindings->_start_canary == 0) && (bindings->_end_canary==0));
     if (!_sg_pipeline_ref_alive(&_sg.cur_pip)) {
-        _sg.next_draw_valid = false;
+        _sg_skipdraw_set_pip();
     }
-    if (!_sg.next_draw_valid) {
+    if (_sg_skipdraw_pip_bnd()) {
         return;
     }
 
@@ -28887,7 +28946,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
                     bnd.vbs[i] = buf;
                     bnd.vb_offsets[i] = bindings->vertex_buffer_offsets[i];
                 } else {
-                    _sg.next_draw_valid = false;
+                    _sg_skipdraw_set_bnd();
                 }
             }
         }
@@ -28897,7 +28956,7 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
                 bnd.ib = buf;
                 bnd.ib_offset = bindings->index_buffer_offset;
             } else {
-                _sg.next_draw_valid = false;
+                _sg_skipdraw_set_bnd();
             }
         }
     }
@@ -28911,15 +28970,15 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
                 if (view->cmn.type == SG_VIEWTYPE_STORAGEBUFFER) {
                     // NOTE: _sg_buffer_ref_valid also checks for resource state VALID!
                     if (!_sg_buffer_ref_valid(&view->cmn.buf.ref)) {
-                        _sg.next_draw_valid = false;
+                        _sg_skipdraw_set_bnd();
                     }
                 } else {
                     if (!_sg_image_ref_valid(&view->cmn.img.ref)) {
-                        _sg.next_draw_valid = false;
+                        _sg_skipdraw_set_bnd();
                     }
                 }
             } else {
-                _sg.next_draw_valid = false;
+                _sg_skipdraw_set_bnd();
             }
         }
     }
@@ -28932,8 +28991,10 @@ SOKOL_API_IMPL void sg_apply_bindings(const sg_bindings* bindings) {
         }
     }
 
-    if (_sg.next_draw_valid) {
-        _sg.next_draw_valid &= _sg_apply_bindings(&bnd);
+    if (!_sg_skipdraw_bnd()) {
+        if (!_sg_apply_bindings(&bnd)) {
+            _sg_skipdraw_set_bnd();
+        }
     }
 }
 
@@ -28947,21 +29008,18 @@ SOKOL_API_IMPL void sg_apply_uniforms(int ub_slot, const sg_range* data) {
     if (!_sg.cur_pass.valid) {
         return;
     }
+    _sg_skipdraw_clr_ub(ub_slot);
     if (!_sg_validate_apply_uniforms(ub_slot, data)) {
-        _sg.next_draw_valid = false;
-        return;
+        _sg_skipdraw_set_ub(ub_slot);
     }
-    if (!_sg.next_draw_valid) {
+    if (_sg_skipdraw_pip_ub(ub_slot)) {
         return;
     }
     _sg_apply_uniforms(ub_slot, data);
 }
 
 _SOKOL_PRIVATE bool _sg_check_skip_draw(int num_elements, int num_instances) {
-    if (!_sg.cur_pass.valid) {
-        return true;
-    }
-    if (!_sg.next_draw_valid) {
+    if (!_sg.cur_pass.valid || _sg_skipdraw_any()) {
         return true;
     }
     // skip no-op draws
@@ -29005,10 +29063,7 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_dispatch);
     _SG_TRACE_ARGS(dispatch, num_groups_x, num_groups_y, num_groups_z);
-    if (!_sg.cur_pass.valid) {
-        return;
-    }
-    if (!_sg.next_draw_valid) {
+    if (!_sg.cur_pass.valid || _sg_skipdraw_any()) {
         return;
     }
     // skip no-op dispatches
