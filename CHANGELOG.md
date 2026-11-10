@@ -1,5 +1,17 @@
 ## Updates
 
+### 10-Nov-2026
+
+- sokol_gfx.h: on non-GL backends, the validation code for `sg_shader_desc` now
+  allows texture views that are not associated with a sampler (e.g. texture-views
+  that are not referenced in the `sg_shader_desc.texture_sampler_pairs[]` array.
+  This relaxation enables the use of alternative shader cross-compilers that might
+  not care about GL-flavoured GLSL or the sokol_gfx.h GL backend.
+
+  PR: https://github.com/floooh/sokol/pull/1643
+
+  Many thanks to @squk!
+
 ### 08-Nov-2026
 
 - sokol_gfx.h: Fix a behaviour bug caused by a too broad implementation of the idea
