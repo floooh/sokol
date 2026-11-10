@@ -4373,6 +4373,9 @@ typedef struct sg_sampler_desc {
         - the sampler's array index in the sg_shader_desc.samplers[] array
         - GLSL only: the name of the combined image-sampler object
 
+      On non-GL backends, textures read without a sampler do not need a
+      texture-sampler pair. GL requires a pair for every texture binding.
+
     The number and order of items in the sg_shader_desc.attrs[]
     array corresponds to the items in sg_pipeline_desc.layout.attrs.
 
@@ -25902,8 +25905,14 @@ _SOKOL_PRIVATE bool _sg_validate_shader_desc(const sg_shader_desc* desc) {
                 }
             }
         }
-        // each image and sampler must be referenced by an image sampler
+        // GL binds textures through combined texture-sampler pairs. Other
+        // backends can read textures without a sampler.
+        #if defined(_SOKOL_ANY_GL)
         _SG_VALIDATE(texview_slot_mask == ref_texview_slot_mask, VALIDATE_SHADERDESC_TEXVIEW_NOT_REFERENCED_BY_TEXTURE_SAMPLER_PAIRS);
+        #else
+        _SOKOL_UNUSED(texview_slot_mask);
+        _SOKOL_UNUSED(ref_texview_slot_mask);
+        #endif
         _SG_VALIDATE(smp_slot_mask == ref_smp_slot_mask, VALIDATE_SHADERDESC_SAMPLER_NOT_REFERENCED_BY_TEXTURE_SAMPLER_PAIRS);
 
         return _sg_validate_end();

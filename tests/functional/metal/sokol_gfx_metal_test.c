@@ -1136,6 +1136,19 @@ UTEST(sokol_gfx_metal, create_sampler_failed) {
 }
 
 //== shaders ===================================================================
+UTEST(sokol_gfx_metal, shader_texture_without_sampler) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .vertex_func.source = "vs_source",
+        .fragment_func.source = "fs_source",
+        .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D,
+            .sample_type = SG_IMAGESAMPLETYPE_UNFILTERABLE_FLOAT, .msl_texture_n = 0 },
+    });
+    T(sg_query_shader_state(shd) == SG_RESOURCESTATE_VALID);
+    T(!logged(SG_LOGITEM_VALIDATION_FAILED));
+    teardown();
+}
+
 UTEST(sokol_gfx_metal, create_shader_from_source) {
     setup();
     sg_shader shd = make_shader();
