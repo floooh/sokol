@@ -3182,7 +3182,7 @@ UTEST(sokol_gfx_d3d11, shader_hlsl_register_out_of_range) {
     reset_log();
     shd = sg_make_shader(&(sg_shader_desc){ .vertex_func = vs, .fragment_func = fs,
         .views[0].texture = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_type = SG_IMAGETYPE_2D, .sample_type = SG_IMAGESAMPLETYPE_FLOAT },
-        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING, .hlsl_register_s_n = 12 },
+        .samplers[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .sampler_type = SG_SAMPLERTYPE_FILTERING, .hlsl_register_s_n = 14 },
         .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0 } });
     T((sg_query_shader_state(shd) == SG_RESOURCESTATE_FAILED) && logged(SG_LOGITEM_D3D11_SAMPLER_HLSL_REGISTER_S_OUT_OF_RANGE));
     sg_destroy_shader(shd);

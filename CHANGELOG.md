@@ -12,6 +12,17 @@
 
   Many thanks to @squk!
 
+- sokol_gfx.h: the max number of sampler bindings in an `sg_apply_bindings()` call
+  has been bumbped from 12 to 14 (the size of `sg_bindings` stays at a nice round
+  256 because I removed the start- and end-canaries, which IMHO is an ok compromise)
+
+  NOTE that to actually make use of the raised limit you also need to update
+  the sokol-shdc binaries!
+
+  Related ticket: https://github.com/floooh/sokol/issues/1626
+  sokol PR: https://github.com/floooh/sokol/pull/1648
+  sokol-shdc PR: https://github.com/floooh/sokol-tools/pull/225
+
 ### 08-Nov-2026
 
 - sokol_gfx.h: Fix a behaviour bug caused by a too broad implementation of the idea
