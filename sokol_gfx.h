@@ -5387,8 +5387,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE, "sg_buffer_desc.size and .data.size must be equal") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE, "sg_buffer_desc.data.size expected to be zero") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_DATA, "sg_buffer_desc: buffer content can never be initialized (provide .data, or set .usage.write_unsealed, .usage.write_transient or .usage.copy_dst)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires OpenGL >= 4.3)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires sg_features.compute)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4, "size of storage buffers must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED, "indirect buffers not supported by the backend 3D API (requires sg_features.compute)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_INDIRECTBUFFER_SIZE_MULTIPLE_4, "size of indirect buffers must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DATA_SIZE, "sg_image_desc.data: data size doesn't match expected size (complete tightly packed size across all mip levels and slices) ") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_COPYDST, "sg_image_desc.usage: attachments cannot have usage .copy_dst") \
@@ -5689,12 +5691,27 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED, "sg_draw_indirect: must be called in a render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_USAGE, "sg_draw_indirect: buffer must have usage.indirect_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_RANGE, "sg_draw_indirect: offset is out of range (must be >= 0 && <= (buf_size - N) where N is 20 or 16)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4, "sg_draw_indirect: offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED, "sg_dispatch: must be called in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSX, "sg_dispatch: num_groups_x must be >=0 and <65536") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSY, "sg_dispatch: num_groups_y must be >=0 and <65536") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSZ, "sg_dispatch: num_groups_z must be >=0 and <65536") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED, "sg_dispatch_indirect: must be called in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE, "sg_dispatch_indirect: buffer must have usage.indirect_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE, "sg_dispatch_indirect: offset is out of range (must be >= 0 && <= (buf_size - 12)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4, "sg_dispatch_indirect: offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
@@ -25483,6 +25500,10 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
         }
+        if (desc->usage.indirect_buffer) {
+            _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED);
+            _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_INDIRECTBUFFER_SIZE_MULTIPLE_4);
+        }
         return _sg_validate_end();
     #endif
 }
@@ -26930,17 +26951,16 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offs
         if (_sg.desc.disable_validation) {
             return true;
         }
+        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
+        const int item_size = _sg.use_indexed_draw ? 20 : 16;
         _sg_validate_begin();
-        // FIXME FIXME FIXME
-        /*
-        _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_RENDERPASS_EXPECTED);
-        _SG_VALIDATE(base_element >= 0, VALIDATE_DRAW_BASEELEMENT_GE_ZERO);
-        _SG_VALIDATE(num_elements >= 0, VALIDATE_DRAW_NUMELEMENTS_GE_ZERO);
-        _SG_VALIDATE(num_instances >= 0, VALIDATE_DRAW_NUMINSTANCES_GE_ZERO);
-        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
-        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_WRITE_BUFFER_TRANSIENT_MISSING);
-        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DRAW_WRITE_IMAGE_TRANSIENT_MISSING);
-        */
+        _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
+        _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
+        _SG_VALIDATE((offset >= 0) && ((offset + item_size) <= buf->cmn.size), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE)
+        _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
         return _sg_validate_end();
     #endif
 }
@@ -26959,7 +26979,7 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
         _SG_VALIDATE((num_groups_x >= 0) && (num_groups_x < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSX);
         _SG_VALIDATE((num_groups_y >= 0) && (num_groups_y < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSY);
         _SG_VALIDATE((num_groups_z >= 0) && (num_groups_z < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSZ);
-        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING);
         _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING);
         return _sg_validate_end();
@@ -26976,16 +26996,15 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int 
         if (_sg.desc.disable_validation) {
             return true;
         }
+        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
         _sg_validate_begin();
-        /*
-        _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED);
-        _SG_VALIDATE((num_groups_x >= 0) && (num_groups_x < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSX);
-        _SG_VALIDATE((num_groups_y >= 0) && (num_groups_y < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSY);
-        _SG_VALIDATE((num_groups_z >= 0) && (num_groups_z < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSZ);
-        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
-        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING);
-        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING);
-        */
+        _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
+        _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
+        _SG_VALIDATE((offset >= 0) && ((offset + 12) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE)
+        _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
         return _sg_validate_end();
     #endif
 }
