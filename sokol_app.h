@@ -14515,6 +14515,9 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     #elif defined(SOKOL_VULKAN)
         _sapp_vk_discard();
     #endif
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
+    }
     _sapp_x11_destroy_window();
     _sapp_x11_destroy_standard_cursors();
     XCloseDisplay(_sapp.x11.display);
