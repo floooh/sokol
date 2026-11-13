@@ -4780,6 +4780,30 @@ typedef struct sg_view_desc {
 } sg_view_desc;
 
 /*
+    TODO: documentation
+*/
+typedef struct sg_draw_indirect_args {
+    uint32_t num_elements;
+    uint32_t num_instances;
+    uint32_t base_element;
+    uint32_t base_index;
+} sg_draw_indirect_args;
+
+typedef struct sg_draw_indirect_indexed_args {
+    uint32_t num_elements;
+    uint32_t num_instances;
+    uint32_t base_element;
+    int32_t base_vertex;
+    uint32_t base_instance;
+} sg_draw_indirect_indexed_args;
+
+typedef struct sg_dispatch_indirect_args {
+    uint32_t num_groups_x;
+    uint32_t num_groups_y;
+    uint32_t num_groups_z;
+} sg_dispatch_indirect_args;
+
+/*
     sg_trace_hooks
 
     Installable callback functions to keep track of the sokol-gfx calls,
@@ -4825,7 +4849,7 @@ typedef struct sg_trace_hooks {
     void (*draw_ex)(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance, void* user_data);
     void (*draw_indirect)(sg_buffer buf, int offset, void* user_data);
     void (*dispatch)(int num_groups_x, int num_groups_y, int num_groups_z, void* user_data);
-    void (*dispatch_indirect)(sg_buffer buf, int offset, void* uset_data);
+    void (*dispatch_indirect)(sg_buffer buf, int offset, void* user_data);
     void (*end_pass)(void* user_data);
     void (*commit)(void* user_data);
     void (*alloc_buffer)(sg_buffer result, void* user_data);
@@ -5693,7 +5717,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED, "sg_draw_indirect: must be called in a render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_USAGE, "sg_draw_indirect: buffer must have usage.indirect_buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_RANGE, "sg_draw_indirect: offset is out of range (must be >= 0 && <= (buf_size - N) where N is 20 or 16)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_RANGE, "sg_draw_indirect: offset is out of range (must be >= 0 && <= (buf_size - sizeof(sg_draw_indirect[_indexed]_args))") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4, "sg_draw_indirect: offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
@@ -5707,7 +5731,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED, "sg_dispatch_indirect: must be called in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE, "sg_dispatch_indirect: buffer must have usage.indirect_buffer") \
-    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE, "sg_dispatch_indirect: offset is out of range (must be >= 0 && <= (buf_size - 12)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE, "sg_dispatch_indirect: offset is out of range (must be >= 0 && <= (buf_size - sizeof(sg_dispatch_indirect_args))") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4, "sg_dispatch_indirect: offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
@@ -26943,16 +26967,17 @@ _SOKOL_PRIVATE bool _sg_validate_draw_ex(int base_element, int num_elements, int
 
 _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offset) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(base_element);
-        _SOKOL_UNUSED(num_elements);
-        _SOKOL_UNUSED(num_instances);
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
         return true;
     #else
         if (_sg.desc.disable_validation) {
             return true;
         }
         SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
-        const int item_size = _sg.use_indexed_draw ? 20 : 16;
+        const int item_size = _sg.use_indexed_draw
+            ? (int)sizeof(sg_draw_indirect_indexed_args)
+            : (int)sizeof(sg_draw_indirect_args);
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
@@ -26988,9 +27013,8 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
 
 _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int offset) {
     #if !defined(SOKOL_DEBUG)
-        _SOKOL_UNUSED(num_groups_x);
-        _SOKOL_UNUSED(num_groups_y);
-        _SOKOL_UNUSED(num_groups_z);
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
         return true;
     #else
         if (_sg.desc.disable_validation) {
@@ -27000,7 +27024,7 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int 
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
-        _SG_VALIDATE((offset >= 0) && ((offset + 12) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE)
+        _SG_VALIDATE((offset >= 0) && ((offset + (int)sizeof(sg_dispatch_indirect_args)) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE)
         _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
