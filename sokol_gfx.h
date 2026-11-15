@@ -18684,8 +18684,27 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 _SOKOL_PRIVATE void _sg_mtl_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(_sg.features.compute);
+    SOKOL_ASSERT(buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    // FIXME FIXME FIXME
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    if (_sg.use_indexed_draw) {
+        // indexed indirect rendering
+        const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.cache.cur_ibuf);
+        SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
+        const NSUInteger index_buffer_offset = (NSUInteger)_sg.mtl.cache.cur_ibuf_offset;
+        [_sg.mtl.render_cmd_encoder drawIndexedPrimitives:pip->mtl.prim_type
+            indexType:pip->mtl.index_type
+            indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
+            indexBufferOffset:index_buffer_offset
+            indirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+            indirectBufferOffset:(NSUInteger)offset];
+    } else {
+        // non-indexed indirect rendering
+        [_sg.mtl.render_cmd_encoder drawPrimitives:pip->mtl.prim_type
+            indirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+            indirectBufferOffset:(NSUInteger)offset];
+    }
 }
 
 _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
@@ -29251,7 +29270,7 @@ SOKOL_API_IMPL void sg_draw_indirect(sg_buffer buf_id, int offset) {
         return;
     }
     #if defined(SOKOL_DEBUG)
-    if (_sg_validate_draw_indirect(buf, offset)) {
+    if (!_sg_validate_draw_indirect(buf, offset)) {
         return;
     }
     #endif
@@ -29302,7 +29321,7 @@ SOKOL_API_IMPL void sg_dispatch_indirect(sg_buffer buf_id, int offset) {
         return;
     }
     #if defined(SOKOL_DEBUG)
-    if (_sg_validate_dispatch_indirect(buf, offset)) {
+    if (!_sg_validate_dispatch_indirect(buf, offset)) {
         return;
     }
     #endif
