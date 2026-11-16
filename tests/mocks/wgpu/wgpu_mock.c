@@ -707,7 +707,8 @@ static obj_t* buffer_create(const WGPUBufferDescriptor* d) {
     bi->mapped = bi->mapped_at_creation;
     sv_copy(bi->label, sizeof(bi->label), d->label);
     const char* l = label_or_empty(bi->label);
-    if ((d->usage == 0) || ((d->usage & ~(uint64_t)0xFF) != 0)) {
+    // known usage bits: MapRead .. Indirect (QueryResolve is not mocked)
+    if ((d->usage == 0) || ((d->usage & ~(uint64_t)0x1FF) != 0)) {
         err("CreateBuffer(%s): invalid usage 0x%llx", l, LL(d->usage));
     }
     if (((d->usage & WGPUBufferUsage_MapRead) != 0) && ((d->usage & ~(WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst)) != 0)) {
@@ -2925,6 +2926,96 @@ WGPUCommandBuffer wgpuCommandEncoderFinish(WGPUCommandEncoder enc, const WGPUCom
     return (WGPUCommandBuffer)o;
 }
 
+// ---- indirect draws and dispatches
+#define WM_DRAW_INDIRECT_ARGS_SIZE (16)
+#define WM_DRAW_INDEXED_INDIRECT_ARGS_SIZE (20)
+#define WM_DISPATCH_INDIRECT_ARGS_SIZE (12)
+
+static obj_t* check_indirect_buffer(WGPUBuffer buf, uint64_t offset, uint64_t args_size, const char* fn) {
+    obj_t* b = lookup(buf, WGPU_MOCK_OBJ_BUFFER, fn);
+    if (!b) {
+        return 0;
+    }
+    const wgpu_mock_buffer_info_t* bi = &b->u.buffer.info;
+    if (!(bi->usage & WGPUBufferUsage_Indirect)) {
+        err("%s: buffer lacks the Indirect usage", fn);
+    }
+    if ((offset % 4) != 0) {
+        err("%s: indirect offset %llu is not a multiple of 4", fn, LL(offset));
+    }
+    if (!range_ok(offset, args_size, bi->size)) {
+        err("%s: indirect args (offset %llu, size %llu) exceed buffer size %llu", fn, LL(offset), LL(args_size), LL(bi->size));
+    }
+    if (bi->mapped) {
+        err("%s: buffer is mapped", fn);
+    }
+    return b;
+}
+
+// WebGPU forbids the use of a buffer as indirect buffer and as writable
+// storage buffer in the same usage scope. Only the currently set bind groups
+// are checked, this matches the compute pass scope (one dispatch), but is a
+// subset of the render pass scope (the whole pass).
+static void check_indirect_vs_storage(const wgpu_mock_bind_slot_t* slots, WGPUBuffer buf, const char* fn) {
+    for (int i = 0; i < WGPU_MOCK_MAX_BIND_GROUPS; i++) {
+        const obj_t* bg = (const obj_t*)slots[i].group;
+        if (!bg) {
+            continue;
+        }
+        const wgpu_mock_bind_group_info_t* bgi = &bg->u.bg.info;
+        const obj_t* bgl = (const obj_t*)bgi->layout;
+        if (!bgl) {
+            continue;
+        }
+        for (int e = 0; e < bgi->num_entries; e++) {
+            if (bgi->entries[e].buffer != buf) {
+                continue;
+            }
+            const WGPUBindGroupLayoutEntry* le = find_bgl_entry(&bgl->u.bgl.info, bgi->entries[e].binding);
+            if (le && (le->buffer.type == WGPUBufferBindingType_Storage)) {
+                err("%s: buffer is used as indirect buffer and as writable storage buffer (bind group %d, binding %u)", fn, i, bgi->entries[e].binding);
+            }
+        }
+    }
+}
+
+// the firstInstance member of the indirect draw args in the mock buffer storage
+static uint32_t indirect_first_instance(const obj_t* b, uint64_t offset, bool indexed) {
+    const uint64_t pos = offset + (indexed ? 16 : 12);
+    if (!b->u.buffer.data || ((pos + 4) > b->u.buffer.info.size)) {
+        return 0;
+    }
+    uint32_t val;
+    memcpy(&val, b->u.buffer.data + pos, sizeof(val));
+    return val;
+}
+
+static void render_draw_indirect(WGPURenderPassEncoder enc, WGPUBuffer buf, uint64_t offset, bool indexed, const char* fn) {
+    if (!rpass(enc, fn)) {
+        return;
+    }
+    // the draw arguments are unknown here, so only the count independent checks run
+    render_check_draw(fn, indexed, 0, 0, 0, 0);
+    const uint64_t args_size = indexed ? WM_DRAW_INDEXED_INDIRECT_ARGS_SIZE : WM_DRAW_INDIRECT_ARGS_SIZE;
+    const obj_t* b = check_indirect_buffer(buf, offset, args_size, fn);
+    if (!b) {
+        return;
+    }
+    check_indirect_vs_storage(g_rpe.bind_groups, buf, fn);
+    if (indexed) {
+        g_rpe.num_indexed_indirect_draws++;
+    } else {
+        g_rpe.num_indirect_draws++;
+    }
+    if (!has_feature(WGPUFeatureName_IndirectFirstInstance) && range_ok(offset, args_size, b->u.buffer.info.size)) {
+        if (indirect_first_instance(b, offset, indexed) != 0) {
+            g_rpe.num_noop_indirect_draws++;
+        }
+    }
+    g_rpe.last_indirect_buffer = buf;
+    g_rpe.last_indirect_offset = offset;
+}
+
 // compute pass
 void wgpuComputePassEncoderSetPipeline(WGPUComputePassEncoder enc, WGPUComputePipeline pip) {
     wgpu_mock_call_t* c = begin_call(WGPU_MOCK_FUNC_wgpuComputePassEncoderSetPipeline, enc);
@@ -2967,6 +3058,29 @@ void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder enc, uint32
     g_cpe.last_dispatch[0] = x;
     g_cpe.last_dispatch[1] = y;
     g_cpe.last_dispatch[2] = z;
+}
+
+void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset) {
+    const char* fn = "wgpuComputePassEncoderDispatchWorkgroupsIndirect";
+    wgpu_mock_call_t* c = begin_call(WGPU_MOCK_FUNC_wgpuComputePassEncoderDispatchWorkgroupsIndirect, enc);
+    arg_p(c, indirect_buffer);
+    arg_u(c, indirect_offset);
+    if (!cpass(enc, fn)) {
+        return;
+    }
+    const obj_t* p = (const obj_t*)g_cpe.pipeline;
+    if (!p) {
+        err("%s: no pipeline is set", fn);
+    } else {
+        check_bind_groups(g_cpe.bind_groups, (const obj_t*)p->u.cp.info.layout, fn);
+    }
+    if (!check_indirect_buffer(indirect_buffer, indirect_offset, WM_DISPATCH_INDIRECT_ARGS_SIZE, fn)) {
+        return;
+    }
+    check_indirect_vs_storage(g_cpe.bind_groups, indirect_buffer, fn);
+    g_cpe.num_indirect_dispatches++;
+    g_cpe.last_indirect_buffer = indirect_buffer;
+    g_cpe.last_indirect_offset = indirect_offset;
 }
 
 void wgpuComputePassEncoderEnd(WGPUComputePassEncoder enc) {
@@ -3140,6 +3254,20 @@ void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder enc, uint32_t index_
     g_rpe.last_first_vertex_or_index = first_index;
     g_rpe.last_base_vertex = base_vertex;
     g_rpe.last_first_instance = first_instance;
+}
+
+void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset) {
+    wgpu_mock_call_t* c = begin_call(WGPU_MOCK_FUNC_wgpuRenderPassEncoderDrawIndirect, enc);
+    arg_p(c, indirect_buffer);
+    arg_u(c, indirect_offset);
+    render_draw_indirect(enc, indirect_buffer, indirect_offset, false, "wgpuRenderPassEncoderDrawIndirect");
+}
+
+void wgpuRenderPassEncoderDrawIndexedIndirect(WGPURenderPassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset) {
+    wgpu_mock_call_t* c = begin_call(WGPU_MOCK_FUNC_wgpuRenderPassEncoderDrawIndexedIndirect, enc);
+    arg_p(c, indirect_buffer);
+    arg_u(c, indirect_offset);
+    render_draw_indirect(enc, indirect_buffer, indirect_offset, true, "wgpuRenderPassEncoderDrawIndexedIndirect");
 }
 
 void wgpuRenderPassEncoderEnd(WGPURenderPassEncoder enc) {

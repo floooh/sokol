@@ -19,7 +19,8 @@
       and the state set on the current pass encoders
     - validation: the mock checks a subset of the WebGPU validation rules
       (alignments, usage flags, bounds, bind group compatibility, use of
-      released objects) and records a message for every violation. Real
+      released objects, indirect vs writable storage buffer use) and records
+      a message for every violation. Real
       WebGPU would raise a validation error in these cases, so a test run
       without recorded messages is a useful correctness check.
     - fault injection: forced creation failures plus configurable device
@@ -112,6 +113,7 @@
     _WGPUM_XMACRO(wgpuComputePassEncoderSetPipeline) \
     _WGPUM_XMACRO(wgpuComputePassEncoderSetBindGroup) \
     _WGPUM_XMACRO(wgpuComputePassEncoderDispatchWorkgroups) \
+    _WGPUM_XMACRO(wgpuComputePassEncoderDispatchWorkgroupsIndirect) \
     _WGPUM_XMACRO(wgpuComputePassEncoderEnd) \
     _WGPUM_XMACRO(wgpuComputePassEncoderRelease) \
     _WGPUM_XMACRO(wgpuRenderPassEncoderSetPipeline) \
@@ -124,6 +126,8 @@
     _WGPUM_XMACRO(wgpuRenderPassEncoderSetVertexBuffer) \
     _WGPUM_XMACRO(wgpuRenderPassEncoderDraw) \
     _WGPUM_XMACRO(wgpuRenderPassEncoderDrawIndexed) \
+    _WGPUM_XMACRO(wgpuRenderPassEncoderDrawIndirect) \
+    _WGPUM_XMACRO(wgpuRenderPassEncoderDrawIndexedIndirect) \
     _WGPUM_XMACRO(wgpuRenderPassEncoderEnd) \
     _WGPUM_XMACRO(wgpuRenderPassEncoderRelease)
 
@@ -179,6 +183,7 @@ typedef enum {
     *PassEncoderSetPipeline     p[0]=pipeline
     *PassEncoderSetBindGroup    u[0]=group index, p[1]=group, u[2]=dynamic offset count
     DispatchWorkgroups          u[0..2]=x,y,z
+    DispatchWorkgroupsIndirect  p[0]=indirect buffer, u[1]=indirect offset
     SetBlendConstant            f[0..3]=r,g,b,a
     SetStencilReference         u[0]=reference
     SetViewport                 f[0..5]=x,y,w,h,min depth,max depth
@@ -188,6 +193,7 @@ typedef enum {
     Draw                        u[0..3]=vertex count, instance count, first vertex, first instance
     DrawIndexed                 u[0]=index count, u[1]=instance count, u[2]=first index,
                                 i[3]=base vertex, u[4]=first instance
+    Draw(Indexed)Indirect       p[0]=indirect buffer, u[1]=indirect offset
 */
 typedef union {
     int64_t i;
@@ -386,6 +392,15 @@ typedef struct {
     uint32_t last_first_vertex_or_index;
     int32_t last_base_vertex;
     uint32_t last_first_instance;
+    int num_indirect_draws;
+    int num_indexed_indirect_draws;
+    // Indirect draws with firstInstance != 0 in the args while the device lacks
+    // IndirectFirstInstance. WebGPU turns these into a no-op without an error.
+    // The args are read from the mock buffer storage at encode time.
+    int num_noop_indirect_draws;
+    // buffer and offset of the last indirect draw
+    const void* last_indirect_buffer;
+    uint64_t last_indirect_offset;
 } wgpu_mock_render_pass_encoder_state_t;
 
 // state of the most recent compute pass encoder
@@ -396,6 +411,10 @@ typedef struct {
     wgpu_mock_bind_slot_t bind_groups[WGPU_MOCK_MAX_BIND_GROUPS];
     int num_dispatches;
     uint32_t last_dispatch[3];
+    int num_indirect_dispatches;
+    // buffer and offset of the last indirect dispatch
+    const void* last_indirect_buffer;
+    uint64_t last_indirect_offset;
 } wgpu_mock_compute_pass_encoder_state_t;
 
 // copy commands recorded on the most recent command encoder
