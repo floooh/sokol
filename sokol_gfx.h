@@ -2649,6 +2649,7 @@ typedef struct sg_features {
     bool separate_buffer_types;         // data can't move between index buffers and other buffer types, neither via usage combination nor copies (webgl2 restriction)
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
+    bool draw_indirect_base_instance;   // draw-indirect with (base instance > 0) supported
     bool dual_source_blending;          // dual-source-blending supported
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
@@ -16987,6 +16988,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.draw_indirect_base_instance = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -18695,7 +18697,7 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 
 _SOKOL_PRIVATE void _sg_mtl_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    SOKOL_ASSERT(buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
@@ -18732,7 +18734,7 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
 
 _SOKOL_PRIVATE void _sg_mtl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-    SOKOL_ASSERT(buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
@@ -18988,6 +18990,9 @@ _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg)
     }
     if (usg->storage_buffer) {
         res |= (int)WGPUBufferUsage_Storage;
+    }
+    if (usg->indirect_buffer) {
+        res |= (int)WGPUBufferUsage_Indirect;
     }
     if (usg->copy_src) {
         res |= (int)WGPUBufferUsage_CopySrc;
@@ -19382,6 +19387,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.draw_indirect_base_instance = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_IndirectFirstInstance);
     _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
     _sg.features.vertexformat_int10_n2 = false;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -21113,6 +21119,20 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
     }
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.wgpu.rpass_enc);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
+    if (_sg.use_indexed_draw) {
+        wgpuRenderPassEncoderDrawIndexedIndirect(_sg.wgpu.rpass_enc, buf->wgpu.buf, (uint64_t)offset);
+    } else {
+        wgpuRenderPassEncoderDrawIndirect(_sg.wgpu.rpass_enc, buf->wgpu.buf, (uint64_t)offset);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.wgpu.cpass_enc);
     if (_sg.wgpu.uniform.dirty) {
@@ -21122,6 +21142,16 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
         (uint32_t)num_groups_x,
         (uint32_t)num_groups_y,
         (uint32_t)num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.wgpu.cpass_enc);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
+    wgpuComputePassEncoderDispatchWorkgroupsIndirect(_sg.wgpu.cpass_enc, buf->wgpu.buf, (uint64_t)offset);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
