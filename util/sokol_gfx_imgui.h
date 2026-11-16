@@ -4859,6 +4859,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
     _sgimgui_igtext("    draw_indirect_base_instance: %s", _sgimgui_bool_string(f.draw_indirect_base_instance));
+    _sgimgui_igtext("    draw_indirect_index_buffer_offset: %s", _sgimgui_bool_string(f.draw_indirect_index_buffer_offset));
     _sgimgui_igtext("    dual_source_blending: %s", _sgimgui_bool_string(f.dual_source_blending));
     _sgimgui_igtext("    vertexformat_int10_n2: %s", _sgimgui_bool_string(f.vertexformat_int10_n2));
     _sgimgui_igtext("    copy_buffer_to_image_relaxed_buffer_type: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_buffer_type));
