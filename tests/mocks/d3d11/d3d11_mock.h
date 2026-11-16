@@ -79,6 +79,12 @@ typedef enum d3d11_mock_call_kind_t {
     D3D11_MOCK_CALL_DRAW_INSTANCED,
     D3D11_MOCK_CALL_DRAW_INDEXED_INSTANCED,
     D3D11_MOCK_CALL_DISPATCH,
+    /* indirect draw/dispatch: dst=args buffer, args[0]=byte offset,
+       buffer_desc=desc of the args buffer, result=E_INVALIDARG if the D3D11
+       runtime would reject the call (see d3d11_mock.c) */
+    D3D11_MOCK_CALL_DRAW_INDEXED_INSTANCED_INDIRECT,
+    D3D11_MOCK_CALL_DRAW_INSTANCED_INDIRECT,
+    D3D11_MOCK_CALL_DISPATCH_INDIRECT,
     /* resource binding setters (args[0]=StartSlot, args[1]=Num, ptrs[]) */
     D3D11_MOCK_CALL_VS_SET_SHADER_RESOURCES,
     D3D11_MOCK_CALL_PS_SET_SHADER_RESOURCES,
