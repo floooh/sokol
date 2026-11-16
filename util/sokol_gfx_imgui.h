@@ -891,6 +891,7 @@ static _sgimgui_t _sgimgui;
 
 #define _SGIMGUI_SLOT_MASK (0xFFFF)
 #define _SGIMGUI_LIST_WIDTH (192)
+#define _SGIMGUI_LIST_CHILD_FLAGS (ImGuiChildFlags_Borders|ImGuiChildFlags_ResizeX)
 #define _SGIMGUI_COLOR_OTHER 0xFFCCCCCC
 #define _SGIMGUI_COLOR_RSRC 0xFF00FFFF
 #define _SGIMGUI_COLOR_PASS 0xFFFFFF00
@@ -3661,7 +3662,7 @@ _SOKOL_PRIVATE void _sgimgui_show_view(_sgimgui_t* ctx, sg_view view) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->buffer_window.num_slots; i++) {
         sg_buffer buf = ctx->buffer_window.slots[i].res_id;
         sg_resource_state state = sg_query_buffer_state(buf);
@@ -3676,7 +3677,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->image_window.num_slots; i++) {
         sg_image img = ctx->image_window.slots[i].res_id;
         sg_resource_state state = sg_query_image_state(img);
@@ -3691,7 +3692,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->sampler_window.num_slots; i++) {
         sg_sampler smp = ctx->sampler_window.slots[i].res_id;
         sg_resource_state state = sg_query_sampler_state(smp);
@@ -3706,7 +3707,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->shader_window.num_slots; i++) {
         sg_shader shd = ctx->shader_window.slots[i].res_id;
         sg_resource_state state = sg_query_shader_state(shd);
@@ -3721,7 +3722,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->pipeline_window.num_slots; i++) {
         sg_pipeline pip = ctx->pipeline_window.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
@@ -3736,7 +3737,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("view_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("view_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->view_window.num_slots; i++) {
         sg_view view = ctx->view_window.slots[i].res_id;
         sg_resource_state state = sg_query_view_state(view);
@@ -3760,7 +3761,7 @@ _SOKOL_PRIVATE uint32_t _sgimgui_hash_combine(uint32_t h, uint32_t val) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     const int num_items = _sgimgui_capture_num_read_items(ctx);
     uint64_t group_stack = 1;   // bit set: group unfolded, cleared: folded
     int depth = 1;
