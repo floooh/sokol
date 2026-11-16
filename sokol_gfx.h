@@ -7146,6 +7146,15 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
     #ifndef GL_COMPUTE_SHADER
     #define GL_COMPUTE_SHADER 0x91B9
     #endif
+    #ifndef GL_DRAW_INDIRECT_BUFFER
+    #define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+    #endif
+    #ifndef GL_DISPATCH_INDIRECT_BUFFER
+    #define GL_DISPATCH_INDIRECT_BUFFER 0x90EE
+    #endif
+    #ifndef GL_COMMAND_BARRIER_BIT
+    #define GL_COMMAND_BARRIER_BIT 0x00000040
+    #endif
     #ifndef _SG_GL_CHECK_ERROR
         #if defined(__EMSCRIPTEN__)
             // generally turn off glGetError() on WASM, it's a too big performance hit
@@ -11534,6 +11543,20 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.index_buffer = 0;
         _sg_stats_inc(gl.num_bind_buffer);
     }
+    if (force || (_sg.gl.cache.draw_indirect_buffer != 0)) {
+        if (_sg.features.compute) {
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+        }
+        _sg.gl.cache.draw_indirect_buffer = 0;
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (force || (_sg.gl.cache.dispatch_indirect_buffer != 0)) {
+        if (_sg.features.compute) {
+            glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+        }
+        _sg.gl.cache.dispatch_indirect_buffer = 0;
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
     if (force || (_sg.gl.cache.storage_buffer != 0)) {
         if (_sg.features.compute) {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -11645,12 +11668,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
             _sg.gl.cache.stored_index_buffer = 0;
         }
     } else if (target == GL_DRAW_INDIRECT_BUFFER) {
-        if (_sg.gl.cache.draw_indirect_buffer != 0) {
+        if (_sg.gl.cache.stored_draw_indirect_buffer != 0) {
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_draw_indirect_buffer);
             _sg.gl.cache.stored_draw_indirect_buffer = 0;
         }
     } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
-        if (_sg.gl.cache.dispatch_indirect_buffer != 0) {
+        if (_sg.gl.cache.stored_dispatch_indirect_buffer != 0) {
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_dispatch_indirect_buffer);
             _sg.gl.cache.stored_dispatch_indirect_buffer = 0;
         }
@@ -13663,6 +13686,7 @@ _SOKOL_PRIVATE void _sg_gl_handle_indirect_memory_barrier(_sg_buffer_t* buf) {
     if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_INDIRECTBUFFER) {
         glMemoryBarrier(GL_COMMAND_BARRIER_BIT);
         buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_INDIRECTBUFFER;
+        _sg_stats_inc(gl.num_memory_barriers);
     }
 }
 #endif
