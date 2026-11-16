@@ -10220,7 +10220,7 @@ _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_i
     _SOKOL_UNUSED(base_instance);
 }
 
-_SOKOL_PRIVATE void _sg_dummy_draw_indirect(_sg_buffer_t* buf, int offset)
+_SOKOL_PRIVATE void _sg_dummy_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
     _SOKOL_UNUSED(buf);
@@ -13575,6 +13575,13 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
     }
 }
 
+_SOKOL_PRIVATE void _sg_gl_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(false && "FIXME _sg_gl_draw_indirect");
+    _SOKOL_UNUSED(buf && offset);
+}
+
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
         if (!_sg.features.compute) {
@@ -13584,6 +13591,13 @@ _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_
     #else
         (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
     #endif
+}
+
+_SOKOL_PRIVATE void _sg_gl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(false && "FIXME _sg_gl_dispatch_indirect");
+    _SOKOL_UNUSED(buf && offset);
 }
 
 _SOKOL_PRIVATE void _sg_gl_commit(void) {
@@ -16159,8 +16173,26 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
     }
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+
+    SOKOL_ASSERT(false && "FIXME _sg_d3d11_draw_indirect");
+    _SOKOL_UNUSED(buf && offset);
+}
+
 _SOKOL_PRIVATE void _sg_d3d11_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     _sg_d3d11_Dispatch(_sg.d3d11.ctx, (UINT)num_groups_x, (UINT)num_groups_y, (UINT)num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+
+    SOKOL_ASSERT(false && "FIXME _sg_d3d11_dispatch_indirect");
+    _SOKOL_UNUSED(buf && offset);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
