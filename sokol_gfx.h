@@ -27077,8 +27077,10 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offs
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
-        _SG_VALIDATE((offset >= 0) && ((offset + item_size) <= buf->cmn.size), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
-        _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - item_size)), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+        if (offset > 0) {
+            _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        }
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
         _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
@@ -27120,8 +27122,10 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int 
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
-        _SG_VALIDATE((offset >= 0) && ((offset + (int)sizeof(sg_dispatch_indirect_args)) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
-        _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+        _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - (int)sizeof(sg_dispatch_indirect_args))), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+        if (offset >= 0) {
+            _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+        }
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
         _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
