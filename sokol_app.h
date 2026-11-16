@@ -4277,6 +4277,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
         SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureFormatsTier2;
     }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_IndirectFirstInstance)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_IndirectFirstInstance;
+    }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
     WGPULimits adapterLimits = WGPU_LIMITS_INIT;
