@@ -425,6 +425,60 @@ UTEST(sokol_cmdbuf, record_dispatch) {
     shutdown();
 }
 
+UTEST(sokol_cmdbuf, record_draw_indirect) {
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_draw_indirect(cb, (sg_buffer){ .id = 0xDEADBEEF }, 64);
+    // 1 byte opcode + 4 byte buffer id + 4 byte offset = 9 bytes
+    T((cbptr->cur - cbptr->buf) == 9);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_DRAW_INDIRECT);
+    T(read_le_u32(&cbptr->buf[1]) == 0xDEADBEEFu);
+    T(read_le_i32(&cbptr->buf[5]) == 64);
+    T(cbptr->overflown == false);
+    T(cbptr->cmd_max_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_dispatch_indirect) {
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_dispatch_indirect(cb, (sg_buffer){ .id = 0xCAFEBABE }, 12);
+    // 1 byte opcode + 4 byte buffer id + 4 byte offset = 9 bytes
+    T((cbptr->cur - cbptr->buf) == 9);
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_DISPATCH_INDIRECT);
+    T(read_le_u32(&cbptr->buf[1]) == 0xCAFEBABEu);
+    T(read_le_i32(&cbptr->buf[5]) == 12);
+    T(cbptr->overflown == false);
+    T(cbptr->cmd_max_end == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
+UTEST(sokol_cmdbuf, record_indirect_overflow) {
+    // size 16 fits one 9-byte indirect command, but not two (18 > 16)
+    init();
+    scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){ .size = 16 });
+    _scb_cmdbuf_t* cbptr = _scb_lookup_cmdbuf(cb.id);
+    T(cbptr);
+    scb_draw_indirect(cb, (sg_buffer){ .id = 1 }, 0);
+    T((cbptr->cur - cbptr->buf) == 9);
+    T(cbptr->overflown == false);
+    scb_dispatch_indirect(cb, (sg_buffer){ .id = 2 }, 4);
+    T((cbptr->cur - cbptr->buf) == 9);
+    T(cbptr->overflown == true);
+    // first command must be intact
+    T(cbptr->buf[0] == (uint8_t)_SCB_CMD_DRAW_INDIRECT);
+    T(read_le_u32(&cbptr->buf[1]) == 1);
+    T(read_le_i32(&cbptr->buf[5]) == 0);
+    scb_destroy_cmdbuf(cb);
+    shutdown();
+}
+
 UTEST(sokol_cmdbuf, record_multiple_commands) {
     init();
     scb_cmdbuf cb = scb_make_cmdbuf(&(scb_cmdbuf_desc){0});
@@ -471,6 +525,8 @@ UTEST(sokol_cmdbuf, record_invalid_cmdbuf_noop) {
     scb_draw(invalid, 0, 3, 1);
     scb_draw_ex(invalid, 0, 3, 1, 0, 0);
     scb_dispatch(invalid, 1, 1, 1);
+    scb_draw_indirect(invalid, (sg_buffer){ .id = 1 }, 0);
+    scb_dispatch_indirect(invalid, (sg_buffer){ .id = 1 }, 0);
     T(_scb.init_tag == _SCB_INIT_TAG);
     shutdown();
 }
@@ -790,6 +846,8 @@ typedef enum {
     TCALL_DRAW,
     TCALL_DRAW_EX,
     TCALL_DISPATCH,
+    TCALL_DRAW_INDIRECT,
+    TCALL_DISPATCH_INDIRECT,
     TCALL_PUSH_DEBUG_GROUP,
     TCALL_POP_DEBUG_GROUP,
 } tcall_kind;
@@ -884,6 +942,18 @@ static void hook_dispatch(int x, int y, int z, void* ud) {
     if (c) { c->i0 = x; c->i1 = y; c->i2 = z; }
 }
 
+static void hook_draw_indirect(sg_buffer buf, int offset, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_DRAW_INDIRECT);
+    if (c) { c->u0 = buf.id; c->i0 = offset; }
+}
+
+static void hook_dispatch_indirect(sg_buffer buf, int offset, void* ud) {
+    (void)ud;
+    tcall_t* c = tcalls_push(TCALL_DISPATCH_INDIRECT);
+    if (c) { c->u0 = buf.id; c->i0 = offset; }
+}
+
 static void hook_push_debug_group(const char* name, void* ud) {
     (void)ud;
     tcall_t* c = tcalls_push(TCALL_PUSH_DEBUG_GROUP);
@@ -908,6 +978,8 @@ static void install_capture_hooks(void) {
         .draw = hook_draw,
         .draw_ex = hook_draw_ex,
         .dispatch = hook_dispatch,
+        .draw_indirect = hook_draw_indirect,
+        .dispatch_indirect = hook_dispatch_indirect,
         .push_debug_group = hook_push_debug_group,
         .pop_debug_group = hook_pop_debug_group,
     });
@@ -971,6 +1043,10 @@ UTEST(sokol_cmdbuf, submit_all_commands_roundtrip) {
     scb_draw(cb, 100, 200, 300);
     scb_draw_ex(cb, 1, 2, 3, 4, 5);
     scb_dispatch(cb, 8, 16, 32);
+    // NOTE: sg_draw/dispatch_indirect() look up the buffer before the pass check,
+    // so the slot index (lower 16 bits) must be inside the buffer pool
+    scb_draw_indirect(cb, (sg_buffer){ .id = 0x00010003 }, 20);
+    scb_dispatch_indirect(cb, (sg_buffer){ .id = 0x00020005 }, 36);
     T(cbptr->overflown == false);
     T(cbptr->cur > cbptr->buf);
     scb_submit(cb);
@@ -978,7 +1054,7 @@ UTEST(sokol_cmdbuf, submit_all_commands_roundtrip) {
     T(cbptr->cur == cbptr->buf);
     T(cbptr->overflown == false);
     // captured trace
-    T(num_tcalls == 8);
+    T(num_tcalls == 10);
     T(tcalls[0].kind == TCALL_APPLY_VIEWPORT);
     T(tcalls[0].i0 == 10 && tcalls[0].i1 == 20 && tcalls[0].i2 == 30 && tcalls[0].i3 == 40);
     T(tcalls[0].b0 == true);
@@ -1008,6 +1084,10 @@ UTEST(sokol_cmdbuf, submit_all_commands_roundtrip) {
     T(tcalls[6].i0 == 1 && tcalls[6].i1 == 2 && tcalls[6].i2 == 3 && tcalls[6].i3 == 4 && tcalls[6].i4 == 5);
     T(tcalls[7].kind == TCALL_DISPATCH);
     T(tcalls[7].i0 == 8 && tcalls[7].i1 == 16 && tcalls[7].i2 == 32);
+    T(tcalls[8].kind == TCALL_DRAW_INDIRECT);
+    T(tcalls[8].u0 == 0x00010003 && tcalls[8].i0 == 20);
+    T(tcalls[9].kind == TCALL_DISPATCH_INDIRECT);
+    T(tcalls[9].u0 == 0x00020005 && tcalls[9].i0 == 36);
     T(num_scb_log_items == 0);
     scb_destroy_cmdbuf(cb);
     shutdown();
