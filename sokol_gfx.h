@@ -5005,13 +5005,21 @@ typedef struct sg_frame_stats_d3d11_draw {
     uint32_t num_draw_indexed;
     uint32_t num_draw_instanced;
     uint32_t num_draw;
+    uint32_t num_draw_indexed_instanced_indirect;
+    uint32_t num_draw_instanced_indirect;
 } sg_frame_stats_d3d11_draw;
+
+typedef struct sg_frame_stats_d3d11_dispatch {
+    uint32_t num_dispatch;
+    uint32_t num_dispatch_indirect;
+} sg_frame_stats_d3d11_dispatch;
 
 typedef struct sg_frame_stats_d3d11 {
     sg_frame_stats_d3d11_pass pass;
     sg_frame_stats_d3d11_pipeline pipeline;
     sg_frame_stats_d3d11_bindings bindings;
     sg_frame_stats_d3d11_draw draw;
+    sg_frame_stats_d3d11_dispatch dispatch;
     uint32_t num_update_subresource;
     uint32_t num_copy_subresource_region;
     uint32_t num_map;
@@ -5396,6 +5404,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .vertex_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .storage_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INDIRECTBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .indirect_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INJECTED, "sg_buffer_desc.usage: cannot inject backend-native buffers for .staging or .staging_index_buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_COPYDST, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot have initial data") \
@@ -14345,11 +14354,35 @@ static inline void _sg_d3d11_DrawInstanced(ID3D11DeviceContext* self, UINT Verte
     #endif
 }
 
+static inline void _sg_d3d11_DrawIndexedInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DrawIndexedInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DrawIndexedInstancedIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
+    #endif
+}
+
+static inline void _sg_d3d11_DrawInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DrawInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DrawInstancedIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
+    #endif
+}
+
 static inline void _sg_d3d11_Dispatch(ID3D11DeviceContext* self, UINT ThreadGroupCountX, UINT ThreadGroupCountY, UINT ThreadGroupCountZ) {
     #if defined(__cplusplus)
         self->Dispatch(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
     #else
         self->lpVtbl->Dispatch(self, ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
+    #endif
+}
+
+static inline void _sg_d3d11_DispatchIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DispatchIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DispatchIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
     #endif
 }
 
@@ -14444,7 +14477,14 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_misc_flags(const sg_buffer_usage* usg) {
-    return usg->storage_buffer ? D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS : 0;
+    UINT flags = 0;
+    if (usg->storage_buffer) {
+        flags |= D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+    }
+    if (usg->indirect_buffer) {
+        flags |= D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+    }
+    return flags;
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_base_pixel_format(sg_pixel_format fmt) {
@@ -16182,22 +16222,28 @@ _SOKOL_PRIVATE void _sg_d3d11_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-
-    SOKOL_ASSERT(false && "FIXME _sg_d3d11_draw_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    if (_sg.use_indexed_draw) {
+        _sg_d3d11_DrawIndexedInstancedIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+        _sg_stats_inc(d3d11.draw.num_draw_indexed_instanced_indirect);
+    } else {
+        _sg_d3d11_DrawInstancedIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+        _sg_stats_inc(d3d11.draw.num_draw_instanced_indirect);
+    }
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     _sg_d3d11_Dispatch(_sg.d3d11.ctx, (UINT)num_groups_x, (UINT)num_groups_y, (UINT)num_groups_z);
+    _sg_stats_inc(d3d11.dispatch.num_dispatch);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(_sg.d3d11.ctx);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-
-    SOKOL_ASSERT(false && "FIXME _sg_d3d11_dispatch_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    _sg_d3d11_DispatchIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+    _sg_stats_inc(d3d11.dispatch.num_dispatch_indirect);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
@@ -25589,6 +25635,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(!desc->usage.vertex_buffer, VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER);
             _SG_VALIDATE(!desc->usage.index_buffer, VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER);
             _SG_VALIDATE(!desc->usage.storage_buffer, VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER);
+            _SG_VALIDATE(!desc->usage.indirect_buffer, VALIDATE_BUFFERDESC_STAGING_VS_INDIRECTBUFFER);
             // staging buffers cannot be injected
             _SG_VALIDATE(!injected, VALIDATE_BUFFERDESC_STAGING_VS_INJECTED);
             // staging cannot (yet?) be combined with copy_dst
