@@ -5086,6 +5086,10 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed_instanced_indirect);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced_indirect);
+                _sgimgui_frame_stats(prev_frame.d3d11.dispatch.num_dispatch);
+                _sgimgui_frame_stats(prev_frame.d3d11.dispatch.num_dispatch_indirect);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_update_subresource);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_copy_subresource_region);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_map);
