@@ -7128,6 +7128,83 @@ UTEST(sokol_gfx, draw_indirect_indexed_offset_range) {
     sg_shutdown();
 }
 
+// indexed indirect draws with an index buffer offset need sg_features.draw_indirect_index_buffer_offset
+UTEST(sokol_gfx, draw_indirect_index_buffer_offset_not_supported) {
+    setup_with_compute(&(sg_desc){0});
+    _sg.features.draw_indirect_index_buffer_offset = false;
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .index_buffer = s.ibuf, .index_buffer_offset = 4 });
+    // direct draws are not affected
+    reset_log_items();
+    sg_draw(0, 2, 1);
+    T(num_log_called == 0);
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    // the same draw without index buffer offset is ok
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .index_buffer = s.ibuf });
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_index_buffer_offset_supported) {
+    setup_with_compute(&(sg_desc){0});
+    _sg.features.draw_indirect_index_buffer_offset = true;
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .index_buffer = s.ibuf, .index_buffer_offset = 4 });
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// the index buffer offset is ignored for non-indexed indirect draws
+UTEST(sokol_gfx, draw_indirect_index_buffer_offset_non_indexed) {
+    setup_with_compute(&(sg_desc){0});
+    _sg.features.draw_indirect_index_buffer_offset = false;
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .index_buffer_offset = 4 });
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// sg_apply_pipeline() resets the recorded index buffer offset
+UTEST(sokol_gfx, draw_indirect_index_buffer_offset_reset_by_apply_pipeline) {
+    setup_with_compute(&(sg_desc){0});
+    _sg.features.draw_indirect_index_buffer_offset = false;
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s.vbuf, .index_buffer = s.ibuf, .index_buffer_offset = 4 });
+    // no sg_apply_bindings() after the 2nd sg_apply_pipeline(): only the missing bindings are reported
+    sg_apply_pipeline(s.indexed_pip);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
 // negative offsets must only report OFFSET_RANGE (no OFFSET_MULTIPLE_4, no assert)
 UTEST(sokol_gfx, draw_indirect_offset_negative) {
     setup_with_compute(&(sg_desc){0});

@@ -185,6 +185,7 @@ typedef uint64_t        GLuint64;
 #define GL_COLOR                                       0x1800
 #define GL_COLOR_ATTACHMENT0                           0x8CE0
 #define GL_COLOR_BUFFER_BIT                            0x00004000
+#define GL_COMMAND_BARRIER_BIT                         0x00000040
 #define GL_COMPARE_REF_TO_TEXTURE                      0x884E
 #define GL_COMPILE_STATUS                              0x8B81
 #define GL_COMPRESSED_R11_EAC                          0x9270
@@ -230,8 +231,10 @@ typedef uint64_t        GLuint64;
 #define GL_DEPTH_STENCIL                               0x84F9
 #define GL_DEPTH_STENCIL_ATTACHMENT                    0x821A
 #define GL_DEPTH_TEST                                  0x0B71
+#define GL_DISPATCH_INDIRECT_BUFFER                    0x90EE
 #define GL_DITHER                                      0x0BD0
 #define GL_DRAW_FRAMEBUFFER                            0x8CA9
+#define GL_DRAW_INDIRECT_BUFFER                        0x8F3F
 #define GL_DST_ALPHA                                   0x0304
 #define GL_DST_COLOR                                   0x0306
 #define GL_DYNAMIC_COPY                                0x88EA
@@ -576,6 +579,9 @@ typedef uint64_t        GLuint64;
     _GLM_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
     _GLM_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
     _GLM_XMACRO(glCopyImageSubData,                void, (GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)) \
+    _GLM_XMACRO(glDrawArraysIndirect,              void, (GLenum mode, const void* indirect)) \
+    _GLM_XMACRO(glDrawElementsIndirect,            void, (GLenum mode, GLenum type, const void* indirect)) \
+    _GLM_XMACRO(glDispatchComputeIndirect,         void, (GLintptr indirect)) \
     _GLM_XMACRO(glInvalidateFramebuffer,          void, (GLenum target, GLsizei numAttachments, const GLenum* attachments))
 
 // generate GL function prototypes
