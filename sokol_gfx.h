@@ -2650,6 +2650,7 @@ typedef struct sg_features {
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
     bool draw_indirect_base_instance;   // draw-indirect with (base instance > 0) supported
+    bool draw_indirect_index_buffer_offset; // draw-indirect with (sg_bindings.index_buffer_offset > 0) supported
     bool dual_source_blending;          // dual-source-blending supported
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
@@ -7028,6 +7029,7 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
         #define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
         #define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
+        #define GL_COMMAND_BARRIER_BIT 0x00000040
         #define GL_MIN 0x8007
         #define GL_MAX 0x8008
         #define GL_WRITE_ONLY 0x88B9
@@ -7043,6 +7045,8 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #define GL_COPY_READ_BUFFER 0x8F36
         #define GL_COPY_WRITE_BUFFER 0x8F37
         #define GL_PIXEL_UNPACK_BUFFER 0x88EC
+        #define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+        #define GL_DISPATCH_INDIRECT_BUFFER 0x90EE
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7452,7 +7456,8 @@ typedef enum {
     _SG_GL_GPUDIRTY_TEXTURE = (1<<3),
     _SG_GL_GPUDIRTY_STORAGEIMAGE = (1<<4),
     _SG_GL_GPUDIRTY_ATTACHMENT = (1<<5),
-    _SG_GL_GPUDIRTY_BUFFER_ALL = _SG_GL_GPUDIRTY_VERTEXBUFFER | _SG_GL_GPUDIRTY_INDEXBUFFER | _SG_GL_GPUDIRTY_STORAGEBUFFER,
+    _SG_GL_GPUDIRTY_INDIRECTBUFFER = (1<<6),
+    _SG_GL_GPUDIRTY_BUFFER_ALL = _SG_GL_GPUDIRTY_VERTEXBUFFER | _SG_GL_GPUDIRTY_INDEXBUFFER | _SG_GL_GPUDIRTY_STORAGEBUFFER | _SG_GL_GPUDIRTY_INDIRECTBUFFER,
     _SG_GL_GPUDIRTY_IMAGE_ALL = _SG_GL_GPUDIRTY_TEXTURE | _SG_GL_GPUDIRTY_STORAGEIMAGE | _SG_GL_GPUDIRTY_ATTACHMENT,
 } _sg_gl_gpudirty_t;
 
@@ -7590,11 +7595,15 @@ typedef struct {
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint vertex_buffer;
     GLuint index_buffer;
+    GLuint draw_indirect_buffer;
+    GLuint dispatch_indirect_buffer;
     GLuint storage_buffer;  // general bind point
     GLuint storage_buffers[_SG_GL_MAX_SBUF_BINDINGS];
     int storage_buffer_offsets[_SG_GL_MAX_SBUF_BINDINGS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
+    GLuint stored_draw_indirect_buffer;
+    GLuint stored_dispatch_indirect_buffer;
     GLuint stored_storage_buffer;
     GLuint prog;
     _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_MAX_TEX_SMP_BINDINGS];
@@ -10454,6 +10463,9 @@ _SOKOL_PRIVATE void _sg_dummy_copy_image_to_image(_sg_image_t* src_img, _sg_imag
     _SG_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
     _SG_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
     _SG_XMACRO(glCopyImageSubData,                void, (GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)) \
+    _SG_XMACRO(glDrawArraysIndirect,              void, (GLenum mode, const void* indirect)) \
+    _SG_XMACRO(glDrawElementsIndirect,            void, (GLenum mode, GLenum type, const void* indirect)) \
+    _SG_XMACRO(glDispatchComputeIndirect,         void, (GLintptr indirect)) \
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -10508,6 +10520,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(const sg_buffer_usage* usg) {
         return GL_ELEMENT_ARRAY_BUFFER;
     } else if (usg->storage_buffer) {
         return GL_SHADER_STORAGE_BUFFER;
+    } else if (usg->indirect_buffer) {
+        return GL_DRAW_INDIRECT_BUFFER;
     } else {
         SOKOL_UNREACHABLE; return 0;
     }
@@ -11258,6 +11272,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
+    _sg.features.draw_indirect_base_instance = version >= 420;
+    _sg.features.draw_indirect_index_buffer_offset = false;
     _sg.features.dual_source_blending = version >= 330;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -11397,6 +11413,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.draw_base_vertex = false;
     #endif
     _sg.features.draw_base_instance = false;
+    _sg.features.draw_indirect_base_instance = false;
+    _sg.features.draw_indirect_index_buffer_offset = false;
     _sg.features.dual_source_blending = false;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -11533,7 +11551,11 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
-    SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target) || (GL_SHADER_STORAGE_BUFFER == target));
+    SOKOL_ASSERT((GL_ARRAY_BUFFER == target)
+        || (GL_ELEMENT_ARRAY_BUFFER == target)
+        || (GL_SHADER_STORAGE_BUFFER == target)
+        || (GL_DRAW_INDIRECT_BUFFER == target)
+        || (GL_DISPATCH_INDIRECT_BUFFER == target));
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
@@ -11544,6 +11566,22 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
         if (_sg.gl.cache.index_buffer != buffer) {
             _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
+            _sg_stats_inc(gl.num_bind_buffer);
+        }
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.draw_indirect_buffer != buffer) {
+            _sg.gl.cache.draw_indirect_buffer = buffer;
+            if (_sg.features.compute) {
+                glBindBuffer(target, buffer);
+            }
+            _sg_stats_inc(gl.num_bind_buffer);
+        }
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.dispatch_indirect_buffer != buffer) {
+            _sg.gl.cache.dispatch_indirect_buffer = buffer;
+            if (_sg.features.compute) {
+                glBindBuffer(target, buffer);
+            }
             _sg_stats_inc(gl.num_bind_buffer);
         }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
@@ -11581,6 +11619,10 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
         _sg.gl.cache.stored_vertex_buffer = _sg.gl.cache.vertex_buffer;
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         _sg.gl.cache.stored_index_buffer = _sg.gl.cache.index_buffer;
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        _sg.gl.cache.stored_draw_indirect_buffer = _sg.gl.cache.draw_indirect_buffer;
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        _sg.gl.cache.stored_dispatch_indirect_buffer = _sg.gl.cache.dispatch_indirect_buffer;
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         _sg.gl.cache.stored_storage_buffer = _sg.gl.cache.storage_buffer;
     } else {
@@ -11589,21 +11631,29 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
+    // NOTE: we only care about restoring valid ids
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_vertex_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
             _sg.gl.cache.stored_vertex_buffer = 0;
         }
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_index_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
             _sg.gl.cache.stored_index_buffer = 0;
         }
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.draw_indirect_buffer != 0) {
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_draw_indirect_buffer);
+            _sg.gl.cache.stored_draw_indirect_buffer = 0;
+        }
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.dispatch_indirect_buffer != 0) {
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_dispatch_indirect_buffer);
+            _sg.gl.cache.stored_dispatch_indirect_buffer = 0;
+        }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.stored_storage_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_storage_buffer);
             _sg.gl.cache.stored_storage_buffer = 0;
         }
@@ -11622,6 +11672,16 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.index_buffer) {
         _sg.gl.cache.index_buffer = 0;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (buf == _sg.gl.cache.draw_indirect_buffer) {
+        _sg.gl.cache.draw_indirect_buffer = 0;
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (buf == _sg.gl.cache.dispatch_indirect_buffer) {
+        _sg.gl.cache.dispatch_indirect_buffer = 0;
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
         _sg_stats_inc(gl.num_bind_buffer);
     }
     if (buf == _sg.gl.cache.storage_buffer) {
@@ -11644,6 +11704,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     }
     if (buf == _sg.gl.cache.stored_index_buffer) {
         _sg.gl.cache.stored_index_buffer = 0;
+    }
+    if (buf == _sg.gl.cache.stored_draw_indirect_buffer) {
+        _sg.gl.cache.stored_draw_indirect_buffer = 0;
+    }
+    if (buf == _sg.gl.cache.stored_dispatch_indirect_buffer) {
+        _sg.gl.cache.stored_dispatch_indirect_buffer = 0;
     }
     if (buf == _sg.gl.cache.stored_storage_buffer) {
         _sg.gl.cache.stored_storage_buffer = 0;
@@ -13589,11 +13655,35 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
     }
 }
 
+#if defined(_SOKOL_GL_HAS_COMPUTE)
+_SOKOL_PRIVATE void _sg_gl_handle_indirect_memory_barrier(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_INDIRECTBUFFER) {
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT);
+        buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_INDIRECTBUFFER;
+    }
+}
+#endif
+
 _SOKOL_PRIVATE void _sg_gl_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    SOKOL_ASSERT(false && "FIXME _sg_gl_draw_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        SOKOL_ASSERT(_sg.features.compute);
+        _sg_gl_handle_indirect_memory_barrier(buf);
+        const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
+        _sg_gl_cache_bind_buffer(GL_DRAW_INDIRECT_BUFFER, gl_buf);
+        const GLenum prim_type = _sg.gl.cache.cur_primitive_type;
+        const GLvoid* indirect = (const GLvoid*)(GLintptr)offset;
+        if (_sg.use_indexed_draw) {
+            const GLenum index_type = _sg.gl.cache.cur_index_type;
+            glDrawElementsIndirect(prim_type, index_type, indirect);
+        } else {
+            glDrawArraysIndirect(prim_type, indirect);
+        }
+    #else
+        _SOKOL_UNUSED(buf && offset);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
@@ -13610,8 +13700,15 @@ _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_
 _SOKOL_PRIVATE void _sg_gl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    SOKOL_ASSERT(false && "FIXME _sg_gl_dispatch_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        SOKOL_ASSERT(_sg.features.compute);
+        _sg_gl_handle_indirect_memory_barrier(buf);
+        const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
+        _sg_gl_cache_bind_buffer(GL_DISPATCH_INDIRECT_BUFFER, gl_buf);
+        glDispatchComputeIndirect((GLintptr)offset);
+    #else
+        _SOKOL_UNUSED(buf && offset);
+    #endif
 }
 
 _SOKOL_PRIVATE void _sg_gl_commit(void) {
@@ -14814,6 +14911,7 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.draw_indirect_base_instance = true;
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = false;
     // can only copy from staging buffer
@@ -17073,6 +17171,7 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.draw_indirect_base_instance = true;
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -19478,6 +19577,7 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
     _sg.features.draw_indirect_base_instance = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_IndirectFirstInstance);
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
     _sg.features.vertexformat_int10_n2 = false;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
