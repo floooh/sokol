@@ -12,6 +12,7 @@
 #define SOKOL_TRACE_HOOKS
 #include "sokol_gfx.h"
 #include "utest.h"
+#include <limits.h>     // INT_MAX
 
 #define T(b) EXPECT_TRUE(b)
 
@@ -4016,6 +4017,98 @@ UTEST(sokol_gfx, make_buffer_storagebuffer_not_supported_and_size) {
     sg_shutdown();
 }
 
+// indirect buffers with initial data, usage.vertex_buffer must not be set by default
+UTEST(sokol_gfx, make_buffer_indirect_with_data_ok) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    const uint32_t args[4] = { 3, 1, 0, 0 };
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .data = SG_RANGE(args),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    const sg_buffer_usage usage = sg_query_buffer_usage(buf);
+    T(usage.indirect_buffer);
+    T(!usage.vertex_buffer);
+    T(!usage.index_buffer);
+    T(!usage.storage_buffer);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// indirect buffers can be combined with other buffer types
+UTEST(sokol_gfx, make_buffer_indirect_combined_usage_ok) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    const uint32_t args[8] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .vertex_buffer = true, .index_buffer = true },
+        .data = SG_RANGE(args),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_usage(buf).indirect_buffer);
+    T(sg_query_buffer_usage(buf).vertex_buffer);
+    T(sg_query_buffer_usage(buf).index_buffer);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// indirect + storage buffers can be initialized by compute shaders, so they don't need data
+UTEST(sokol_gfx, make_buffer_indirect_storage_no_data_ok) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true },
+        .size = 64,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// a writable indirect buffer doesn't need data
+UTEST(sokol_gfx, make_buffer_indirect_copy_dst_no_data_ok) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .copy_dst = true },
+        .size = 64,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// an indirect-only buffer without data can't be initialized
+UTEST(sokol_gfx, make_buffer_indirect_no_data_expect_data) {
+    setup(&(sg_desc){0});
+    _sg.features.compute = true;
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .size = 64,
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_EXPECT_DATA);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, make_buffer_indirectbuffer_not_supported_and_size) {
+    setup(&(sg_desc){0});
+    const uint8_t data[10] = {0};
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .data = SG_RANGE(data),
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_BUFFERDESC_INDIRECTBUFFER_SIZE_MULTIPLE_4);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_shutdown();
+}
+
 UTEST(sokol_gfx, make_image_validate_start_canary) {
     setup(&(sg_desc){0});
     const uint32_t pixels[8][8] = {0};
@@ -6932,5 +7025,527 @@ UTEST(sokol_gfx, next_draw_valid_compute_pass) {
     };
     const int num_failed = ndv_run_sequences(&s, ndv_compute_pass(), ops, (int)(sizeof(ops) / sizeof(ops[0])));
     T(num_failed == 0);
+    sg_shutdown();
+}
+
+// sg_draw_indirect() tests
+typedef struct {
+    sg_buffer vbuf;
+    sg_buffer ibuf;
+    sg_buffer indirect_buf;     // 32 bytes, usage.indirect_buffer
+    sg_pipeline pip;            // non-indexed, 16 bytes per indirect item
+    sg_pipeline indexed_pip;    // indexed, 20 bytes per indirect item
+} draw_indirect_setup_t;
+
+static draw_indirect_setup_t create_draw_indirect_setup(void) {
+    draw_indirect_setup_t s = {0};
+    const float vertices[12] = {0};
+    const uint16_t indices[4] = {0};
+    const uint32_t args[8] = {0};
+    s.vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(vertices) });
+    s.ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
+    s.indirect_buf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    s.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){0}),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    s.indexed_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){0}),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .index_type = SG_INDEXTYPE_UINT16,
+    });
+    return s;
+}
+
+static void apply_draw_indirect(const draw_indirect_setup_t* s, bool indexed) {
+    if (indexed) {
+        sg_apply_pipeline(s->indexed_pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s->vbuf, .index_buffer = s->ibuf });
+    } else {
+        sg_apply_pipeline(s->pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = s->vbuf });
+    }
+}
+
+UTEST(sokol_gfx, draw_indirect_setup_valid) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    T(sg_query_buffer_state(s.vbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(s.ibuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(s.indirect_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.indexed_pip) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// valid offsets up to the last item in the buffer, non-indexed and indexed
+UTEST(sokol_gfx, draw_indirect_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    sg_draw_indirect(s.indirect_buf, 0);
+    sg_draw_indirect(s.indirect_buf, 16);   // 16 + 16 == 32
+    apply_draw_indirect(&s, true);
+    sg_draw_indirect(s.indirect_buf, 0);
+    sg_draw_indirect(s.indirect_buf, 12);   // 12 + 20 == 32
+    sg_end_pass();
+    T(sg_query_stats().cur_frame.num_draw_indirect == 4);
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_offset_range) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 20);   // 20 + 16 > 32
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// indexed draws use the larger sg_draw_indirect_indexed_args item size
+UTEST(sokol_gfx, draw_indirect_indexed_offset_range) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, true);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 16);   // 16 + 20 > 32 (ok for non-indexed)
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// negative offsets must only report OFFSET_RANGE (no OFFSET_MULTIPLE_4, no assert)
+UTEST(sokol_gfx, draw_indirect_offset_negative) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, -4);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, -2);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// very large offsets must not overflow in the range check
+UTEST(sokol_gfx, draw_indirect_offset_large) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, true);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, INT_MAX - 3);  // multiple of 4
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_offset_multiple_4) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 2);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_buffer_usage) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(s.vbuf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_required_bindings_missing) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.pip);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_write_buffer_transient_missing) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_write_transient_test_buffer();
+    sg_pipeline pip = create_write_transient_test_pipeline();
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = buf });
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// a destroyed indirect buffer is an error, but not a validation error
+UTEST(sokol_gfx, draw_indirect_buffer_alive) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_destroy_buffer(s.indirect_buf);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_DRAW_INDIRECT_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// an indirect buffer in failed state silently skips the draw
+UTEST(sokol_gfx, draw_indirect_buffer_failed_silent) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(failed_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// when the draw is skipped (here: failed vertex buffer), no buffer checks run
+UTEST(sokol_gfx, draw_indirect_skipdraw_silent) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer failed_vbuf = sg_alloc_buffer();
+    sg_fail_buffer(failed_vbuf);
+    sg_destroy_buffer(s.indirect_buf);
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = failed_vbuf });
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    T(sg_query_stats().cur_frame.num_draw_indirect == 1);
+    sg_commit();
+    sg_shutdown();
+}
+
+// outside a pass the draw is silently skipped
+UTEST(sokol_gfx, draw_indirect_outside_pass_silent) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// sg_dispatch_indirect() tests
+typedef struct {
+    sg_buffer indirect_buf;     // 16 bytes, usage.indirect_buffer + usage.storage_buffer
+    sg_view indirect_view;      // storage buffer view on indirect_buf
+    sg_buffer sbuf;             // storage buffer without usage.indirect_buffer
+    sg_view sbuf_view;          // storage buffer view on sbuf
+    sg_pipeline pip;            // compute, views[0]: readonly
+    sg_pipeline rw_pip;         // compute, views[0]: read/write
+} dispatch_indirect_setup_t;
+
+static dispatch_indirect_setup_t create_dispatch_indirect_setup(void) {
+    dispatch_indirect_setup_t s = {0};
+    s.indirect_buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true },
+        .size = 16,
+    });
+    s.indirect_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.indirect_buf });
+    s.sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    s.sbuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.sbuf });
+    s.pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = true },
+        }),
+    });
+    s.rw_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = false },
+        }),
+    });
+    return s;
+}
+
+static void apply_dispatch_indirect(const dispatch_indirect_setup_t* s) {
+    sg_apply_pipeline(s->pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s->sbuf_view });
+}
+
+UTEST(sokol_gfx, dispatch_indirect_setup_valid) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    T(sg_query_buffer_state(s.indirect_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.indirect_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(s.sbuf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.sbuf_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.pip) == SG_RESOURCESTATE_VALID);
+    T(sg_query_pipeline_state(s.rw_pip) == SG_RESOURCESTATE_VALID);
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_dispatch_indirect(s.indirect_buf, 4);    // 4 + 12 == 16
+    sg_end_pass();
+    T(sg_query_stats().cur_frame.num_dispatch_indirect == 2);
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// a compute shader writes the dispatch args, a following dispatch reads them
+UTEST(sokol_gfx, dispatch_indirect_after_storage_write_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    sg_dispatch(1, 1, 1);
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_offset_range) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 8);    // 8 + 12 > 16
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// negative offsets must only report OFFSET_RANGE (no OFFSET_MULTIPLE_4, no assert)
+UTEST(sokol_gfx, dispatch_indirect_offset_negative) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, -4);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, -2);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// very large offsets must not overflow in the range check
+UTEST(sokol_gfx, dispatch_indirect_offset_large) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, INT_MAX - 3);  // multiple of 4
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_offset_multiple_4) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 2);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_buffer_usage) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(s.sbuf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_renderpass_expected) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    const dispatch_indirect_setup_t cs = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    // without an applied pipeline the draw is silently skipped before validation
+    apply_dispatch_indirect(&cs);
+    reset_log_items();
+    sg_draw_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_computepass_expected) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    const draw_indirect_setup_t ds = create_draw_indirect_setup();
+    sg_begin_pass(ndv_render_pass());
+    // without an applied pipeline the dispatch is silently skipped before validation
+    apply_draw_indirect(&ds, false);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_required_bindings_missing) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.pip);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// a destroyed indirect buffer is an error, but not a validation error
+UTEST(sokol_gfx, dispatch_indirect_buffer_alive) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer dead_buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true },
+        .size = 16,
+    });
+    sg_destroy_buffer(dead_buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(dead_buf, 0);
+    T(log_items[0] == SG_LOGITEM_DISPATCH_INDIRECT_BUFFER_ALIVE);
+    T(num_log_called == 1);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// an indirect buffer in failed state silently skips the dispatch
+UTEST(sokol_gfx, dispatch_indirect_buffer_failed_silent) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer failed_buf = sg_alloc_buffer();
+    sg_fail_buffer(failed_buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(failed_buf, 0);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// outside a pass the dispatch is silently skipped
+UTEST(sokol_gfx, dispatch_indirect_outside_pass_silent) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    T(num_log_called == 0);
     sg_shutdown();
 }
