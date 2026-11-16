@@ -5728,6 +5728,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_USAGE, "sg_draw_indirect: buffer must have usage.indirect_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_RANGE, "sg_draw_indirect: offset is out of range (must be >= 0 && <= (buf_size - sizeof(sg_draw_indirect[_indexed]_args))") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4, "sg_draw_indirect: offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET, "sg_draw_indirect: indexed indirect draws require sg_bindings.index_buffer_offset == 0 on this backend (see sg_features.draw_indirect_index_buffer_offset)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
@@ -8413,6 +8414,7 @@ typedef struct {
         uint32_t pass_index;    // running count of passes (keeps counting across frames)
         uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
         uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
+        int index_buffer_offset;                    // index buffer offset of the last sg_apply_bindings(), checked in sg_draw_indirect()
         bool write_buffer_transient_missing;        // used for 'deferred validation' in draw/dispatch when sg_write_buffer_transient() hasn't been called in current frame
         bool write_image_transient_missing;         // ditto for transient images
     } validate;
@@ -26841,6 +26843,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         // set the expected bindings and uniform block flags for deferred validation in draw/dispatch
         _sg.validate.required_bindings_and_uniforms = pip->cmn.required_bindings_and_uniforms | shd->cmn.required_bindings_and_uniforms;
         _sg.validate.applied_bindings_and_uniforms = 0;
+        _sg.validate.index_buffer_offset = 0;
         // resetting the write-transient flags here prevents potential validation misfires when sg_apply_bindings() isn't called
         _sg.validate.write_buffer_transient_missing = false;
         _sg.validate.write_image_transient_missing = false;
@@ -26901,6 +26904,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _sg_validate_begin();
 
         _sg.validate.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+        _sg.validate.index_buffer_offset = bindings->index_buffer_offset;
         _sg.validate.write_buffer_transient_missing = false;
         _sg.validate.write_image_transient_missing = false;
 
@@ -27258,6 +27262,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(_sg_buffer_t* buf, int offset) {
         _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - item_size)), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
         if (offset > 0) {
             _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        }
+        if (_sg.use_indexed_draw && !_sg.features.draw_indirect_index_buffer_offset) {
+            _SG_VALIDATE(_sg.validate.index_buffer_offset == 0, VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET);
         }
         if (buf->cmn.usage.write_transient) {
             _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
