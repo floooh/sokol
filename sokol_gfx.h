@@ -5721,6 +5721,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: indirect buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED, "sg_dispatch: must be called in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSX, "sg_dispatch: num_groups_x must be >=0 and <65536") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSY, "sg_dispatch: num_groups_y must be >=0 and <65536") \
@@ -5735,10 +5736,12 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: indirect buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT, "sg_write_buffer_transient: cannot be called after buffer has already been used in an draw/dispatch-indirect call in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
@@ -7274,6 +7277,7 @@ typedef struct {
     uint32_t write_transient_frame_index; // last frame index when written to
     struct {
         uint32_t bind_frame_index;  // last frame index the buffer was bound
+        uint32_t indirect_frame_index;  // last frame index the buffer was used in a draw/dispatch-indirect call
         uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
         uint32_t read_render_pass_index;    // last pass index the buffer was read in a render pass
         uint32_t write_render_pass_index;   // last pass index the buffer was written in a render pass
@@ -9303,6 +9307,7 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->active_slot = 0;
     cmn->write_transient_frame_index = 0;
     cmn->validate.bind_frame_index = 0;
+    cmn->validate.indirect_frame_index = 0;
     cmn->validate.copy_src_frame_index = 0;
     cmn->validate.read_render_pass_index = 0;
     cmn->validate.write_render_pass_index = 0;
@@ -18731,6 +18736,9 @@ _SOKOL_PRIVATE void _sg_mtl_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
+    if (buf->cmn.usage.write_transient) {
+        _sg_mtl_commit_buffer_write_range(buf);
+    }
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     if (_sg.use_indexed_draw) {
@@ -18768,6 +18776,9 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
+    if (buf->cmn.usage.write_transient) {
+        _sg_mtl_commit_buffer_write_range(buf);
+    }
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
     SOKOL_ASSERT(pip);
     [_sg.mtl.compute_cmd_encoder dispatchThreadgroupsWithIndirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
@@ -27061,7 +27072,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_ex(int base_element, int num_elements, int
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offset) {
+_SOKOL_PRIVATE bool _sg_validate_draw_indirect(_sg_buffer_t* buf, int offset) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(buf);
         _SOKOL_UNUSED(offset);
@@ -27071,6 +27082,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offs
             return true;
         }
         SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
+        buf->cmn.validate.indirect_frame_index = _sg.frame_index;
         const int item_size = _sg.use_indexed_draw
             ? (int)sizeof(sg_draw_indirect_indexed_args)
             : (int)sizeof(sg_draw_indirect_args);
@@ -27080,6 +27092,9 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offs
         _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - item_size)), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
         if (offset > 0) {
             _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        }
+        if (buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
         }
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
@@ -27109,7 +27124,7 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
     #endif
 }
 
-_SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int offset) {
+_SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(buf);
         _SOKOL_UNUSED(offset);
@@ -27119,12 +27134,16 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int 
             return true;
         }
         SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
+        buf->cmn.validate.indirect_frame_index = _sg.frame_index;
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
         _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - (int)sizeof(sg_dispatch_indirect_args))), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
         if (offset >= 0) {
             _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+        }
+        if (buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
         }
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
@@ -27159,6 +27178,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         // write-transient is only allowed before resource is 'used' in current frame
         _SG_VALIDATE(buf->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
         _SG_VALIDATE(buf->cmn.validate.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        _SG_VALIDATE(buf->cmn.validate.indirect_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT);
         // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);

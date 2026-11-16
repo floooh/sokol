@@ -7549,3 +7549,262 @@ UTEST(sokol_gfx, dispatch_indirect_outside_pass_silent) {
     T(num_log_called == 0);
     sg_shutdown();
 }
+
+// usage.write_transient indirect buffers must be written in the current frame
+static sg_buffer create_transient_indirect_buffer(bool with_storage) {
+    return sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = with_storage, .write_transient = true },
+        .size = 32,
+    });
+}
+
+static void write_transient_indirect_buffer(sg_buffer buf) {
+    const uint32_t args[8] = { 3, 1, 0, 0 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(args), .dst.buffer = buf });
+}
+
+UTEST(sokol_gfx, draw_indirect_buffer_transient_missing) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, draw_indirect_buffer_transient_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(buf, 0);
+    sg_draw_indirect(buf, 16);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// a write in the previous frame doesn't count
+UTEST(sokol_gfx, draw_indirect_buffer_transient_previous_frame) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    sg_draw_indirect(buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    reset_log_items();
+    sg_draw_indirect(buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_buffer_transient_missing) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_buffer_transient_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(buf, 0);
+    sg_dispatch_indirect(buf, 20);
+    T(num_log_called == 0);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_buffer_transient_previous_frame) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    reset_log_items();
+    sg_dispatch_indirect(buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// an unwritten buffer which is both bound and used as indirect buffer
+// triggers both the indirect-buffer and the bound-buffer check
+UTEST(sokol_gfx, dispatch_indirect_buffer_transient_missing_and_bound) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(true);
+    sg_view view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = buf });
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = view });
+    reset_log_items();
+    sg_dispatch_indirect(buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[1] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+    T(log_items[2] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 3);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// sg_write_buffer_transient() is not allowed after the buffer was used
+// in a draw/dispatch-indirect call in the same frame
+UTEST(sokol_gfx, draw_indirect_write_buffer_transient_after_use) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    sg_draw_indirect(buf, 0);
+    T(num_log_called == 0);
+    reset_log_items();
+    write_transient_indirect_buffer(buf);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+UTEST(sokol_gfx, dispatch_indirect_write_buffer_transient_after_use) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(buf, 0);
+    T(num_log_called == 0);
+    reset_log_items();
+    write_transient_indirect_buffer(buf);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// the write-before-indirect rule also applies outside the pass
+UTEST(sokol_gfx, dispatch_indirect_write_buffer_transient_after_pass) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(buf, 0);
+    sg_end_pass();
+    reset_log_items();
+    write_transient_indirect_buffer(buf);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_commit();
+    sg_shutdown();
+}
+
+// a write in the next frame is allowed again
+UTEST(sokol_gfx, draw_indirect_write_buffer_transient_next_frame_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    for (int frame = 0; frame < 3; frame++) {
+        write_transient_indirect_buffer(buf);
+        sg_begin_pass(ndv_render_pass());
+        apply_draw_indirect(&s, false);
+        sg_draw_indirect(buf, 0);
+        sg_end_pass();
+        sg_commit();
+    }
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// multiple writes before the first indirect use are allowed
+UTEST(sokol_gfx, draw_indirect_write_buffer_transient_multiple_writes_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    const uint32_t args[4] = { 3, 1, 0, 0 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(args), .dst.buffer = buf });
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(args), .dst = { .buffer = buf, .offset = 16 } });
+    sg_begin_pass(ndv_render_pass());
+    apply_draw_indirect(&s, false);
+    sg_draw_indirect(buf, 0);
+    sg_draw_indirect(buf, 16);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// a skipped draw (here: failed vertex buffer) doesn't count as use
+UTEST(sokol_gfx, draw_indirect_write_buffer_transient_after_skipped_draw_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const draw_indirect_setup_t s = create_draw_indirect_setup();
+    sg_buffer buf = create_transient_indirect_buffer(false);
+    sg_buffer failed_vbuf = sg_alloc_buffer();
+    sg_fail_buffer(failed_vbuf);
+    write_transient_indirect_buffer(buf);
+    sg_begin_pass(ndv_render_pass());
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = failed_vbuf });
+    sg_draw_indirect(buf, 0);
+    sg_end_pass();
+    reset_log_items();
+    write_transient_indirect_buffer(buf);
+    T(num_log_called == 0);
+    sg_commit();
+    sg_shutdown();
+}

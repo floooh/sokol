@@ -741,6 +741,14 @@ static NSError* _mtlm_error(void) {
 
 //== command encoders ==========================================================
 
+// Metal requires a 4-byte aligned indirect buffer offset, and the arguments
+// must be inside the buffer
+static void _mtlm_check_indirect_buffer(id<MTLBuffer> buf, NSUInteger offset, NSUInteger args_size) {
+    _MTLM_ASSERT(_mtlm_is_obj(buf, METAL_MOCK_OBJ_BUFFER));
+    _MTLM_ASSERT((offset & 3) == 0);
+    _MTLM_ASSERT((offset + args_size) <= ((_mtlm_buffer*)buf)->info.length);
+}
+
 @implementation _mtlm_render_encoder
 
 - (void)endEncoding {
@@ -987,6 +995,40 @@ static NSError* _mtlm_error(void) {
     c->args[6].i = baseVertex;
     c->args[7].u = baseInstance;
 }
+
+- (void)drawPrimitives:(MTLPrimitiveType)primitiveType
+        indirectBuffer:(id<MTLBuffer>)indirectBuffer
+  indirectBufferOffset:(NSUInteger)indirectBufferOffset
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_drawPrimitivesIndirect, self);
+    c->num_args = 3;
+    c->args[0].u = primitiveType;
+    c->args[1].p = indirectBuffer;
+    c->args[2].u = indirectBufferOffset;
+    _MTLM_ASSERT(!_mtlm.render_encoder_state.ended);
+    _mtlm_check_indirect_buffer(indirectBuffer, indirectBufferOffset, sizeof(MTLDrawPrimitivesIndirectArguments));
+}
+
+- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType
+                    indexType:(MTLIndexType)indexType
+                  indexBuffer:(id<MTLBuffer>)indexBuffer
+            indexBufferOffset:(NSUInteger)indexBufferOffset
+               indirectBuffer:(id<MTLBuffer>)indirectBuffer
+         indirectBufferOffset:(NSUInteger)indirectBufferOffset
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_drawIndexedPrimitivesIndirect, self);
+    c->num_args = 6;
+    c->args[0].u = primitiveType;
+    c->args[1].u = indexType;
+    c->args[2].p = indexBuffer;
+    c->args[3].u = indexBufferOffset;
+    c->args[4].p = indirectBuffer;
+    c->args[5].u = indirectBufferOffset;
+    _MTLM_ASSERT(!_mtlm.render_encoder_state.ended);
+    _MTLM_ASSERT(_mtlm_is_obj(indexBuffer, METAL_MOCK_OBJ_BUFFER));
+    _MTLM_ASSERT(indexBufferOffset < ((_mtlm_buffer*)indexBuffer)->info.length);
+    _mtlm_check_indirect_buffer(indirectBuffer, indirectBufferOffset, sizeof(MTLDrawIndexedPrimitivesIndirectArguments));
+}
 @end
 
 @implementation _mtlm_compute_encoder
@@ -1070,6 +1112,23 @@ static NSError* _mtlm_error(void) {
     _mtlm.compute_encoder_state.last_threadgroups_per_grid = threadgroupsPerGrid;
     _mtlm.compute_encoder_state.last_threads_per_threadgroup = threadsPerThreadgroup;
     _mtlm.compute_encoder_state.num_dispatches++;
+}
+
+- (void)dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer>)indirectBuffer
+                          indirectBufferOffset:(NSUInteger)indirectBufferOffset
+                         threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup
+{
+    metal_mock_call_t* c = _mtlm_log(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect, self);
+    c->num_args = 5;
+    c->args[0].p = indirectBuffer;
+    c->args[1].u = indirectBufferOffset;
+    c->args[2].u = threadsPerThreadgroup.width;
+    c->args[3].u = threadsPerThreadgroup.height;
+    c->args[4].u = threadsPerThreadgroup.depth;
+    _MTLM_ASSERT(!_mtlm.compute_encoder_state.ended);
+    _mtlm_check_indirect_buffer(indirectBuffer, indirectBufferOffset, sizeof(MTLDispatchThreadgroupsIndirectArguments));
+    _mtlm.compute_encoder_state.last_threads_per_threadgroup = threadsPerThreadgroup;
+    _mtlm.compute_encoder_state.num_indirect_dispatches++;
 }
 @end
 

@@ -105,12 +105,15 @@
     _MTLM_XMACRO(drawPrimitivesBaseInstance) \
     _MTLM_XMACRO(drawIndexedPrimitives) \
     _MTLM_XMACRO(drawIndexedPrimitivesBaseVertex) \
+    _MTLM_XMACRO(drawPrimitivesIndirect) \
+    _MTLM_XMACRO(drawIndexedPrimitivesIndirect) \
     _MTLM_XMACRO(setComputePipelineState) \
     _MTLM_XMACRO(setBuffer) \
     _MTLM_XMACRO(setBufferOffset) \
     _MTLM_XMACRO(setTexture) \
     _MTLM_XMACRO(setSamplerState) \
     _MTLM_XMACRO(dispatchThreadgroups) \
+    _MTLM_XMACRO(dispatchThreadgroupsIndirect) \
     _MTLM_XMACRO(blitCommandEncoder) \
     _MTLM_XMACRO(copyFromBufferToBuffer) \
     _MTLM_XMACRO(copyFromBufferToTexture) \
@@ -334,6 +337,7 @@ typedef struct {
     MTLSize last_threadgroups_per_grid;
     MTLSize last_threads_per_threadgroup;
     int num_dispatches;
+    int num_indirect_dispatches;
     int debug_group_depth;
     char label[METAL_MOCK_MAX_STRING];
 } metal_mock_compute_encoder_state_t;

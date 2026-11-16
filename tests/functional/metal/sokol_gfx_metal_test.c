@@ -28,6 +28,7 @@
 //    - resource bindings                   _sg_mtl_apply_pipeline / _sg_mtl_apply_bindings
 //    - uniform updates                     _sg_mtl_apply_uniforms / _sg_mtl_bind_uniform_buffers
 //    - draws and dispatches                _sg_mtl_draw_ex / _sg_mtl_dispatch
+//    - indirect draws and dispatches       _sg_mtl_draw_indirect / _sg_mtl_dispatch_indirect
 //    - debug groups                        _sg_mtl_push_debug_group / _sg_mtl_pop_debug_group
 //    - frame end and garbage collection    _sg_mtl_commit / _sg_mtl_garbage_collect
 //------------------------------------------------------------------------------
@@ -523,6 +524,10 @@ static const buffer_usage_case_t buffer_usage_cases[] = {
     { .usage = { .storage_buffer = true, .copy_src = true, .copy_dst = true }, .num_slots = 1 },
     { .usage = { .staging_buffer = true, .copy_src = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
     { .usage = { .staging_index_buffer = true, .write_transient = true, .copy_src = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .indirect_buffer = true }, .with_data = true, .num_slots = 1 },
+    { .usage = { .indirect_buffer = true, .storage_buffer = true }, .num_slots = 1 },
+    { .usage = { .indirect_buffer = true, .write_transient = true }, .num_slots = SG_NUM_INFLIGHT_FRAMES, .write_combined = true },
+    { .usage = { .indirect_buffer = true, .write_unsealed = true }, .num_slots = 1, .write_combined = true },
 };
 
 static void check_buffer_usage_cases(int* utest_result, MTLResourceOptions expected_storage_mode) {
@@ -2439,6 +2444,528 @@ UTEST(sokol_gfx_metal, dispatch) {
     T(state->last_threads_per_threadgroup.height == 4);
     sg_end_pass();
     sg_commit();
+    teardown();
+}
+
+//== indirect draws and dispatches =============================================
+// non-indexed render pipeline, matches the default swapchain
+static sg_pipeline make_strip_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = make_shader(),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+}
+
+// compute pipeline with one storage buffer at MSL buffer slot 8
+static sg_pipeline make_sbuf_compute_pipeline(bool readonly) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .mtl_threads_per_threadgroup = { .x = 8, .y = 4, .z = 1 },
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = readonly, .msl_buffer_n = 8 },
+        }),
+    });
+}
+
+UTEST(sokol_gfx_metal, draw_indirect) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .data = { .ptr = scratch, .size = 64 },
+    });
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
+    metal_mock_clear_calls();
+    sg_draw_indirect(args, 16);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_drawPrimitivesIndirect);
+    T(call != 0);
+    T(call->args[0].u == MTLPrimitiveTypeTriangleStrip);
+    T(call->args[1].p == sg_mtl_query_buffer_info(args).buf[0]);
+    T(call->args[2].u == 16);
+    // the last item in the buffer
+    sg_draw_indirect(args, 64 - (int)sizeof(sg_draw_indirect_args));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 2);
+    call = metal_mock_last_call(METAL_MOCK_FUNC_drawPrimitivesIndirect);
+    T(call->args[2].u == 48);
+    // no direct or indexed draws
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitives) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesBaseInstance) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawIndexedPrimitivesIndirect) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, draw_indirect_indexed) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = make_shader(),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .index_type = SG_INDEXTYPE_UINT32,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage.index_buffer = true,
+        .data = { .ptr = scratch, .size = 64 },
+    });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .data = { .ptr = scratch, .size = 64 },
+    });
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){
+        .vertex_buffers[0] = make_vbuf(),
+        .index_buffer = ibuf,
+        .index_buffer_offset = 8,
+    });
+    metal_mock_clear_calls();
+    sg_draw_indirect(args, 20);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_drawIndexedPrimitivesIndirect);
+    T(call != 0);
+    T(call->args[0].u == MTLPrimitiveTypeTriangle);
+    T(call->args[1].u == MTLIndexTypeUInt32);
+    T(call->args[2].p == sg_mtl_query_buffer_info(ibuf).buf[0]);
+    // only the bind offset, the first index comes from the indirect args
+    T(call->args[3].u == 8);
+    T(call->args[4].p == sg_mtl_query_buffer_info(args).buf[0]);
+    T(call->args[5].u == 20);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawIndexedPrimitives) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+// failed validation or a skipped draw must not reach Metal
+UTEST(sokol_gfx_metal, draw_indirect_rejected) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage.indirect_buffer = true,
+        .data = { .ptr = scratch, .size = 32 },
+    });
+    sg_buffer failed_vbuf = sg_alloc_buffer();
+    sg_fail_buffer(failed_vbuf);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
+    metal_mock_clear_calls();
+    reset_log();
+    sg_draw_indirect(args, 2);                              // not a multiple of 4
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4));
+    sg_draw_indirect(args, 20);                             // out of range
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE));
+    sg_draw_indirect(make_vbuf(), 0);                       // no indirect usage
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_USAGE));
+    // skipped draw because of a failed vertex buffer
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = failed_vbuf });
+    sg_draw_indirect(args, 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 0);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+// a write_transient indirect buffer rotates through its slots, the draw
+// must use the MTLBuffer of the current slot
+UTEST(sokol_gfx_metal, draw_indirect_write_transient_slot) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 32,
+    });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    T(mtl_info.buf[0] != 0 && mtl_info.buf[1] != 0 && mtl_info.buf[0] != mtl_info.buf[1]);
+    const void* used[2] = {0};
+    for (int frame = 0; frame < 2; frame++) {
+        const sg_draw_indirect_args draw_args = { .num_elements = 3, .num_instances = 1 };
+        sg_write_buffer_transient(&(sg_write_buffer_desc){
+            .src.data = SG_RANGE(draw_args),
+            .dst.buffer = args,
+        });
+        const int slot = sg_mtl_query_buffer_info(args).active_slot;
+        sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+        metal_mock_clear_calls();
+        sg_draw_indirect(args, 0);
+        const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_drawPrimitivesIndirect);
+        T(call != 0);
+        T(call->args[1].p == mtl_info.buf[slot]);
+        used[frame] = call->args[1].p;
+        // the recorded args are in the MTLBuffer the draw reads from
+        T(0 == memcmp(metal_mock_buffer_data(mtl_info.buf[slot]), &draw_args, sizeof(draw_args)));
+        sg_end_pass();
+        sg_commit();
+    }
+    T(used[0] != used[1]);
+    T(num_log_items == 0);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+// with managed storage, CPU-written indirect args must be flushed with
+// didModifyRange before the GPU reads them (vertex/index/storage buffers
+// are flushed in sg_apply_bindings(), indirect buffers are never bound)
+UTEST(sokol_gfx_metal, draw_indirect_managed_flush) {
+    setup_with((setup_desc_t){ .force_managed_storage_mode = true });
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 32,
+    });
+    const sg_draw_indirect_args draw_args = { .num_elements = 3, .num_instances = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = SG_RANGE(draw_args),
+        .dst = { .buffer = args, .offset = 16 },
+    });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    const void* mtl_buf = mtl_info.buf[mtl_info.active_slot];
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
+    metal_mock_clear_calls();
+    sg_draw_indirect(args, 16);
+    // the flush must happen before the draw
+    const int flush_idx = metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0);
+    const int draw_idx = metal_mock_find_call(METAL_MOCK_FUNC_drawPrimitivesIndirect, 0);
+    T(flush_idx >= 0);
+    T(draw_idx >= 0);
+    T(flush_idx < draw_idx);
+    metal_mock_buffer_info_t info = {0};
+    T(metal_mock_buffer_info(mtl_buf, &info));
+    T(info.num_did_modify_range == 1);
+    T(info.last_modified_offset == 16);
+    T(info.last_modified_length == sizeof(draw_args));
+    // a second draw in the same frame doesn't flush again
+    sg_draw_indirect(args, 16);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 1);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, dispatch_indirect) {
+    setup();
+    sg_pipeline pip = make_sbuf_compute_pipeline(true);
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true },
+        .size = 32,
+    });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    metal_mock_clear_calls();
+    sg_dispatch_indirect(args, 12);
+    const metal_mock_call_t* call = metal_mock_last_call(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect);
+    T(call != 0);
+    T(call->args[0].p == sg_mtl_query_buffer_info(args).buf[0]);
+    T(call->args[1].u == 12);
+    // threads-per-threadgroup come from the shader desc
+    T(call->args[2].u == 8);
+    T(call->args[3].u == 4);
+    T(call->args[4].u == 1);
+    // the last item in the buffer
+    sg_dispatch_indirect(args, 32 - (int)sizeof(sg_dispatch_indirect_args));
+    const metal_mock_compute_encoder_state_t* state = metal_mock_compute_encoder_state();
+    T(state->num_indirect_dispatches == 2);
+    T(state->num_dispatches == 0);
+    T(state->last_threads_per_threadgroup.width == 8);
+    T(state->last_threads_per_threadgroup.height == 4);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+}
+
+// a compute dispatch writes the args through a storage buffer view, the
+// next dispatch in the same compute encoder reads them as indirect args
+UTEST(sokol_gfx_metal, dispatch_indirect_after_storage_write) {
+    setup();
+    sg_pipeline rw_pip = make_sbuf_compute_pipeline(false);
+    sg_pipeline ro_pip = make_sbuf_compute_pipeline(true);
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true },
+        .size = 16,
+    });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    const void* mtl_args = sg_mtl_query_buffer_info(args).buf[0];
+    const int num_encoders = metal_mock_num_created(METAL_MOCK_OBJ_COMPUTE_ENCODER);
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    metal_mock_clear_calls();
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    T(metal_mock_compute_encoder_state()->buffers[8].buffer == mtl_args);
+    sg_dispatch(1, 1, 1);
+    sg_apply_pipeline(ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    sg_dispatch_indirect(args, 0);
+    const int dispatch_idx = metal_mock_find_call(METAL_MOCK_FUNC_dispatchThreadgroups, 0);
+    const int indirect_idx = metal_mock_find_call(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect, 0);
+    T(dispatch_idx >= 0);
+    T(indirect_idx > dispatch_idx);
+    T(metal_mock_call(indirect_idx)->args[0].p == mtl_args);
+    // both dispatches are recorded into the same compute encoder
+    T(metal_mock_call(indirect_idx)->obj == metal_mock_call(dispatch_idx)->obj);
+    sg_end_pass();
+    T(metal_mock_num_created(METAL_MOCK_OBJ_COMPUTE_ENCODER) == (num_encoders + 1));
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+}
+
+UTEST(sokol_gfx_metal, dispatch_indirect_managed_flush) {
+    setup_with((setup_desc_t){ .force_managed_storage_mode = true });
+    sg_pipeline pip = make_sbuf_compute_pipeline(true);
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 16,
+    });
+    const sg_dispatch_indirect_args dispatch_args = { .num_groups_x = 4, .num_groups_y = 2, .num_groups_z = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){
+        .src.data = SG_RANGE(dispatch_args),
+        .dst.buffer = args,
+    });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    const void* mtl_buf = mtl_info.buf[mtl_info.active_slot];
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    metal_mock_clear_calls();
+    sg_dispatch_indirect(args, 0);
+    const int flush_idx = metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0);
+    const int dispatch_idx = metal_mock_find_call(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect, 0);
+    T(flush_idx >= 0);
+    T(dispatch_idx >= 0);
+    T(flush_idx < dispatch_idx);
+    metal_mock_buffer_info_t info = {0};
+    T(metal_mock_buffer_info(mtl_buf, &info));
+    T(info.num_did_modify_range == 1);
+    T(info.last_modified_offset == 0);
+    T(info.last_modified_length == sizeof(dispatch_args));
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+// an unwritten write_transient indirect buffer must not reach Metal, the
+// GPU would read stale args from another frame's slot
+UTEST(sokol_gfx_metal, draw_indirect_transient_not_written) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 32,
+    });
+    // frame 1: written and drawn
+    const sg_draw_indirect_args draw_args = { .num_elements = 3, .num_instances = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 1);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    // frame 2: not written, rejected
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    metal_mock_clear_calls();
+    reset_log();
+    sg_draw_indirect(args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 0);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, dispatch_indirect_transient_not_written) {
+    setup();
+    sg_pipeline pip = make_sbuf_compute_pipeline(true);
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 16,
+    });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    metal_mock_clear_calls();
+    reset_log();
+    sg_dispatch_indirect(args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect) == 0);
+    T(metal_mock_compute_encoder_state()->num_indirect_dispatches == 0);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+// managed storage: a write_transient buffer which is bound as storage buffer
+// and used as indirect buffer is flushed once at bind time, not again at dispatch
+UTEST(sokol_gfx_metal, dispatch_indirect_managed_flush_bound_and_indirect) {
+    setup_with((setup_desc_t){ .force_managed_storage_mode = true });
+    sg_pipeline pip = make_sbuf_compute_pipeline(true);
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .storage_buffer = true, .write_transient = true },
+        .size = 16,
+    });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    const sg_dispatch_indirect_args dispatch_args = { .num_groups_x = 1, .num_groups_y = 1, .num_groups_z = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(dispatch_args), .dst.buffer = args });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    const void* mtl_buf = mtl_info.buf[mtl_info.active_slot];
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    metal_mock_clear_calls();
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch_indirect(args, 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 1);
+    const int flush_idx = metal_mock_find_call(METAL_MOCK_FUNC_didModifyRange, 0);
+    const int dispatch_idx = metal_mock_find_call(METAL_MOCK_FUNC_dispatchThreadgroupsIndirect, 0);
+    T(flush_idx >= 0);
+    T(dispatch_idx > flush_idx);
+    T(metal_mock_call(flush_idx)->obj == mtl_buf);
+    T(metal_mock_call(dispatch_idx)->args[0].p == mtl_buf);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+}
+
+// managed storage: a write_unsealed indirect buffer is flushed when sealed,
+// the draw doesn't flush it again
+UTEST(sokol_gfx_metal, draw_indirect_managed_unsealed_no_flush) {
+    setup_with((setup_desc_t){ .force_managed_storage_mode = true });
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_unsealed = true },
+        .size = 32,
+    });
+    const sg_draw_indirect_args draw_args = { .num_elements = 3, .num_instances = 1 };
+    sg_write_buffer_unsealed(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+    metal_mock_clear_calls();
+    sg_seal_buffer(args);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 1);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
+    metal_mock_clear_calls();
+    sg_draw_indirect(args, 0);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_drawPrimitivesIndirect) == 1);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_didModifyRange) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+    discard_swapchain(&sc);
+}
+
+// a write after an indirect draw in the same frame is rejected and must not
+// change the args which the already recorded draw reads
+UTEST(sokol_gfx_metal, draw_indirect_write_after_use_rejected) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 32, 1, true);
+    sg_pipeline pip = make_strip_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 32,
+    });
+    const sg_draw_indirect_args draw_args = { .num_elements = 3, .num_instances = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    const void* mtl_buf = mtl_info.buf[mtl_info.active_slot];
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = make_vbuf() });
+    sg_draw_indirect(args, 0);
+    T(metal_mock_last_call(METAL_MOCK_FUNC_drawPrimitivesIndirect)->args[1].p == mtl_buf);
+    metal_mock_clear_calls();
+    reset_log();
+    const sg_draw_indirect_args other_args = { .num_elements = 6, .num_instances = 2 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(other_args), .dst.buffer = args });
+    T(logged(SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT));
+    // no slot rotation, no CPU access to the MTLBuffer, args unchanged
+    T(sg_mtl_query_buffer_info(args).active_slot == mtl_info.active_slot);
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_contents) == 0);
+    T(0 == memcmp(metal_mock_buffer_data(mtl_buf), &draw_args, sizeof(draw_args)));
+    sg_end_pass();
+    sg_commit();
+    teardown();
+    discard_swapchain(&sc);
+}
+
+UTEST(sokol_gfx_metal, dispatch_indirect_write_after_use_rejected) {
+    setup();
+    sg_pipeline pip = make_sbuf_compute_pipeline(true);
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .indirect_buffer = true, .write_transient = true },
+        .size = 16,
+    });
+    const sg_dispatch_indirect_args dispatch_args = { .num_groups_x = 4, .num_groups_y = 2, .num_groups_z = 1 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(dispatch_args), .dst.buffer = args });
+    const sg_mtl_buffer_info mtl_info = sg_mtl_query_buffer_info(args);
+    const void* mtl_buf = mtl_info.buf[mtl_info.active_slot];
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    sg_dispatch_indirect(args, 0);
+    T(metal_mock_compute_encoder_state()->num_indirect_dispatches == 1);
+    sg_end_pass();
+    // also rejected after the compute pass, the GPU hasn't run the dispatch yet
+    metal_mock_clear_calls();
+    reset_log();
+    const sg_dispatch_indirect_args other_args = { .num_groups_x = 8, .num_groups_y = 8, .num_groups_z = 8 };
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(other_args), .dst.buffer = args });
+    T(logged(SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT));
+    T(metal_mock_count_calls(METAL_MOCK_FUNC_contents) == 0);
+    T(0 == memcmp(metal_mock_buffer_data(mtl_buf), &dispatch_args, sizeof(dispatch_args)));
+    // the next frame writes into the other slot
+    sg_commit();
+    reset_log();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(other_args), .dst.buffer = args });
+    T(num_log_items == 0);
+    const int new_slot = sg_mtl_query_buffer_info(args).active_slot;
+    T(new_slot != mtl_info.active_slot);
+    T(0 == memcmp(metal_mock_buffer_data(mtl_info.buf[new_slot]), &other_args, sizeof(other_args)));
+    T(0 == memcmp(metal_mock_buffer_data(mtl_buf), &dispatch_args, sizeof(dispatch_args)));
     teardown();
 }
 
