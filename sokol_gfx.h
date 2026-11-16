@@ -4786,7 +4786,7 @@ typedef struct sg_draw_indirect_args {
     uint32_t num_elements;
     uint32_t num_instances;
     uint32_t base_element;
-    uint32_t base_index;
+    uint32_t base_instance;
 } sg_draw_indirect_args;
 
 typedef struct sg_draw_indirect_indexed_args {
@@ -5377,9 +5377,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(COPY_IMAGE_TO_IMAGE_SRC_VALID, "sg_copy_image_to_image: src image not in state SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(COPY_IMAGE_TO_IMAGE_DST_VALID, "sg_copy_image_to_image: dst image not in state SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(DRAW_INDIRECT_BUFFER_ALIVE, "sg_draw_indirect: buffer no longer alive") \
-    _SG_LOGITEM_XMACRO(DRAW_INDIRECT_BUFFER_VALID, "sg_draw_indirect: buffer not in state SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(DISPATCH_INDIRECT_BUFFER_ALIVE, "sg_dispatch_indirect: buffer no longer alive") \
-    _SG_LOGITEM_XMACRO(DISPATCH_INDIRECT_BUFFER_VALID, "sg_dispatch_indirect: buffer not in state SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -10221,10 +10219,24 @@ _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_i
     _SOKOL_UNUSED(base_instance);
 }
 
+_SOKOL_PRIVATE void _sg_dummy_draw_indirect(_sg_buffer_t* buf, int offset)
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(offset);
+}
+
 _SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     _SOKOL_UNUSED(num_groups_x);
     _SOKOL_UNUSED(num_groups_y);
     _SOKOL_UNUSED(num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(offset);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -18683,7 +18695,6 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
 
 _SOKOL_PRIVATE void _sg_mtl_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
-    SOKOL_ASSERT(_sg.features.compute);
     SOKOL_ASSERT(buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
@@ -18721,9 +18732,13 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
 
 _SOKOL_PRIVATE void _sg_mtl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
-    SOKOL_ASSERT(_sg.features.compute);
+    SOKOL_ASSERT(buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    // FIXME FIXME FIXME
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    [_sg.mtl.compute_cmd_encoder dispatchThreadgroupsWithIndirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+        indirectBufferOffset:(NSUInteger)offset
+        threadsPerThreadgroup:pip->mtl.threads_per_threadgroup];
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
@@ -25187,19 +25202,19 @@ static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     #endif
 }
 
-static inline void _sg_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_index) {
+static inline void _sg_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_gl_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_VULKAN)
-    _sg_vk_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_vk_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -27000,7 +27015,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(const _sg_buffer_t* buf, int offs
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
-        _SG_VALIDATE((offset >= 0) && ((offset + item_size) <= buf->cmn.size), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE)
+        _SG_VALIDATE((offset >= 0) && ((offset + item_size) <= buf->cmn.size), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
         _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
@@ -27043,7 +27058,7 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(const _sg_buffer_t* buf, int 
         _sg_validate_begin();
         _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
         _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
-        _SG_VALIDATE((offset >= 0) && ((offset + (int)sizeof(sg_dispatch_indirect_args)) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE)
+        _SG_VALIDATE((offset >= 0) && ((offset + (int)sizeof(sg_dispatch_indirect_args)) <= buf->cmn.size), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
         _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
         _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
@@ -29245,28 +29260,22 @@ SOKOL_API_IMPL void sg_draw_ex(int base_element, int num_elements, int num_insta
     _sg_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
-_SOKOL_PRIVATE bool _sg_check_skip_draw_indirect(const _sg_buffer_t* buf) {
-    if (!buf) {
-        _SG_ERROR(DRAW_INDIRECT_BUFFER_ALIVE);
-        return true;
-    }
-    // FIXME: should this actually be silent?
-    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
-        _SG_ERROR(DRAW_INDIRECT_BUFFER_VALID);
-        return true;
-    }
-    if (!_sg.cur_pass.valid || _sg_skipdraw_any()) {
-        return true;
-    }
-    return false;
-}
-
 SOKOL_API_IMPL void sg_draw_indirect(sg_buffer buf_id, int offset) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_draw_indirect);
     _SG_TRACE_ARGS(draw_indirect, buf_id, offset);
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    if (_sg_check_skip_draw_indirect(buf)) {
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
+    if (_sg_skipdraw_any()) {
+        return;
+    }
+    if (!buf) {
+        _SG_ERROR(DRAW_INDIRECT_BUFFER_ALIVE);
+        return;
+    }
+    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
         return;
     }
     #if defined(SOKOL_DEBUG)
@@ -29296,28 +29305,22 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     _sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
 }
 
-_SOKOL_PRIVATE bool _sg_check_skip_dispatch_indirect(const _sg_buffer_t* buf) {
-    if (!buf) {
-        _SG_ERROR(DISPATCH_INDIRECT_BUFFER_ALIVE);
-        return true;
-    }
-    // FIXME: should this actually be silent?
-    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
-        _SG_ERROR(DISPATCH_INDIRECT_BUFFER_VALID);
-        return true;
-    }
-    if (!_sg.cur_pass.valid || _sg_skipdraw_any()) {
-        return true;
-    }
-    return false;
-}
-
 SOKOL_API_IMPL void sg_dispatch_indirect(sg_buffer buf_id, int offset) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_dispatch_indirect);
     _SG_TRACE_ARGS(dispatch_indirect, buf_id, offset);
     _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
-    if (_sg_check_skip_dispatch_indirect(buf)) {
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
+    if (_sg_skipdraw_any()) {
+        return;
+    }
+    if (!buf) {
+        _SG_ERROR(DISPATCH_INDIRECT_BUFFER_ALIVE);
+        return;
+    }
+    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
         return;
     }
     #if defined(SOKOL_DEBUG)
