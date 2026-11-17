@@ -200,7 +200,7 @@ jobs:
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libpulse-dev
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libpulse-dev libxml2
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
