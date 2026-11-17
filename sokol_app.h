@@ -4740,6 +4740,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     if (supports.features.textureCompressionASTC_LDR) {
         required.features.textureCompressionASTC_LDR = VK_TRUE;
     }
+    if (supports.features.drawIndirectFirstInstance) {
+        required.features.drawIndirectFirstInstance = VK_TRUE;
+    }
     _SAPP_STRUCT(VkDeviceCreateInfo, dev_create_info);
     dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     dev_create_info.pNext = &required;
