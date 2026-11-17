@@ -1856,7 +1856,7 @@
     restrictions apply:
 
     A storage buffer that's written to in a fragment shader cannot be used
-    in another role in the same render pass, e.g. as vertex- or index-buffer,
+    in another role in the same render pass, e.g. as vertex-, index- or indirect-buffer,
     or bound as a readonly storage buffer. This means that writing to a storage
     buffer in one draw call, and then reading the results back in another draw
     call must happen in separate render passes (in compute passes this restriction
