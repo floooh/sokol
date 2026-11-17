@@ -21861,8 +21861,15 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
 
 _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t* buf, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf && buf && buf->vk.buf);
+    // skip read/read transition only if the new read stages can already
+    // see the last write
     if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
-        return;
+        if (0 == (new_access & ~buf->vk.cur_access)) {
+            // last write is already visible to all new read stages
+            return;
+        }
+        // extend visibility of last write to the new read stages
+        new_access |= buf->vk.cur_access;
     }
     _SG_STRUCT(VkBufferMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
