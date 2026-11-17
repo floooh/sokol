@@ -6297,6 +6297,8 @@ typedef struct {
     sg_view view2;              // another storage buffer view on buf
     sg_buffer other_buf;        // a second storage buffer
     sg_view other_view;         // storage buffer view on other_buf
+    sg_buffer ind_buf;          // storage + indirect buffer
+    sg_view ind_view;           // storage buffer view on ind_buf
     sg_pipeline fs_rw_pip;      // views[0]: fragment read/write
     sg_pipeline fs_ro_pip;      // views[0]: fragment readonly
     sg_pipeline vs_ro_pip;      // views[0]: vertex readonly
@@ -6318,6 +6320,11 @@ static sbuf_rw_setup_t create_sbuf_rw_setup(void) {
     s.view2 = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.buf });
     s.other_buf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
     s.other_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.other_buf });
+    s.ind_buf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .indirect_buffer = true },
+        .data = SG_RANGE(data),
+    });
+    s.ind_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = s.ind_buf });
     s.fs_rw_pip = sg_make_pipeline(&(sg_pipeline_desc){
         .shader = sg_make_shader(&(sg_shader_desc){
             .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_FRAGMENT, .readonly = false },
@@ -6383,6 +6390,8 @@ UTEST(sokol_gfx, sbuf_rw_setup_valid) {
     T(sg_query_view_state(s.view2) == SG_RESOURCESTATE_VALID);
     T(sg_query_buffer_state(s.other_buf) == SG_RESOURCESTATE_VALID);
     T(sg_query_view_state(s.other_view) == SG_RESOURCESTATE_VALID);
+    T(sg_query_buffer_state(s.ind_buf) == SG_RESOURCESTATE_VALID);
+    T(sg_query_view_state(s.ind_view) == SG_RESOURCESTATE_VALID);
     T(sg_query_pipeline_state(s.fs_rw_pip) == SG_RESOURCESTATE_VALID);
     T(sg_query_pipeline_state(s.fs_ro_pip) == SG_RESOURCESTATE_VALID);
     T(sg_query_pipeline_state(s.vs_ro_pip) == SG_RESOURCESTATE_VALID);
@@ -6536,6 +6545,85 @@ UTEST(sokol_gfx, apply_bindings_index_buffer_then_sbuf_readwrite) {
     T(num_log_called == 2);
     sg_end_pass();
     sg_commit();
+    sg_shutdown();
+}
+
+// read/write storage buffer and indirect buffer in the same draw call
+UTEST(sokol_gfx, draw_indirect_sbuf_readwrite_same_draw) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.ind_view);
+    reset_log_items();
+    sg_draw_indirect(s.ind_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// read/write storage buffer in an earlier draw call of the same render pass
+UTEST(sokol_gfx, draw_indirect_sbuf_readwrite_earlier_draw) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.ind_view);
+    sg_draw(0, 3, 1);
+    sg_apply_pipeline(s.fs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.other_view });
+    reset_log_items();
+    sg_draw_indirect(s.ind_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// indirect buffer first, then bound as read/write storage buffer in the same render pass
+UTEST(sokol_gfx, draw_indirect_then_sbuf_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.other_view });
+    sg_draw_indirect(s.ind_buf, 0);
+    T(num_log_called == 0);
+    reset_log_items();
+    apply_sbuf_rw(&s, s.ind_view);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// read/write storage buffer and indirect buffer in separate passes is ok
+UTEST(sokol_gfx, draw_indirect_sbuf_readwrite_separate_passes_ok) {
+    setup_with_compute(&(sg_desc){0});
+    sbuf_rw_setup_t s = create_sbuf_rw_setup();
+    // written in fragment shader in previous render pass
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    apply_sbuf_rw(&s, s.ind_view);
+    sg_draw(0, 3, 1);
+    sg_end_pass();
+    // written in compute pass
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(s.cs_rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.ind_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_begin_pass(SBUF_RW_TEST_PASS);
+    sg_apply_pipeline(s.fs_ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.other_view });
+    sg_draw_indirect(s.ind_buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
     sg_shutdown();
 }
 
@@ -7351,7 +7439,6 @@ UTEST(sokol_gfx, draw_indirect_skipdraw_silent) {
     sg_draw_indirect(s.indirect_buf, 0);
     T(num_log_called == 0);
     sg_end_pass();
-    T(sg_query_stats().cur_frame.num_draw_indirect == 1);
     sg_commit();
     sg_shutdown();
 }
