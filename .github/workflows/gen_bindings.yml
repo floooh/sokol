@@ -196,20 +196,15 @@ jobs:
           name: ignore-me-odin
       # NOTE: see https://github.com/floooh/sokol-odin/blob/main/.github/workflows/main.yml
       - uses: ilammy/msvc-dev-cmd@v1
+      - uses: laytan/setup-odin@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          release: latest
       - if: runner.os == 'Linux'
         name: prepare-linux
         run: |
           sudo apt-get update
-          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libpulse-dev libxml2
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          echo "/usr/lib/llvm-17/bin" >> $GITHUB_PATH
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-ubuntu-amd64-dev-2024-04.zip --output odin.zip
-          unzip odin.zip
-          unzip dist.zip
-          rm -r ./dist/examples
-          mv ./dist/* ./
-          chmod a+x ./odin
+          sudo apt-get install libglu1-mesa-dev mesa-common-dev xorg-dev libpulse-dev
           cd sokol
           chmod a+x ./build_clibs_linux.sh
           ./build_clibs_linux.sh
@@ -217,13 +212,6 @@ jobs:
       - if: runner.os == 'macOS'
         name: prepare-macos
         run: |
-          brew install llvm@17
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-macos-amd64-dev-2024-04.zip --output odin.zip
-          unzip odin.zip
-          unzip dist.zip
-          rm -r ./dist/examples
-          mv ./dist/* ./
-          chmod a+x ./odin
           cd sokol
           chmod a+x ./build_clibs_macos.sh
           ./build_clibs_macos.sh
@@ -232,32 +220,31 @@ jobs:
         name: prepare-windows
         shell: cmd
         run: |
-          curl -L https://github.com/odin-lang/Odin/releases/download/dev-2024-04/odin-windows-amd64-dev-2024-04.zip --output odin.zip
-          unzip odin.zip
           cd sokol
           build_clibs_windows.cmd
           cd ..
       - name: build
         run: |
-          ./odin build examples/clear -debug
-          ./odin build examples/triangle -debug
-          ./odin build examples/quad -debug
-          ./odin build examples/bufferoffsets -debug
-          ./odin build examples/cube -debug
-          ./odin build examples/noninterleaved -debug
-          ./odin build examples/texcube -debug
-          ./odin build examples/shapes -debug
-          ./odin build examples/offscreen -debug
-          ./odin build examples/instancing -debug
-          ./odin build examples/mrt -debug
-          ./odin build examples/blend -debug
-          ./odin build examples/debugtext -debug
-          ./odin build examples/debugtext-print -debug
-          ./odin build examples/debugtext-userfont -debug
-          ./odin build examples/saudio -debug
-          ./odin build examples/sgl -debug
-          ./odin build examples/sgl-points -debug
-          ./odin build examples/sgl-context -debug
+          odin version
+          odin build examples/clear -debug
+          odin build examples/triangle -debug
+          odin build examples/quad -debug
+          odin build examples/bufferoffsets -debug
+          odin build examples/cube -debug
+          odin build examples/noninterleaved -debug
+          odin build examples/texcube -debug
+          odin build examples/shapes -debug
+          odin build examples/offscreen -debug
+          odin build examples/instancing -debug
+          odin build examples/mrt -debug
+          odin build examples/blend -debug
+          odin build examples/debugtext -debug
+          odin build examples/debugtext-print -debug
+          odin build examples/debugtext-userfont -debug
+          odin build examples/saudio -debug
+          odin build examples/sgl -debug
+          odin build examples/sgl-points -debug
+          odin build examples/sgl-context -debug
 
   test-rust:
     needs: gen-bindings
