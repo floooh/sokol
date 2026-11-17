@@ -8148,14 +8148,15 @@ typedef enum {
     _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
     _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE = (1<<5),
     _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT = (1<<6),
-    _SG_VK_ACCESS_TEXTURE = (1<<7),
-    _SG_VK_ACCESS_STORAGEIMAGE = (1<<8),
-    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<9),
-    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<11),
-    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<12),
-    _SG_VK_ACCESS_DISCARD = (1<<13),    // in combination with attachments
-    _SG_VK_ACCESS_PRESENT = (1<<14),
+    _SG_VK_ACCESS_INDIRECTBUFFER = (1<<7),
+    _SG_VK_ACCESS_TEXTURE = (1<<8),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<9),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<11),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<12),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<13),
+    _SG_VK_ACCESS_DISCARD = (1<<14),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<15),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -21552,6 +21553,9 @@ _SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_buffer_access_mask(const _sg_buffe
     if (buf->cmn.usage.storage_buffer) {
         res |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
     }
+    if (buf->cmn.usage.indirect_buffer) {
+        res |= _SG_VK_ACCESS_INDIRECTBUFFER;
+    }
     if (buf->cmn.usage.copy_src) {
         res |= _SG_VK_ACCESS_COPY_SRC;
     }
@@ -21588,6 +21592,7 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
     _sg_vk_access_t read_bits =
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
+        _SG_VK_ACCESS_INDIRECTBUFFER |
         _SG_VK_ACCESS_STORAGEBUFFER_RO |
         _SG_VK_ACCESS_COPY_SRC |
         _SG_VK_ACCESS_TEXTURE |
@@ -21615,6 +21620,9 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
     }
     if (access & _SG_VK_ACCESS_INDEXBUFFER) {
         f |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_INDIRECTBUFFER) {
+        f |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
     }
     if (access & (_SG_VK_ACCESS_STORAGEBUFFER_RO|_SG_VK_ACCESS_TEXTURE)) {
         f |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
@@ -21669,6 +21677,9 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
         }
         if (access & _SG_VK_ACCESS_INDEXBUFFER) {
             f |= VK_ACCESS_2_INDEX_READ_BIT;
+        }
+        if (access & _SG_VK_ACCESS_INDIRECTBUFFER) {
+            f |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
         if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
             f |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
@@ -23094,6 +23105,9 @@ _SOKOL_PRIVATE VkBufferUsageFlags _sg_vk_buffer_usage(const sg_buffer_usage* usg
     if (usg->index_buffer) {
         res |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     }
+    if (usg->indirect_buffer) {
+        res |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
     if (usg->storage_buffer) {
         res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
@@ -23513,6 +23527,8 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.dev_props);
     _sg.vk.dev_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkGetPhysicalDeviceFeatures2(_sg.vk.phys_dev, &_sg.vk.dev_features);
+    _sg.features.draw_indirect_base_instance = _sg.vk.dev_features.features.drawIndirectFirstInstance;
+    _sg.features.draw_indirect_index_buffer_offset = true;
 
     const VkPhysicalDeviceLimits* l = &_sg.vk.dev_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
@@ -24828,9 +24844,19 @@ _SOKOL_PRIVATE void _sg_vk_draw_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    // FIXME FIXME FIXME
-    SOKOL_ASSERT(false && "FIXME _sg_vk_draw_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_INDIRECTBUFFER));
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    if (_sg.vk.uniforms.dirty) {
+        if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
+            return;
+        }
+    }
+    const VkDeviceSize vk_offset = (VkDeviceSize)offset;
+    if (_sg.use_indexed_draw) {
+        vkCmdDrawIndexedIndirect(cmd_buf, buf->vk.buf, vk_offset, 1, sizeof(sg_draw_indirect_indexed_args));
+    } else {
+        vkCmdDrawIndirect(cmd_buf, buf->vk.buf, vk_offset, 1, sizeof(sg_draw_indirect_args));
+    }
 }
 
 _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
@@ -24848,9 +24874,16 @@ _SOKOL_PRIVATE void _sg_vk_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
     SOKOL_ASSERT(offset >= 0);
-    // FIXME FIXME FIXME
-    SOKOL_ASSERT(false && "FIXME _sg_vk_dispatch_indirect");
-    _SOKOL_UNUSED(buf && offset);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
+    if (_sg.vk.uniforms.dirty) {
+        if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
+            return;
+        }
+    }
+    const VkDeviceSize vk_offset = (VkDeviceSize)offset;
+    vkCmdDispatchIndirect(cmd_buf, buf->vk.buf, vk_offset);
+
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
