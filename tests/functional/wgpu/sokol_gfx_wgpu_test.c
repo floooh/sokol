@@ -3716,8 +3716,8 @@ UTEST(sokol_gfx_wgpu, dispatch_indirect_after_storage_write) {
 }
 
 // A buffer which is bound as read/write storage buffer and used as indirect
-// buffer in the same dispatch is a WebGPU validation error. sokol-gfx doesn't
-// detect this (yet), only the mock does.
+// buffer in the same dispatch is a WebGPU validation error. The sokol-gfx
+// validation layer catches this before the call reaches WebGPU.
 UTEST(sokol_gfx_wgpu, dispatch_indirect_vs_writable_storage) {
     setup();
     sg_pipeline rw_pip = make_sbuf_compute_pipeline(false);
@@ -3729,15 +3729,16 @@ UTEST(sokol_gfx_wgpu, dispatch_indirect_vs_writable_storage) {
     sg_apply_pipeline(ro_pip);
     sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
     sg_dispatch_indirect(args, 0);
+    T(num_log_items == 0);
     T(wgpu_mock_total_errors() == 0);
-    // read/write storage binding plus indirect use is not
+    T(wgpu_mock_compute_pass_encoder_state()->num_indirect_dispatches == 1);
+    // read/write storage binding plus indirect use is rejected by sokol-gfx
     sg_apply_pipeline(rw_pip);
     sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
     sg_dispatch_indirect(args, 0);
-    T(num_log_items == 0);
-    T(wgpu_mock_total_errors() == 1);
-    T(wgpu_mock_find_error("writable storage buffer") >= 0);
-    wgpu_mock_clear_errors();
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE));
+    T(wgpu_mock_total_errors() == 0);
+    T(wgpu_mock_compute_pass_encoder_state()->num_indirect_dispatches == 1);
     sg_end_pass();
     sg_commit();
     teardown();

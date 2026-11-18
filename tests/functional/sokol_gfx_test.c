@@ -7668,6 +7668,108 @@ UTEST(sokol_gfx, dispatch_indirect_required_bindings_missing) {
     sg_shutdown();
 }
 
+// the indirect buffer cannot be written by the same dispatch
+UTEST(sokol_gfx, dispatch_indirect_buffer_vs_sbview_readwrite) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// the read/write binding is still active after a plain dispatch
+UTEST(sokol_gfx, dispatch_indirect_buffer_vs_sbview_readwrite_after_dispatch) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    sg_dispatch(1, 1, 1);
+    reset_log_items();
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    T(log_items[0] == SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+    T(log_items[1] == SG_LOGITEM_VALIDATION_FAILED);
+    T(num_log_called == 2);
+    sg_end_pass();
+    sg_commit();
+    sg_shutdown();
+}
+
+// a readonly storage binding of the indirect buffer is allowed
+UTEST(sokol_gfx, dispatch_indirect_buffer_vs_sbview_readonly_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// a read/write binding of another buffer is allowed
+UTEST(sokol_gfx, dispatch_indirect_other_sbview_readwrite_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.sbuf_view });
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// after a new pipeline without bindings, the old read/write binding doesn't count
+UTEST(sokol_gfx, dispatch_indirect_after_storage_write_new_pipeline_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_pipeline nobind_pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){ .compute_func.source = "cs" }),
+    });
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    sg_dispatch(1, 1, 1);
+    sg_apply_pipeline(nobind_pip);
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_end_pass();
+    T(sg_query_stats().cur_frame.num_dispatch_indirect == 1);
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
+// the read/write binding doesn't carry over into the next compute pass
+UTEST(sokol_gfx, dispatch_indirect_after_storage_write_next_pass_ok) {
+    setup_with_compute(&(sg_desc){0});
+    const dispatch_indirect_setup_t s = create_dispatch_indirect_setup();
+    sg_begin_pass(ndv_compute_pass());
+    sg_apply_pipeline(s.rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = s.indirect_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_begin_pass(ndv_compute_pass());
+    apply_dispatch_indirect(&s);
+    sg_dispatch_indirect(s.indirect_buf, 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_called == 0);
+    sg_shutdown();
+}
+
 // a destroyed indirect buffer is an error, but not a validation error
 UTEST(sokol_gfx, dispatch_indirect_buffer_alive) {
     setup_with_compute(&(sg_desc){0});
