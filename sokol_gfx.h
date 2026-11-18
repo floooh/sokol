@@ -14600,7 +14600,7 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
     }
     // workaround: write_transient implies D3D11_USAGE_DYNAMIC, but
     // dynamic d3d11 buffers need at least one bind flag
-    if (usg->indirect_buffer && usg->write_transient) {
+    if (usg->indirect_buffer && usg->write_transient && (0 == res)) {
         res |= D3D11_BIND_SHADER_RESOURCE;
     }
     return res;
