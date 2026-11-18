@@ -1155,7 +1155,8 @@ UTEST(sokol_gfx_d3d11, buffer_usage_matrix) {
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .indirect_buffer = true }, .data = data }, 64, D3D11_USAGE_DEFAULT, VB, 0, DIA));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .index_buffer = true, .indirect_buffer = true }, .data = data }, 64, D3D11_USAGE_DEFAULT, IB, 0, DIA));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .indirect_buffer = true }, .size = 256 }, 256, D3D11_USAGE_DEFAULT, SRV|UAV, 0, RAW|DIA));
-    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 128 }, 128, D3D11_USAGE_DYNAMIC, 0, W, DIA));
+    // dynamic buffers need at least one bind flag, sokol adds a dummy SRV bind flag
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 128 }, 128, D3D11_USAGE_DYNAMIC, SRV, W, DIA));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .indirect_buffer = true, .write_transient = true }, .size = 128 }, 128, D3D11_USAGE_DYNAMIC, SRV, W, RAW|DIA));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_unsealed = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, 0, 0, DIA));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .copy_dst = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, 0, 0, DIA));

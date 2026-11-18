@@ -257,6 +257,10 @@ static HRESULT dev_CreateBuffer(ID3D11Device* self, const D3D11_BUFFER_DESC* pDe
         call->src_data = pInit->pSysMem;
         mock_snapshot(call, pInit->pSysMem, pDesc ? pDesc->ByteWidth : 0);
     }
+    /* the D3D11 runtime rejects dynamic resources without bind flags */
+    if (pDesc && (pDesc->Usage == D3D11_USAGE_DYNAMIC) && (pDesc->BindFlags == 0)) {
+        *ppOut = NULL; call->result = E_INVALIDARG; return E_INVALIDARG;
+    }
     if (mock_consume_create_fault()) { *ppOut = NULL; call->result = E_FAIL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_BUFFER, &buffer_vtbl);
     obj->size_bytes = pDesc ? pDesc->ByteWidth : 0;
