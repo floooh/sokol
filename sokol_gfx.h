@@ -5754,7 +5754,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from in this frame") \
-    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT, "sg_write_buffer_transient: cannot be called after buffer has already been used in an draw/dispatch-indirect call in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT, "sg_write_buffer_transient: cannot be called after buffer has already been used in a draw/dispatch-indirect call in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
@@ -11289,7 +11289,7 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
-    _sg.features.draw_indirect_base_instance = version >= 420;
+    _sg.features.draw_indirect_base_instance = version >= 430;
     _sg.features.draw_indirect_index_buffer_offset = false;
     _sg.features.dual_source_blending = version >= 330;
     _sg.features.vertexformat_int10_n2 = true;
@@ -13714,7 +13714,8 @@ _SOKOL_PRIVATE void _sg_gl_draw_indirect(_sg_buffer_t* buf, int offset) {
             glDrawArraysIndirect(prim_type, indirect);
         }
     #else
-        _SOKOL_UNUSED(buf && offset);
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
     #endif
 }
 
@@ -13739,7 +13740,8 @@ _SOKOL_PRIVATE void _sg_gl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
         _sg_gl_cache_bind_buffer(GL_DISPATCH_INDIRECT_BUFFER, gl_buf);
         glDispatchComputeIndirect((GLintptr)offset);
     #else
-        _SOKOL_UNUSED(buf && offset);
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
     #endif
 }
 
@@ -24900,7 +24902,6 @@ _SOKOL_PRIVATE void _sg_vk_dispatch_indirect(_sg_buffer_t* buf, int offset) {
     }
     const VkDeviceSize vk_offset = (VkDeviceSize)offset;
     vkCmdDispatchIndirect(cmd_buf, buf->vk.buf, vk_offset);
-
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -27356,6 +27357,7 @@ _SOKOL_PRIVATE bool _sg_validate_draw_indirect(_sg_buffer_t* buf, int offset) {
         return _sg_validate_end();
     #endif
 }
+
 _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(num_groups_x);

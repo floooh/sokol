@@ -3789,18 +3789,16 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
             } else {
                 group_stack <<= 1;
             }
-            if (depth < 63) {
-                path_key[depth + 1] = _sgimgui_hash_combine(path_key[depth], (uint32_t)loc_idx);
-                local_index[++depth] = 0;
-            }
+            SOKOL_ASSERT(depth < 63);
+            path_key[depth + 1] = _sgimgui_hash_combine(path_key[depth], (uint32_t)loc_idx);
+            local_index[++depth] = 0;
         } else if (item->cmd == _SGIMGUI_CMD_POP_DEBUG_GROUP) {
+            SOKOL_ASSERT(depth > 1);
             if (group_stack & 1) {
                 _sgimgui_igtreepop();
             }
             group_stack >>= 1;
-            if (depth > 0) {
-                depth -= 1;
-            }
+            depth -= 1;
         } else {
             const int loc_idx = local_index[depth]++;
             const uint32_t key = _sgimgui_hash_combine(path_key[depth], (uint32_t)loc_idx);
