@@ -5749,6 +5749,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: indirect buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE, "sg_dispatch_indirect: same buffer cannot be used as indirect buffer and read/write storage buffer in the same dispatch") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
@@ -7305,6 +7306,7 @@ typedef struct {
         uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
         uint32_t read_render_pass_index;    // last pass index the buffer was read in a render pass
         uint32_t write_render_pass_index;   // last pass index the buffer was written in a render pass
+        uint32_t write_bindings_index;      // last bindings index the buffer was bound as read/write storage buffer
     } validate;
     sg_buffer_usage usage;
 } _sg_buffer_common_t;
@@ -8423,6 +8425,7 @@ typedef struct {
     bool use_instanced_draw;
     struct {
         uint32_t pass_index;    // running count of passes (keeps counting across frames)
+        uint32_t bindings_index;    // running count of sg_apply_pipeline() and sg_apply_bindings() calls
         uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
         uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
         int index_buffer_offset;                    // index buffer offset of the last sg_apply_bindings(), checked in sg_draw_indirect()
@@ -9342,6 +9345,7 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->validate.copy_src_frame_index = 0;
     cmn->validate.read_render_pass_index = 0;
     cmn->validate.write_render_pass_index = 0;
+    cmn->validate.write_bindings_index = 0;
     cmn->usage = desc->usage;
 }
 
@@ -26913,6 +26917,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         // set the expected bindings and uniform block flags for deferred validation in draw/dispatch
         _sg.validate.required_bindings_and_uniforms = pip->cmn.required_bindings_and_uniforms | shd->cmn.required_bindings_and_uniforms;
         _sg.validate.applied_bindings_and_uniforms = 0;
+        // not a bug! old read/write bindings can't be written by the new shader
+        _sg.validate.bindings_index += 1;
         _sg.validate.index_buffer_offset = 0;
         // resetting the write-transient flags here prevents potential validation misfires when sg_apply_bindings() isn't called
         _sg.validate.write_buffer_transient_missing = false;
@@ -26974,6 +26980,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _sg_validate_begin();
 
         _sg.validate.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+        _sg.validate.bindings_index += 1;
         _sg.validate.index_buffer_offset = bindings->index_buffer_offset;
         _sg.validate.write_buffer_transient_missing = false;
         _sg.validate.write_image_transient_missing = false;
@@ -27118,6 +27125,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                         _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
                                     } else {
                                         buf->cmn.validate.write_render_pass_index = _sg.validate.pass_index;
+                                        buf->cmn.validate.write_bindings_index = _sg.validate.bindings_index;
                                         _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.read_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
                                         _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
                                     }
@@ -27388,6 +27396,7 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(_sg_buffer_t* buf, int offset
         if (offset >= 0) {
             _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
         }
+        _SG_VALIDATE(buf->cmn.validate.write_bindings_index != _sg.validate.bindings_index, VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
         if (buf->cmn.usage.write_transient) {
             _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
         }
