@@ -9398,6 +9398,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         _sg_shader_view_t* dst = &cmn->views[i];
         if (desc->views[i].texture.stage != SG_SHADERSTAGE_NONE) {
             const sg_shader_texture_view* src = &desc->views[i].texture;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->view_type = SG_VIEWTYPE_TEXTURE;
             dst->image_type = src->image_type;
@@ -12517,9 +12518,10 @@ _SOKOL_PRIVATE sg_resource_state _sg_gl_create_shader(_sg_shader_t* shd, const s
         _sg_strcpy(&shd->gl.attrs[i].name, desc->attrs[i].glsl_name);
     }
 
-    const bool has_vs = desc->vertex_func.source;
-    const bool has_fs = desc->fragment_func.source;
-    const bool has_cs = desc->compute_func.source;
+    // the explicit 0 != is a workaround for MSVC 14.52.37025 which started to issue a warning C4047
+    const bool has_vs = 0 != desc->vertex_func.source;
+    const bool has_fs = 0 != desc->fragment_func.source;
+    const bool has_cs = 0 != desc->compute_func.source;
     SOKOL_ASSERT((has_vs && has_fs) || has_cs);
     GLuint gl_prog = glCreateProgram();
     if (has_vs && has_fs) {
