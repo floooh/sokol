@@ -9245,6 +9245,7 @@ _SOKOL_PRIVATE void _sg_shader_common_init(_sg_shader_common_t* cmn, const sg_sh
         _sg_shader_view_t* dst = &cmn->views[i];
         if (desc->views[i].texture.stage != SG_SHADERSTAGE_NONE) {
             const sg_shader_texture_view* src = &desc->views[i].texture;
+            cmn->required_bindings_and_uniforms |= required_bindings_flag;
             dst->stage = src->stage;
             dst->view_type = SG_VIEWTYPE_TEXTURE;
             dst->image_type = src->image_type;
