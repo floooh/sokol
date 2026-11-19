@@ -2009,6 +2009,12 @@
     itself though, not any allocations in OS libraries.
 
 
+    ON INDIRECT DRAW AND DISPATCH
+    =============================
+
+    FIXME FIXME FIXME
+
+
     ERROR REPORTING AND LOGGING
     ===========================
     To get any logging information at all you need to provide a logging callback in the setup call
@@ -4782,7 +4788,15 @@ typedef struct sg_view_desc {
 } sg_view_desc;
 
 /*
-    TODO: documentation
+    sg_draw_indirect_args
+    sg_draw_indirect_indexed_args
+    sg_dispatch_indirect_args
+
+    These are reference structs which define the layout of
+    indirect draw and dispatch arguments in indirect buffers.
+
+    For details and caveats of indirect draw and dispatch
+    see the documentation sectionr `ON INDIRECT DRAW AND DISPATCH`!
 */
 typedef struct sg_draw_indirect_args {
     uint32_t num_elements;
