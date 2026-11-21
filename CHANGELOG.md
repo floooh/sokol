@@ -1,5 +1,46 @@
 ## Updates
 
+### 21-Nov-2026
+
+- sokol_gfx.h: now support indirect draw and dispatch on backends with
+  compute suports (e.g. not on WebGL2 and macOS/iOS+GL):
+
+  - a new buffer usage `sg_buffer_usage.indirect_buffer` (usually combined
+    with `.storage_buffer` to let a compute shader write indirect draw/dispatch
+    args)
+  - two new functions `sg_draw_indirect(buf, offset)` and `sg_dispatch_indirect(buf, offset)`
+  - 'reference structs' for the indirect draw/dispatch argument
+    layout:
+        - `sg_draw_indirect_args`
+        - `sg_draw_indirect_indexed_args`
+        - `sg_dispatch_indirect_args`
+  - two new feature flags `sg_features.draw_indirect_base_instance`
+    and `sg_features.draw_indirect_index_buffer_offset` for portability
+    caveats on GL/GLES, WebGPU and Vulkan
+  - new trace hooks, frame stats and validation checks
+
+  For implementation details and caveats see the new documentation
+  section `ON INDIRECT DRAW AND DISPATCH` in sokol_gfx.h
+
+Related changes in other headers:
+
+- sokol_app.h: the WebGPU and Vulkan backends now request the optional
+  features `IndirectFirstInstance` and `drawIndirectFirstInstance`
+- sokol_cmdbuf.h: new functions `scb_draw_indirect()` and `scb_dispatch_indirect()`
+- sokol_gfx_imgui.h: shows the new feature flags, frame stats and
+  trace hook calls. Also some unrelated UI improvements in the debug UI:
+  the lists are now horizontally resizeable and the capture list selection
+  and hover state remain stable when debug-groups are collapsed.
+
+New sample (requires a WebGPU capable browser):
+
+    - [draw-indirect-sapp](https://floooh.github.io/sokol-webgpu/draw-indirect-sapp.html)
+    - [C source](https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.c)
+    - [GLSL source](https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.glsl)
+
+
+PR: https://github.com/floooh/sokol/pull/1651
+
 ### 10-Nov-2026
 
 - sokol_gfx.h: on non-GL backends, the validation code for `sg_shader_desc` now
