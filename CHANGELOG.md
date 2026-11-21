@@ -34,7 +34,7 @@ Related changes in other headers:
 
 New sample (requires a WebGPU capable browser):
 
-- [draw-indirect-sapp](https://floooh.github.io/sokol-webgpu/draw-indirect-sapp.html)
+- [draw-indirect-sapp](https://floooh.github.io/sokol-webgpu/player.html?name=draw-indirect)
 - [C source](https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.c)
 - [GLSL source](https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.glsl)
 
