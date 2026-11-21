@@ -2,8 +2,8 @@
 
 ### 21-Nov-2026
 
-- sokol_gfx.h: now support indirect draw and dispatch on backends with
-  compute suport (e.g. not on WebGL2 and macOS/iOS+GL):
+- sokol_gfx.h: added indirect draw and dispatch on backends with
+  compute support (e.g. not on WebGL2 and macOS/iOS+GL):
 
   - a new buffer usage `sg_buffer_usage.indirect_buffer` (usually combined
     with `.storage_buffer` to let a compute shader write indirect draw/dispatch
