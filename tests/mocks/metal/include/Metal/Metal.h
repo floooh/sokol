@@ -676,6 +676,21 @@ typedef struct {
     NSUInteger x, y, width, height;
 } MTLScissorRect;
 
+typedef struct {
+    uint32_t vertexCount;
+    uint32_t instanceCount;
+    uint32_t vertexStart;
+    uint32_t baseInstance;
+} MTLDrawPrimitivesIndirectArguments;
+
+typedef struct {
+    uint32_t indexCount;
+    uint32_t instanceCount;
+    uint32_t indexStart;
+    int32_t baseVertex;
+    uint32_t baseInstance;
+} MTLDrawIndexedPrimitivesIndirectArguments;
+
 @protocol MTLRenderCommandEncoder <MTLCommandEncoder>
 - (void)setViewport:(MTLViewport)viewport;
 - (void)setScissorRect:(MTLScissorRect)rect;
@@ -717,9 +732,22 @@ typedef struct {
                 instanceCount:(NSUInteger)instanceCount
                    baseVertex:(NSInteger)baseVertex
                  baseInstance:(NSUInteger)baseInstance;
+- (void)drawPrimitives:(MTLPrimitiveType)primitiveType
+        indirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+  indirectBufferOffset:(NSUInteger)indirectBufferOffset;
+- (void)drawIndexedPrimitives:(MTLPrimitiveType)primitiveType
+                    indexType:(MTLIndexType)indexType
+                  indexBuffer:(id<MTLBuffer> _Nonnull)indexBuffer
+            indexBufferOffset:(NSUInteger)indexBufferOffset
+               indirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+         indirectBufferOffset:(NSUInteger)indirectBufferOffset;
 @end
 
 //== MTLComputeCommandEncoder.h ================================================
+
+typedef struct {
+    uint32_t threadgroupsPerGrid[3];
+} MTLDispatchThreadgroupsIndirectArguments;
 
 @protocol MTLComputeCommandEncoder <MTLCommandEncoder>
 - (void)setComputePipelineState:(id<MTLComputePipelineState> _Nonnull)state;
@@ -728,6 +756,9 @@ typedef struct {
 - (void)setTexture:(id<MTLTexture> _Nullable)texture atIndex:(NSUInteger)index;
 - (void)setSamplerState:(id<MTLSamplerState> _Nullable)sampler atIndex:(NSUInteger)index;
 - (void)dispatchThreadgroups:(MTLSize)threadgroupsPerGrid threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup;
+- (void)dispatchThreadgroupsWithIndirectBuffer:(id<MTLBuffer> _Nonnull)indirectBuffer
+                          indirectBufferOffset:(NSUInteger)indirectBufferOffset
+                         threadsPerThreadgroup:(MTLSize)threadsPerThreadgroup;
 @end
 
 //== MTLBlitCommandEncoder.h ===================================================

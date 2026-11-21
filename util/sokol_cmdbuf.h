@@ -127,7 +127,9 @@
         scb_apply_uniforms(cb, ub_slot, &(sg_range){ ... });
         scb_draw(cb, base_element, num_elements, num_instances);
         scb_draw_ex(cb, base_element, num_elements, num_instances, base_vertex, base_instance);
+        scb_draw_indirect(cb, buf, offset);
         scb_dispatch(cb, num_groups_x, num_groups_y, num_groups_z);
+        scb_dispatch_indirect(cb, buf, offset);
 
       Uniform data will be copied into the command buffer, and with the
       required alignment.
@@ -430,8 +432,12 @@ SOKOL_CMDBUF_API_DECL void scb_apply_uniforms(scb_cmdbuf cb, int ub_slot, const 
 SOKOL_CMDBUF_API_DECL void scb_draw(scb_cmdbuf cb, int base_element, int num_elements, int num_instances);
 // record draw-ex command
 SOKOL_CMDBUF_API_DECL void scb_draw_ex(scb_cmdbuf cb, int base_element, int num_elements, int num_instances, int base_vertex, int base_instance);
+// record draw-indirect command
+SOKOL_CMDBUF_API_DECL void scb_draw_indirect(scb_cmdbuf cb, sg_buffer buf, int offset);
 // record dispatch command
 SOKOL_CMDBUF_API_DECL void scb_dispatch(scb_cmdbuf cb, int num_groups_x, int num_groups_y, int num_groups_z);
+// record dispatch-indirect command
+SOKOL_CMDBUF_API_DECL void scb_dispatch_indirect(scb_cmdbuf cb, sg_buffer buf, int offset);
 
 // query command buffer resource state (valid, failed, invalid)
 SOKOL_CMDBUF_API_DECL scb_resource_state scb_query_cmdbuf_state(scb_cmdbuf cb);
@@ -497,7 +503,9 @@ typedef enum {
     _SCB_CMD_APPLY_UNIFORMS,
     _SCB_CMD_DRAW,
     _SCB_CMD_DRAW_EX,
+    _SCB_CMD_DRAW_INDIRECT,
     _SCB_CMD_DISPATCH,
+    _SCB_CMD_DISPATCH_INDIRECT,
 } _scb_cmd_t;
 
 typedef struct {
@@ -1054,6 +1062,24 @@ static const uint8_t* _scb_dec_draw_ex(const uint8_t* ptr) {
     return ptr;
 }
 
+static void _scb_enc_draw_indirect(_scb_cmdbuf_t* cb, uint32_t buf_id, int offset) {
+    const size_t payload_size = sizeof(uint32_t) + sizeof(int32_t);
+    if (_scb_enc_cmd(cb, _SCB_CMD_DRAW_INDIRECT, payload_size)) {
+        _scb_enc_u32(cb, buf_id);
+        _scb_enc_i32(cb, offset);
+        _scb_enc_end(cb);
+    }
+}
+
+static const uint8_t* _scb_dec_draw_indirect(const uint8_t* ptr) {
+    sg_buffer buf;
+    int offset;
+    ptr = _scb_dec_u32(ptr, &buf.id);
+    ptr = _scb_dec_i32(ptr, &offset);
+    sg_draw_indirect(buf, offset);
+    return ptr;
+}
+
 static void _scb_enc_dispatch(_scb_cmdbuf_t* cb, int num_groups_x, int num_groups_y, int num_groups_z) {
     const size_t payload_size = 3 * sizeof(int32_t);
     if (_scb_enc_cmd(cb, _SCB_CMD_DISPATCH, payload_size)) {
@@ -1070,6 +1096,24 @@ static const uint8_t* _scb_dec_dispatch(const uint8_t* ptr) {
     ptr = _scb_dec_i32(ptr, &num_groups_y);
     ptr = _scb_dec_i32(ptr, &num_groups_z);
     sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
+    return ptr;
+}
+
+static void _scb_enc_dispatch_indirect(_scb_cmdbuf_t* cb, uint32_t buf_id, int offset) {
+    const size_t payload_size = sizeof(uint32_t) + sizeof(int32_t);
+    if (_scb_enc_cmd(cb, _SCB_CMD_DISPATCH_INDIRECT, payload_size)) {
+        _scb_enc_u32(cb, buf_id);
+        _scb_enc_i32(cb, offset);
+        _scb_enc_end(cb);
+    }
+}
+
+static const uint8_t* _scb_dec_dispatch_indirect(const uint8_t* ptr) {
+    sg_buffer buf;
+    int offset;
+    ptr = _scb_dec_u32(ptr, &buf.id);
+    ptr = _scb_dec_i32(ptr, &offset);
+    sg_dispatch_indirect(buf, offset);
     return ptr;
 }
 
@@ -1368,6 +1412,16 @@ SOKOL_API_IMPL void scb_draw_ex(scb_cmdbuf cb_id, int base_element, int num_elem
     _scb_enc_draw_ex(cb, base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
+SOKOL_API_IMPL void scb_draw_indirect(scb_cmdbuf cb_id, sg_buffer buf, int offset) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
+    }
+    _scb_enc_draw_indirect(cb, buf.id, offset);
+}
+
 SOKOL_API_IMPL void scb_dispatch(scb_cmdbuf cb_id, int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
     _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
@@ -1376,6 +1430,16 @@ SOKOL_API_IMPL void scb_dispatch(scb_cmdbuf cb_id, int num_groups_x, int num_gro
         return;
     }
     _scb_enc_dispatch(cb, num_groups_x, num_groups_y, num_groups_z);
+}
+
+SOKOL_API_IMPL void scb_dispatch_indirect(scb_cmdbuf cb_id, sg_buffer buf, int offset) {
+    SOKOL_ASSERT(_SCB_INIT_TAG == _scb.init_tag);
+    _scb_cmdbuf_t* cb = _scb_lookup_cmdbuf(cb_id.id);
+    if (!_scb_cmdbuf_valid(cb)) {
+        _SCB_ERROR(CMDBUF_NOT_VALID);
+        return;
+    }
+    _scb_enc_dispatch_indirect(cb, buf.id, offset);
 }
 
 SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
@@ -1423,8 +1487,14 @@ SOKOL_API_IMPL void scb_submit(scb_cmdbuf cb_id) {
             case _SCB_CMD_DRAW_EX:
                 ptr = _scb_dec_draw_ex(ptr);
                 break;
+            case _SCB_CMD_DRAW_INDIRECT:
+                ptr = _scb_dec_draw_indirect(ptr);
+                break;
             case _SCB_CMD_DISPATCH:
                 ptr = _scb_dec_dispatch(ptr);
+                break;
+            case _SCB_CMD_DISPATCH_INDIRECT:
+                ptr = _scb_dec_dispatch_indirect(ptr);
                 break;
             default:
                 _SCB_ERROR(SUBMIT_INVALID_COMMAND);

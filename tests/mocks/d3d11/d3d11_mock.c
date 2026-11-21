@@ -51,6 +51,8 @@ typedef struct mock_obj_s {
     size_t size_bytes;
     UINT row_pitch;
     UINT depth_pitch;
+    /* buffers keep their create desc (checked by indirect draw/dispatch) */
+    D3D11_BUFFER_DESC buffer_desc;
     /* blob payload */
     void* blob_data;
     SIZE_T blob_size;
@@ -255,9 +257,14 @@ static HRESULT dev_CreateBuffer(ID3D11Device* self, const D3D11_BUFFER_DESC* pDe
         call->src_data = pInit->pSysMem;
         mock_snapshot(call, pInit->pSysMem, pDesc ? pDesc->ByteWidth : 0);
     }
+    /* the D3D11 runtime rejects dynamic resources without bind flags */
+    if (pDesc && (pDesc->Usage == D3D11_USAGE_DYNAMIC) && (pDesc->BindFlags == 0)) {
+        *ppOut = NULL; call->result = E_INVALIDARG; return E_INVALIDARG;
+    }
     if (mock_consume_create_fault()) { *ppOut = NULL; call->result = E_FAIL; return E_FAIL; }
     mock_obj_t* obj = mock_alloc(MOCK_KIND_BUFFER, &buffer_vtbl);
     obj->size_bytes = pDesc ? pDesc->ByteWidth : 0;
+    if (pDesc) { obj->buffer_desc = *pDesc; }
     call->dst = obj;
     *ppOut = (ID3D11Buffer*)obj;
     return S_OK;
@@ -598,6 +605,39 @@ static void ctx_Dispatch(ID3D11DeviceContext* self, UINT x, UINT y, UINT z) {
     call->args[0] = x; call->args[1] = y; call->args[2] = z;
 }
 
+/* Record an indirect draw/dispatch. Set result to E_INVALIDARG when the
+   D3D11 runtime would reject the call: args buffer is NULL or not a buffer,
+   has no D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS, offset is not a multiple
+   of 4, or the args do not fit into the buffer. */
+static void mock_record_indirect(d3d11_mock_call_kind_t kind, ID3D11Buffer* buf, UINT offset, UINT args_size) {
+    d3d11_mock_call_t* call = mock_record(kind);
+    call->dst = buf;
+    call->args[0] = offset;
+    const mock_obj_t* obj = (const mock_obj_t*)buf;
+    bool valid = obj && (obj->kind == MOCK_KIND_BUFFER);
+    if (valid) {
+        call->buffer_desc = obj->buffer_desc;
+        valid = (0 != (obj->buffer_desc.MiscFlags & D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS))
+             && ((offset & 3) == 0)
+             && (((size_t)offset + args_size) <= obj->size_bytes);
+    }
+    if (!valid) {
+        call->result = E_INVALIDARG;
+    }
+}
+static void ctx_DrawIndexedInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* buf, UINT offset) {
+    (void)self;
+    mock_record_indirect(D3D11_MOCK_CALL_DRAW_INDEXED_INSTANCED_INDIRECT, buf, offset, 20);
+}
+static void ctx_DrawInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* buf, UINT offset) {
+    (void)self;
+    mock_record_indirect(D3D11_MOCK_CALL_DRAW_INSTANCED_INDIRECT, buf, offset, 16);
+}
+static void ctx_DispatchIndirect(ID3D11DeviceContext* self, ID3D11Buffer* buf, UINT offset) {
+    (void)self;
+    mock_record_indirect(D3D11_MOCK_CALL_DISPATCH_INDIRECT, buf, offset, 12);
+}
+
 static HRESULT ctx_Map(ID3D11DeviceContext* self, ID3D11Resource* pRes, UINT sub, D3D11_MAP mt, UINT flags, D3D11_MAPPED_SUBRESOURCE* pMapped) {
     (void)self;
     d3d11_mock_call_t* call = mock_record(D3D11_MOCK_CALL_MAP);
@@ -701,6 +741,9 @@ static const struct ID3D11DeviceContextVtbl context_vtbl = {
     ctx_Draw,
     ctx_DrawInstanced,
     ctx_Dispatch,
+    ctx_DrawIndexedInstancedIndirect,
+    ctx_DrawInstancedIndirect,
+    ctx_DispatchIndirect,
     ctx_Map,
     ctx_Unmap,
     (ULONG (STDMETHODCALLTYPE*)(ID3D11DeviceContext*))mock_addref,

@@ -408,6 +408,7 @@ static const WGPUBufferUsage WGPUBufferUsage_Index = 0x0000000000000010;
 static const WGPUBufferUsage WGPUBufferUsage_Vertex = 0x0000000000000020;
 static const WGPUBufferUsage WGPUBufferUsage_Uniform = 0x0000000000000040;
 static const WGPUBufferUsage WGPUBufferUsage_Storage = 0x0000000000000080;
+static const WGPUBufferUsage WGPUBufferUsage_Indirect = 0x0000000000000100;
 
 typedef WGPUFlags WGPUColorWriteMask;
 static const WGPUColorWriteMask WGPUColorWriteMask_None = 0x0000000000000000;
@@ -838,6 +839,7 @@ void wgpuCommandBufferRelease(WGPUCommandBuffer cmd_buf);
 void wgpuComputePassEncoderSetPipeline(WGPUComputePassEncoder enc, WGPUComputePipeline pip);
 void wgpuComputePassEncoderSetBindGroup(WGPUComputePassEncoder enc, uint32_t group_index, WGPUBindGroup group, size_t num_dyn_offsets, const uint32_t* dyn_offsets);
 void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder enc, uint32_t x, uint32_t y, uint32_t z);
+void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset);
 void wgpuComputePassEncoderEnd(WGPUComputePassEncoder enc);
 void wgpuComputePassEncoderRelease(WGPUComputePassEncoder enc);
 
@@ -851,6 +853,8 @@ void wgpuRenderPassEncoderSetIndexBuffer(WGPURenderPassEncoder enc, WGPUBuffer b
 void wgpuRenderPassEncoderSetVertexBuffer(WGPURenderPassEncoder enc, uint32_t slot, WGPUBuffer buf, uint64_t offset, uint64_t size);
 void wgpuRenderPassEncoderDraw(WGPURenderPassEncoder enc, uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
 void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder enc, uint32_t index_count, uint32_t instance_count, uint32_t first_index, int32_t base_vertex, uint32_t first_instance);
+void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset);
+void wgpuRenderPassEncoderDrawIndexedIndirect(WGPURenderPassEncoder enc, WGPUBuffer indirect_buffer, uint64_t indirect_offset);
 void wgpuRenderPassEncoderEnd(WGPURenderPassEncoder enc);
 void wgpuRenderPassEncoderRelease(WGPURenderPassEncoder enc);
 

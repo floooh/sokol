@@ -21,6 +21,7 @@
 //    - bindings and bindgroups cache       _sg_wgpu_apply_bindings / _sg_wgpu_bindgroups_cache_*
 //    - uniforms                            _sg_wgpu_uniform_system_*
 //    - draws and dispatches                _sg_wgpu_draw / _sg_wgpu_dispatch
+//    - indirect draws and dispatches       _sg_wgpu_draw_indirect / _sg_wgpu_dispatch_indirect
 //    - copies                              _sg_wgpu_copy_buffer_to_buffer / _sg_wgpu_copy_*_to_image
 //    - frame end                           _sg_wgpu_commit
 //------------------------------------------------------------------------------
@@ -3370,6 +3371,394 @@ UTEST(sokol_gfx_wgpu, pipeline_stencil_decr_wrap) {
     T(pi.depth_stencil.stencilBack.failOp == WGPUStencilOperation_DecrementWrap);
     sg_destroy_pipeline(pip);
     sg_destroy_shader(shd);
+    teardown();
+}
+
+//== indirect draws and dispatches =============================================
+static const char* cs_sbuf_src = "@group(1) @binding(0) var<storage, read_write> buf: array<u32>; @compute @workgroup_size(1) fn cs_main() { }";
+
+// compute pipeline with one storage buffer at group 1 binding 0
+static sg_pipeline make_sbuf_compute_pipeline(bool readonly) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .compute = true,
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func = { .source = cs_sbuf_src, .entry = "cs_main" },
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = readonly, .wgsl_group1_binding_n = 0 },
+        }),
+    });
+}
+
+static sg_pipeline make_indexed_pipeline(sg_shader shd) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .index_type = SG_INDEXTYPE_UINT16,
+        .depth.pixel_format = SG_PIXELFORMAT_DEPTH_STENCIL,
+        .colors[0].pixel_format = SG_PIXELFORMAT_BGRA8,
+    });
+}
+
+UTEST(sokol_gfx_wgpu, init_caps_indirect_first_instance) {
+    setup();
+    T(!sg_query_features().draw_indirect_base_instance);
+    sg_shutdown();
+    T(wgpu_mock_total_errors() == 0);
+    wgpu_mock_set_feature(WGPUFeatureName_IndirectFirstInstance, true);
+    sg_setup(&(sg_desc){ .environment.defaults.color_format = SG_PIXELFORMAT_BGRA8, .environment.wgpu.device = wgpu_mock_device(), .logger.func = capture_log });
+    T(sg_query_features().draw_indirect_base_instance);
+    teardown();
+}
+
+UTEST(sokol_gfx_wgpu, create_buffer_indirect_usage) {
+    setup();
+    const uint32_t args[4] = { 3, 1, 0, 0 };
+    sg_buffer ib = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    sg_buffer isb = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .storage_buffer = true }, .size = 64 });
+    sg_buffer itb = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 64 });
+    sg_buffer vb = make_vbuf();
+    wgpu_mock_buffer_info_t info = {0};
+    T(wgpu_mock_buffer_info(sg_wgpu_query_buffer_info(ib).buf, &info));
+    T(info.usage & WGPUBufferUsage_Indirect);
+    T(!(info.usage & WGPUBufferUsage_Vertex));
+    T(info.mapped_at_creation);
+    T(0 == memcmp(wgpu_mock_buffer_data(sg_wgpu_query_buffer_info(ib).buf), args, sizeof(args)));
+    T(wgpu_mock_buffer_info(sg_wgpu_query_buffer_info(isb).buf, &info));
+    T(info.usage & WGPUBufferUsage_Indirect);
+    T(info.usage & WGPUBufferUsage_Storage);
+    T(wgpu_mock_buffer_info(sg_wgpu_query_buffer_info(itb).buf, &info));
+    T(info.usage & WGPUBufferUsage_Indirect);
+    T(info.usage & WGPUBufferUsage_CopyDst);
+    T(wgpu_mock_buffer_info(sg_wgpu_query_buffer_info(vb).buf, &info));
+    T(!(info.usage & WGPUBufferUsage_Indirect));
+    teardown();
+}
+
+UTEST(sokol_gfx_wgpu, draw_indirect) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { .ptr = scratch, .size = 64 } });
+    const void* wgpu_args = sg_wgpu_query_buffer_info(args).buf;
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    wgpu_mock_clear_calls();
+    sg_draw_indirect(args, 16);
+    const wgpu_mock_call_t* c = wgpu_mock_last_call(F(wgpuRenderPassEncoderDrawIndirect));
+    T(c != 0);
+    if (c) {
+        T(c->args[0].p == wgpu_args);
+        T(c->args[1].u == 16);
+    }
+    // the last item in the buffer
+    sg_draw_indirect(args, 64 - (int)sizeof(sg_draw_indirect_args));
+    const wgpu_mock_render_pass_encoder_state_t* rpe = wgpu_mock_render_pass_encoder_state();
+    T(rpe->num_indirect_draws == 2);
+    T(rpe->num_indexed_indirect_draws == 0);
+    T(rpe->last_indirect_buffer == wgpu_args);
+    T(rpe->last_indirect_offset == 48);
+    T(rpe->num_draws == 0);
+    T(wgpu_mock_count_calls(F(wgpuRenderPassEncoderDrawIndexedIndirect)) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    discard_swapchain(&sc);
+    teardown();
+}
+
+UTEST(sokol_gfx_wgpu, draw_indexed_indirect) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_indexed_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer ibuf = make_ibuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { .ptr = scratch, .size = 64 } });
+    const void* wgpu_args = sg_wgpu_query_buffer_info(args).buf;
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .index_buffer_offset = 8 });
+    wgpu_mock_clear_calls();
+    sg_draw_indirect(args, 20);
+    const wgpu_mock_call_t* c = wgpu_mock_last_call(F(wgpuRenderPassEncoderDrawIndexedIndirect));
+    T(c != 0);
+    if (c) {
+        T(c->args[0].p == wgpu_args);
+        T(c->args[1].u == 20);
+    }
+    const wgpu_mock_render_pass_encoder_state_t* rpe = wgpu_mock_render_pass_encoder_state();
+    T(rpe->num_indexed_indirect_draws == 1);
+    T(rpe->num_indirect_draws == 0);
+    // the index buffer binding (with offset) comes from sg_apply_bindings()
+    T(rpe->index_buffer.buffer == sg_wgpu_query_buffer_info(ibuf).buf);
+    T(rpe->index_buffer.offset == 8);
+    T(rpe->index_format == WGPUIndexFormat_Uint16);
+    T(wgpu_mock_count_calls(F(wgpuRenderPassEncoderDrawIndirect)) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// pending uniform updates must be applied before the indirect draw
+UTEST(sokol_gfx_wgpu, draw_indirect_uniforms) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_pipeline(make_ub_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { .ptr = scratch, .size = 32 } });
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_apply_uniforms(0, &(sg_range){ .ptr = scratch, .size = 16 });
+    sg_apply_uniforms(1, &(sg_range){ .ptr = scratch, .size = 32 });
+    wgpu_mock_clear_calls();
+    sg_draw_indirect(args, 0);
+    const int bg_idx = wgpu_mock_find_call(F(wgpuRenderPassEncoderSetBindGroup), 0);
+    const int draw_idx = wgpu_mock_find_call(F(wgpuRenderPassEncoderDrawIndirect), 0);
+    T(bg_idx >= 0);
+    T(draw_idx > bg_idx);
+    const wgpu_mock_render_pass_encoder_state_t* rpe = wgpu_mock_render_pass_encoder_state();
+    T(rpe->bind_groups[0].num_dynamic_offsets == 2);
+    // no new uniforms: the next indirect draw doesn't set the bind group again
+    const int n = wgpu_mock_count_calls(F(wgpuRenderPassEncoderSetBindGroup));
+    sg_draw_indirect(args, 16);
+    T(wgpu_mock_count_calls(F(wgpuRenderPassEncoderSetBindGroup)) == n);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// failed validation or a skipped draw must not reach WebGPU
+UTEST(sokol_gfx_wgpu, draw_indirect_rejected) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { .ptr = scratch, .size = 32 } });
+    sg_buffer failed_vbuf = sg_alloc_buffer();
+    sg_fail_buffer(failed_vbuf);
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    wgpu_mock_clear_calls();
+    reset_log();
+    sg_draw_indirect(args, 2);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4));
+    sg_draw_indirect(args, 20);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE));
+    sg_draw_indirect(vbuf, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_USAGE));
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = failed_vbuf });
+    sg_draw_indirect(args, 0);
+    T(wgpu_mock_count_calls(F(wgpuRenderPassEncoderDrawIndirect)) == 0);
+    sg_end_pass();
+    sg_commit();
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// write_transient indirect args: one WebGPU buffer, updated with a queue write
+// before the draw, a second write after the draw is rejected
+UTEST(sokol_gfx_wgpu, draw_indirect_write_transient) {
+    setup();
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 32 });
+    const void* wgpu_args = sg_wgpu_query_buffer_info(args).buf;
+    for (int frame = 0; frame < 2; frame++) {
+        const sg_draw_indirect_args draw_args = { .num_elements = (uint32_t)(3 + frame), .num_instances = 1 };
+        wgpu_mock_clear_calls();
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+        T(0 == memcmp(wgpu_mock_buffer_data(wgpu_args), &draw_args, sizeof(draw_args)));
+        sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+        sg_draw_indirect(args, 0);
+        const int write_idx = wgpu_mock_find_call(F(wgpuQueueWriteBuffer), 0);
+        const int draw_idx = wgpu_mock_find_call(F(wgpuRenderPassEncoderDrawIndirect), 0);
+        T(write_idx >= 0);
+        T(draw_idx > write_idx);
+        T(wgpu_mock_call(draw_idx)->args[0].p == wgpu_args);
+        // a write after the draw is rejected and doesn't reach the queue
+        reset_log();
+        const int num_writes = wgpu_mock_count_calls(F(wgpuQueueWriteBuffer));
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+        T(logged(SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT));
+        T(wgpu_mock_count_calls(F(wgpuQueueWriteBuffer)) == num_writes);
+        sg_end_pass();
+        sg_commit();
+    }
+    discard_swapchain(&sc);
+    teardown();
+}
+
+// WebGPU turns an indirect draw with firstInstance != 0 into a no-op unless
+// the device has IndirectFirstInstance, sokol-gfx reports this through
+// sg_features.draw_indirect_base_instance
+static int count_noop_indirect_draws(int* utest_result, bool feature) {
+    setup();
+    if (feature) {
+        sg_shutdown();
+        wgpu_mock_set_feature(WGPUFeatureName_IndirectFirstInstance, true);
+        sg_setup(&(sg_desc){ .environment.defaults.color_format = SG_PIXELFORMAT_BGRA8, .environment.wgpu.device = wgpu_mock_device(), .logger.func = capture_log });
+    }
+    T(sg_query_features().draw_indirect_base_instance == feature);
+    swapchain_t sc = make_swapchain(64, 64, 1, true);
+    sg_pipeline pip = make_pipeline(make_shader());
+    sg_pipeline indexed_pip = make_indexed_pipeline(make_shader());
+    sg_buffer vbuf = make_vbuf();
+    sg_buffer ibuf = make_ibuf();
+    const sg_draw_indirect_args draw_args[2] = {
+        { .num_elements = 3, .num_instances = 1, .base_instance = 0 },
+        { .num_elements = 3, .num_instances = 1, .base_instance = 1 },
+    };
+    const sg_draw_indirect_indexed_args indexed_args = { .num_elements = 3, .num_instances = 1, .base_instance = 2 };
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(draw_args) });
+    sg_buffer indexed = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .size = 20, .data = SG_RANGE(indexed_args) });
+    sg_begin_pass(&(sg_pass){ .swapchain = swapchain(&sc) });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 0);
+    sg_draw_indirect(args, (int)sizeof(sg_draw_indirect_args));
+    sg_apply_pipeline(indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf });
+    sg_draw_indirect(indexed, 0);
+    const wgpu_mock_render_pass_encoder_state_t* rpe = wgpu_mock_render_pass_encoder_state();
+    T(rpe->num_indirect_draws == 2);
+    T(rpe->num_indexed_indirect_draws == 1);
+    const int num_noop = rpe->num_noop_indirect_draws;
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    discard_swapchain(&sc);
+    teardown();
+    return num_noop;
+}
+
+UTEST(sokol_gfx_wgpu, draw_indirect_first_instance_without_feature) {
+    T(count_noop_indirect_draws(utest_result, false) == 2);
+}
+
+UTEST(sokol_gfx_wgpu, draw_indirect_first_instance_with_feature) {
+    T(count_noop_indirect_draws(utest_result, true) == 0);
+}
+
+UTEST(sokol_gfx_wgpu, dispatch_indirect) {
+    setup();
+    sg_shader shd = sg_make_shader(&(sg_shader_desc){
+        .compute_func = { .source = cs_src, .entry = "cs_main" },
+        .uniform_blocks[0] = { .stage = SG_SHADERSTAGE_COMPUTE, .size = 16, .wgsl_group0_binding_n = 1 },
+    });
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .compute = true, .shader = shd });
+    const sg_dispatch_indirect_args dispatch_args[2] = { { 2, 3, 4 }, { 5, 6, 7 } };
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(dispatch_args) });
+    const void* wgpu_args = sg_wgpu_query_buffer_info(args).buf;
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_apply_uniforms(0, &(sg_range){ .ptr = scratch, .size = 16 });
+    wgpu_mock_clear_calls();
+    sg_dispatch_indirect(args, 12);
+    const wgpu_mock_call_t* c = wgpu_mock_last_call(F(wgpuComputePassEncoderDispatchWorkgroupsIndirect));
+    T(c != 0);
+    if (c) {
+        T(c->args[0].p == wgpu_args);
+        T(c->args[1].u == 12);
+    }
+    // pending uniforms are applied before the dispatch
+    const int bg_idx = wgpu_mock_find_call(F(wgpuComputePassEncoderSetBindGroup), 0);
+    const int disp_idx = wgpu_mock_find_call(F(wgpuComputePassEncoderDispatchWorkgroupsIndirect), 0);
+    T(bg_idx >= 0);
+    T(disp_idx > bg_idx);
+    const wgpu_mock_compute_pass_encoder_state_t* cpe = wgpu_mock_compute_pass_encoder_state();
+    T(cpe->bind_groups[0].num_dynamic_offsets == 1);
+    T(cpe->num_indirect_dispatches == 1);
+    T(cpe->num_dispatches == 0);
+    T(cpe->last_indirect_buffer == wgpu_args);
+    T(cpe->last_indirect_offset == 12);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+}
+
+// a dispatch writes the args through a read/write storage buffer binding,
+// the next dispatch reads them as indirect args; the two uses are in
+// different usage scopes, so this is valid WebGPU
+UTEST(sokol_gfx_wgpu, dispatch_indirect_after_storage_write) {
+    setup();
+    sg_pipeline rw_pip = make_sbuf_compute_pipeline(false);
+    sg_pipeline ro_pip = make_sbuf_compute_pipeline(true);
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .storage_buffer = true }, .size = 16 });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    sg_buffer sbuf = sg_make_buffer(&(sg_buffer_desc){ .usage.storage_buffer = true, .size = 64 });
+    sg_view sview = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = sbuf });
+    const void* wgpu_args = sg_wgpu_query_buffer_info(args).buf;
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch(1, 1, 1);
+    sg_apply_pipeline(ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = sview });
+    sg_dispatch_indirect(args, 0);
+    const wgpu_mock_compute_pass_encoder_state_t* cpe = wgpu_mock_compute_pass_encoder_state();
+    T(cpe->num_dispatches == 1);
+    T(cpe->num_indirect_dispatches == 1);
+    T(cpe->last_indirect_buffer == wgpu_args);
+    sg_end_pass();
+    sg_commit();
+    T(num_log_items == 0);
+    teardown();
+}
+
+// A buffer which is bound as read/write storage buffer and used as indirect
+// buffer in the same dispatch is a WebGPU validation error. The sokol-gfx
+// validation layer catches this before the call reaches WebGPU.
+UTEST(sokol_gfx_wgpu, dispatch_indirect_vs_writable_storage) {
+    setup();
+    sg_pipeline rw_pip = make_sbuf_compute_pipeline(false);
+    sg_pipeline ro_pip = make_sbuf_compute_pipeline(true);
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .storage_buffer = true }, .size = 16 });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    // read-only storage binding plus indirect use is valid
+    sg_apply_pipeline(ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch_indirect(args, 0);
+    T(num_log_items == 0);
+    T(wgpu_mock_total_errors() == 0);
+    T(wgpu_mock_compute_pass_encoder_state()->num_indirect_dispatches == 1);
+    // read/write storage binding plus indirect use is rejected by sokol-gfx
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch_indirect(args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE));
+    T(wgpu_mock_total_errors() == 0);
+    T(wgpu_mock_compute_pass_encoder_state()->num_indirect_dispatches == 1);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_wgpu, dispatch_indirect_rejected) {
+    setup();
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){ .compute = true, .shader = make_compute_shader() });
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 16 });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    wgpu_mock_clear_calls();
+    reset_log();
+    // not written in this frame
+    sg_dispatch_indirect(args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING));
+    T(wgpu_mock_count_calls(F(wgpuComputePassEncoderDispatchWorkgroupsIndirect)) == 0);
+    T(wgpu_mock_compute_pass_encoder_state()->num_indirect_dispatches == 0);
+    sg_end_pass();
+    sg_commit();
     teardown();
 }
 

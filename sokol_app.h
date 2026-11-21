@@ -4277,6 +4277,10 @@ _SOKOL_PRIVATE void _sapp_wgpu_create_device_and_swapchain(void) {
         SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
         requiredFeatures[cur_feature_index++] = WGPUFeatureName_TextureFormatsTier2;
     }
+    if (wgpuAdapterHasFeature(_sapp.wgpu.adapter, WGPUFeatureName_IndirectFirstInstance)) {
+        SOKOL_ASSERT(cur_feature_index < _SAPP_WGPU_MAX_REQUESTED_FEATURES);
+        requiredFeatures[cur_feature_index++] = WGPUFeatureName_IndirectFirstInstance;
+    }
     #undef _SAPP_WGPU_MAX_REQUESTED_FEATURES
 
     WGPULimits adapterLimits = WGPU_LIMITS_INIT;
@@ -4735,6 +4739,9 @@ _SOKOL_PRIVATE void _sapp_vk_create_device(void) {
     }
     if (supports.features.textureCompressionASTC_LDR) {
         required.features.textureCompressionASTC_LDR = VK_TRUE;
+    }
+    if (supports.features.drawIndirectFirstInstance) {
+        required.features.drawIndirectFirstInstance = VK_TRUE;
     }
     _SAPP_STRUCT(VkDeviceCreateInfo, dev_create_info);
     dev_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

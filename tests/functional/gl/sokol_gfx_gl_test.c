@@ -32,6 +32,8 @@
 //    - View creation (texture / attachment / MSAA) _sg_gl_create_view
 //    - Pass begin/end (swapchain, offscreen, MSAA) _sg_gl_begin_pass / _sg_gl_end_pass
 //    - Draw / dispatch                             _sg_gl_draw / _sg_gl_dispatch
+//    - Draw / dispatch indirect                    _sg_gl_draw_indirect / _sg_gl_dispatch_indirect
+//    - Indirect bind points in the state cache     _sg_gl_cache_bind_buffer / _sg_gl_cache_clear_buffer_bindings
 //    - Resource writes (transient / unsealed)      _sg_gl_write_* / _sg_gl_write_miplevel_data
 //    - Resource copies                             _sg_gl_copy_buffer_to_buffer / _sg_gl_copy_buffer_to_image
 //    - Compute memory barriers                     _sg_gl_handle_memory_barriers
@@ -254,6 +256,7 @@ UTEST(sokol_gfx_gl, features) {
         T(f.gl_texture_views == (GL_MOCK_VERSION >= 430));
         T(f.draw_base_vertex);          // GLCORE is always >= 3.2
         T(f.draw_base_instance == (GL_MOCK_VERSION >= 420));
+        T(f.draw_indirect_base_instance == (GL_MOCK_VERSION >= 420));
     #else
         T(!f.image_clamp_to_border);
         T(f.compute == (GL_MOCK_VERSION >= 310));
@@ -261,8 +264,11 @@ UTEST(sokol_gfx_gl, features) {
         T(!f.msaa_texture_bindings);
         T(f.draw_base_vertex == (GL_MOCK_VERSION >= 320));
         T(!f.draw_base_instance);
+        T(!f.draw_indirect_base_instance);
         T(!f.dual_source_blending);
     #endif
+    // glDrawElementsIndirect has no index buffer offset
+    T(!f.draw_indirect_index_buffer_offset);
     T(!f.mrt_independent_blend_state);
     T(f.vertexformat_int10_n2);
     T(f.copy_buffer_to_image_relaxed_buffer_type);
@@ -1573,6 +1579,12 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
         { .usage = { .storage_buffer = true }, .with_data = true, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
         { .usage = { .storage_buffer = true, .write_transient = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
         { .usage = { .storage_buffer = true, .copy_dst = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
+        // indirect-only buffers use their own bind point, other buffer types take precedence
+        { .usage = { .indirect_buffer = true }, .with_data = true, .needs_compute = true, .gl_target = GL_DRAW_INDIRECT_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .indirect_buffer = true, .write_transient = true }, .needs_compute = true, .gl_target = GL_DRAW_INDIRECT_BUFFER, .gl_usage = GL_STREAM_DRAW, .num_slots = SG_NUM_INFLIGHT_FRAMES },
+        { .usage = { .indirect_buffer = true, .copy_dst = true }, .needs_compute = true, .gl_target = GL_DRAW_INDIRECT_BUFFER, .gl_usage = GL_DYNAMIC_COPY, .num_slots = 1 },
+        { .usage = { .vertex_buffer = true, .indirect_buffer = true }, .with_data = true, .needs_compute = true, .gl_target = GL_ARRAY_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
+        { .usage = { .storage_buffer = true, .indirect_buffer = true }, .needs_compute = true, .gl_target = GL_SHADER_STORAGE_BUFFER, .gl_usage = GL_STATIC_DRAW, .num_slots = 1 },
     };
     for (size_t ci = 0; ci < sizeof(cases) / sizeof(cases[0]); ci++) {
         const buffer_usage_case_t* c = &cases[ci];
@@ -4274,6 +4286,499 @@ UTEST(sokol_gfx_gl, shader_glsl_binding_out_of_range) {
     T(gl_mock_live_objects(GL_MOCK_OBJ_PROGRAM) == 0);
     sg_destroy_shader(s0);
     sg_destroy_shader(s1);
+    teardown();
+}
+#endif
+
+//------------------------------------------------------------------------------
+//  draw / dispatch indirect
+//------------------------------------------------------------------------------
+#if TEST_HAS_COMPUTE
+// index of the n-th call to 'func', or -1
+static int find_nth_call(gl_mock_func_t func, int n) {
+    int i = 0;
+    while ((i = gl_mock_find_call(func, i)) >= 0) {
+        if (n == 0) {
+            return i;
+        }
+        n--;
+        i++;
+    }
+    return -1;
+}
+
+static int count_bind_buffer(GLenum target) {
+    int n = 0;
+    for (int i = 0; i < gl_mock_num_calls(); i++) {
+        const gl_mock_call_t* c = gl_mock_call(i);
+        if ((c->func == GL_MOCK_FUNC_glBindBuffer) && (c->args[0].i == target)) {
+            n++;
+        }
+    }
+    return n;
+}
+
+static int count_direct_draws(void) {
+    return gl_mock_count_calls(GL_MOCK_FUNC_glDrawArrays)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysInstanced)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysInstancedBaseInstance)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawElements)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsInstanced)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsBaseVertex)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsInstancedBaseVertex)
+        + gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsInstancedBaseVertexBaseInstance);
+}
+
+// the indirect calls record the bound indirect buffer as extra last argument
+static bool draw_arrays_indirect_call(int index, GLenum mode, int64_t offset, GLuint buf) {
+    const gl_mock_call_t* c = (index >= 0) ? gl_mock_call(index) : 0;
+    return c && (c->func == GL_MOCK_FUNC_glDrawArraysIndirect)
+        && (c->args[0].i == mode) && (c->args[1].i == offset) && (c->args[2].i == buf);
+}
+
+static bool draw_elements_indirect_call(int index, GLenum mode, GLenum type, int64_t offset, GLuint buf) {
+    const gl_mock_call_t* c = (index >= 0) ? gl_mock_call(index) : 0;
+    return c && (c->func == GL_MOCK_FUNC_glDrawElementsIndirect)
+        && (c->args[0].i == mode) && (c->args[1].i == type) && (c->args[2].i == offset) && (c->args[3].i == buf);
+}
+
+static bool dispatch_indirect_call(int index, int64_t offset, GLuint buf) {
+    const gl_mock_call_t* c = (index >= 0) ? gl_mock_call(index) : 0;
+    return c && (c->func == GL_MOCK_FUNC_glDispatchComputeIndirect)
+        && (c->args[0].i == offset) && (c->args[1].i == buf);
+}
+
+static sg_pipeline make_draw_pipeline(sg_primitive_type prim_type, sg_index_type index_type) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = make_test_shader(),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+        .primitive_type = prim_type,
+        .index_type = index_type,
+    });
+}
+
+typedef enum {
+    CS_NO_SBUF,
+    CS_READONLY_SBUF,
+    CS_READWRITE_SBUF,
+} cs_sbuf_mode_t;
+
+// compute pipeline, optionally with a storage buffer in view slot 0
+static sg_pipeline make_compute_pipeline(cs_sbuf_mode_t mode) {
+    sg_shader shd;
+    if (mode == CS_NO_SBUF) {
+        shd = sg_make_shader(&(sg_shader_desc){ .compute_func.source = "cs" });
+    } else {
+        shd = sg_make_shader(&(sg_shader_desc){
+            .compute_func.source = "cs",
+            .views[0].storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = (mode == CS_READONLY_SBUF) },
+        });
+    }
+    return sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd, .compute = true });
+}
+
+static sg_buffer make_vertex_buffer(void) {
+    static const float verts[9] = {0};
+    return sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
+}
+
+UTEST(sokol_gfx_gl, indirect_buffer_create_restores_previous_binding) {
+    setup();
+    static const uint32_t data[4] = { 3, 1, 0, 0 };
+    sg_buffer a = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(data) });
+    const GLuint gl_a = query_gl_buf(a, 0);
+    // after the first create, the new buffer stays bound in the cache
+    T(gl_mock_bindings()->draw_indirect_buffer == gl_a);
+    gl_mock_clear_calls();
+    sg_buffer b = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(data) });
+    const GLuint gl_b = query_gl_buf(b, 0);
+    // the second create binds b, uploads, then restores a
+    TA(count_bind_buffer(GL_DRAW_INDIRECT_BUFFER) == 2);
+    T(gl_mock_call(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DRAW_INDIRECT_BUFFER))->args[1].i == gl_b);
+    T(gl_mock_last_call(GL_MOCK_FUNC_glBindBuffer)->args[1].i == gl_a);
+    T(gl_mock_bindings()->draw_indirect_buffer == gl_a);
+    // the other bind points are not touched
+    T(gl_mock_bindings()->array_buffer == 0);
+    T(gl_mock_bindings()->dispatch_indirect_buffer == 0);
+    // after a frame boundary there's nothing to restore
+    sg_commit();
+    T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    gl_mock_clear_calls();
+    sg_buffer c = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(data) });
+    T(count_bind_buffer(GL_DRAW_INDIRECT_BUFFER) == 1);
+    T(gl_mock_bindings()->draw_indirect_buffer == query_gl_buf(c, 0));
+    sg_destroy_buffer(a);
+    sg_destroy_buffer(b);
+    sg_destroy_buffer(c);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, draw_indirect_non_indexed) {
+    setup();
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_LINES, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    const sg_draw_indirect_args args[2] = { { 3, 1, 0, 0 }, { 6, 2, 3, 1 } };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    // drop the bindings from resource creation
+    sg_commit();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    gl_mock_clear_calls();
+    sg_draw_indirect(abuf, 0);
+    sg_draw_indirect(abuf, (int)sizeof(sg_draw_indirect_args));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysIndirect) == 2);
+    T(draw_arrays_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0), GL_LINES, 0, gl_abuf));
+    T(draw_arrays_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 1), GL_LINES, 16, gl_abuf));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsIndirect) == 0);
+    T(count_direct_draws() == 0);
+    // the indirect buffer is bound once, the 2nd draw hits the state cache
+    T(count_bind_buffer(GL_DRAW_INDIRECT_BUFFER) == 1);
+    T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DRAW_INDIRECT_BUFFER) < find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0));
+    // CPU-written args need no memory barrier
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, draw_indirect_indexed_then_non_indexed) {
+    setup();
+    sg_pipeline indexed_pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_UINT32);
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    static const uint32_t indices[6] = { 0, 1, 2, 0, 2, 1 };
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
+    const sg_draw_indirect_indexed_args args[2] = { { 6, 1, 0, 0, 0 }, { 3, 4, 3, -1, 2 } };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf });
+    gl_mock_clear_calls();
+    sg_draw_indirect(abuf, 0);
+    sg_draw_indirect(abuf, (int)sizeof(sg_draw_indirect_indexed_args));
+    // the index buffer comes from sg_apply_bindings()
+    T(gl_mock_bindings()->element_array_buffer == query_gl_buf(ibuf, 0));
+    // a non-indexed pipeline in the same pass switches to glDrawArraysIndirect
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 4);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsIndirect) == 2);
+    T(draw_elements_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawElementsIndirect, 0), GL_TRIANGLES, GL_UNSIGNED_INT, 0, gl_abuf));
+    T(draw_elements_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawElementsIndirect, 1), GL_TRIANGLES, GL_UNSIGNED_INT, 20, gl_abuf));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysIndirect) == 1);
+    T(draw_arrays_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0), GL_TRIANGLES, 4, gl_abuf));
+    T(find_nth_call(GL_MOCK_FUNC_glDrawElementsIndirect, 1) < find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0));
+    T(count_direct_draws() == 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+// glDrawElementsIndirect() has no index buffer offset, sokol-gfx rejects
+// indexed indirect draws with sg_bindings.index_buffer_offset != 0
+UTEST(sokol_gfx_gl, draw_indirect_index_buffer_offset_rejected) {
+    setup();
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_UINT16);
+    sg_buffer vbuf = make_vertex_buffer();
+    static const uint16_t indices[8] = { 0, 1, 2, 0, 0, 1, 2, 0 };
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
+    const sg_draw_indirect_indexed_args args = { 3, 1, 0, 0, 0 };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .index_buffer_offset = 8 });
+    gl_mock_clear_calls();
+    reset_log();
+    sg_draw_indirect(abuf, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawElementsIndirect) == 0);
+    // a direct draw passes the offset through the indices pointer
+    reset_log();
+    sg_draw(0, 3, 1);
+    T(no_errors());
+    const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glDrawElements);
+    TA(c != 0);
+    T(c->args[3].p == (const void*)(intptr_t)8);
+    sg_end_pass();
+    sg_commit();
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, dispatch_indirect) {
+    setup();
+    sg_pipeline pip = make_compute_pipeline(CS_NO_SBUF);
+    const sg_dispatch_indirect_args args[2] = { { 2, 3, 4 }, { 5, 6, 7 } };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_commit();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    gl_mock_clear_calls();
+    sg_dispatch_indirect(abuf, 0);
+    sg_dispatch_indirect(abuf, (int)sizeof(sg_dispatch_indirect_args));
+    sg_dispatch(1, 2, 3);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDispatchComputeIndirect) == 2);
+    T(dispatch_indirect_call(find_nth_call(GL_MOCK_FUNC_glDispatchComputeIndirect, 0), 0, gl_abuf));
+    T(dispatch_indirect_call(find_nth_call(GL_MOCK_FUNC_glDispatchComputeIndirect, 1), 12, gl_abuf));
+    // a direct dispatch after indirect dispatches takes the direct path
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDispatchCompute) == 1);
+    T(find_nth_call(GL_MOCK_FUNC_glDispatchComputeIndirect, 1) < find_nth_call(GL_MOCK_FUNC_glDispatchCompute, 0));
+    // dispatch args have their own bind point, bound once
+    T(count_bind_buffer(GL_DISPATCH_INDIRECT_BUFFER) == 1);
+    T(count_bind_buffer(GL_DRAW_INDIRECT_BUFFER) == 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+// args written by a compute shader need one GL_COMMAND_BARRIER_BIT barrier
+// before the first indirect draw which reads them
+UTEST(sokol_gfx_gl, draw_indirect_barrier_after_compute_write) {
+    setup();
+    sg_pipeline rw_pip = make_compute_pipeline(CS_READWRITE_SBUF);
+    sg_pipeline ro_pip = make_compute_pipeline(CS_READONLY_SBUF);
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .indirect_buffer = true },
+        .size = sizeof(sg_draw_indirect_args),
+    });
+    sg_view abuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = abuf });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_enable_stats();
+    sg_commit();
+
+    // frame 1: compute writes the args, the render pass reads them twice
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = abuf_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    GLbitfield bits = 0;
+    T(count_barriers(&bits) == 1);
+    T(bits == GL_COMMAND_BARRIER_BIT);
+    T(gl_mock_find_call(GL_MOCK_FUNC_glMemoryBarrier, 0) < find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0));
+    T(draw_arrays_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 1), GL_TRIANGLES, 0, gl_abuf));
+    sg_commit();
+    T(sg_query_stats().prev_frame.gl.num_memory_barriers == 1);
+
+    // frame 2: compute only reads the args, so the indirect draw needs no barrier
+    // (the read-only binding gets a storage barrier for the unconsumed frame 1 write)
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(ro_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = abuf_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    T(count_barriers(&bits) == 1);
+    T(bits == GL_SHADER_STORAGE_BARRIER_BIT);
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    T(count_barriers(0) == 0);
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysIndirect) == 1);
+    sg_commit();
+    sg_disable_stats();
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, dispatch_indirect_barrier_after_compute_write) {
+    setup();
+    sg_pipeline rw_pip = make_compute_pipeline(CS_READWRITE_SBUF);
+    sg_pipeline pip = make_compute_pipeline(CS_NO_SBUF);
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .indirect_buffer = true },
+        .size = sizeof(sg_dispatch_indirect_args),
+    });
+    sg_view abuf_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = abuf });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = abuf_view });
+    sg_dispatch(1, 1, 1);
+    gl_mock_clear_calls();
+    // the next dispatch in the same pass reads the args
+    sg_apply_pipeline(pip);
+    sg_dispatch_indirect(abuf, 0);
+    sg_dispatch_indirect(abuf, 0);
+    sg_end_pass();
+    GLbitfield bits = 0;
+    T(count_barriers(&bits) == 1);
+    T(bits == GL_COMMAND_BARRIER_BIT);
+    T(gl_mock_find_call(GL_MOCK_FUNC_glMemoryBarrier, 0) < find_nth_call(GL_MOCK_FUNC_glDispatchComputeIndirect, 0));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDispatchComputeIndirect) == 2);
+    T(dispatch_indirect_call(find_nth_call(GL_MOCK_FUNC_glDispatchComputeIndirect, 1), 0, gl_abuf));
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+// write_transient args: written with glBufferSubData, the indirect draw reads the active slot
+UTEST(sokol_gfx_gl, draw_indirect_write_transient_uses_active_slot) {
+    setup();
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 32 });
+    GLuint bound[2] = { 0, 0 };
+    for (int frame = 0; frame < 2; frame++) {
+        const sg_draw_indirect_args args = { .num_elements = (uint32_t)(3 + frame), .num_instances = 1 };
+        gl_mock_clear_calls();
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(args), .dst.buffer = abuf });
+        const gl_mock_call_t* c = gl_mock_last_call(GL_MOCK_FUNC_glBufferSubData);
+        TA(c != 0);
+        T(c->args[0].i == GL_DRAW_INDIRECT_BUFFER);
+        sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+        sg_draw_indirect(abuf, 0);
+        sg_end_pass();
+        const int draw_idx = find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0);
+        TA(draw_idx >= 0);
+        bound[frame] = (GLuint)gl_mock_call(draw_idx)->args[2].i;
+        T(bound[frame] == query_active_gl_buf(abuf));
+        T(gl_mock_find_call(GL_MOCK_FUNC_glBufferSubData, 0) < draw_idx);
+        T(gl_mock_count_calls(GL_MOCK_FUNC_glMemoryBarrier) == 0);
+        sg_commit();
+    }
+    // each frame's first write moves to the next slot (SG_NUM_INFLIGHT_FRAMES >= 2)
+    T(bound[0] != bound[1]);
+    T(no_errors());
+    teardown();
+}
+
+UTEST(sokol_gfx_gl, destroy_bound_indirect_buffer_unbinds_it) {
+    setup();
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_NONE);
+    sg_pipeline cpip = make_compute_pipeline(CS_NO_SBUF);
+    sg_buffer vbuf = make_vertex_buffer();
+    static const uint32_t args[8] = { 3, 1, 0, 0, 1, 1, 1, 0 };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_dispatch_indirect(abuf, 16);
+    sg_end_pass();
+    T(gl_mock_bindings()->draw_indirect_buffer == gl_abuf);
+    T(gl_mock_bindings()->dispatch_indirect_buffer == gl_abuf);
+    // destroy before sg_commit(), which would soft-clear the binding cache
+    gl_mock_clear_calls();
+    sg_destroy_buffer(abuf);
+    const int draw_unbind = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DRAW_INDIRECT_BUFFER);
+    const int dispatch_unbind = find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DISPATCH_INDIRECT_BUFFER);
+    const int del = gl_mock_find_call(GL_MOCK_FUNC_glDeleteBuffers, 0);
+    TA((draw_unbind >= 0) && (dispatch_unbind >= 0) && (del >= 0));
+    T(gl_mock_call(draw_unbind)->args[1].i == 0);
+    T(gl_mock_call(dispatch_unbind)->args[1].i == 0);
+    T((draw_unbind < del) && (dispatch_unbind < del));
+    T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    T(gl_mock_bindings()->dispatch_indirect_buffer == 0);
+    sg_commit();
+    T(no_errors());
+    teardown();
+}
+
+// sg_commit() soft-clears the indirect bind points, sg_reset_state_cache()
+// forgets them so that GL changes outside sokol-gfx don't leave a stale cache
+UTEST(sokol_gfx_gl, indirect_bindings_cleared_by_commit_and_reset_state_cache) {
+    setup();
+    sg_pipeline pip = make_draw_pipeline(SG_PRIMITIVETYPE_TRIANGLES, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    const sg_draw_indirect_args args = { 3, 1, 0, 0 };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    const GLuint gl_abuf = query_gl_buf(abuf, 0);
+    sg_commit();
+    T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    T(gl_mock_bindings()->draw_indirect_buffer == gl_abuf);
+    sg_commit();
+    T(gl_mock_bindings()->draw_indirect_buffer == 0);
+
+    // bind the args again, then GL code outside sokol-gfx binds another buffer
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    GLuint gl_other = 0;
+    glGenBuffers(1, &gl_other);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, gl_other);
+    sg_reset_state_cache();
+    T(gl_mock_bindings()->draw_indirect_buffer == 0);
+    T(gl_mock_bindings()->dispatch_indirect_buffer == 0);
+    // the next indirect draw must bind the args buffer again
+    gl_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    T(draw_arrays_indirect_call(find_nth_call(GL_MOCK_FUNC_glDrawArraysIndirect, 0), GL_TRIANGLES, 0, gl_abuf));
+    sg_commit();
+    glDeleteBuffers(1, &gl_other);
+    T(no_errors());
+    teardown();
+}
+#else
+// without compute support (GL 4.1, GLES 3.0) indirect buffers are rejected,
+// and the GL backend never touches the indirect bind points
+UTEST(sokol_gfx_gl, indirect_buffer_rejected_without_compute) {
+    setup();
+    T(!sg_query_features().compute);
+    // the forced state cache reset in sg_setup() skips the indirect bind points
+    T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DRAW_INDIRECT_BUFFER) < 0);
+    T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DISPATCH_INDIRECT_BUFFER) < 0);
+    sg_pipeline pip = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = make_test_shader(),
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT3,
+    });
+    static const float verts[9] = {0};
+    sg_buffer vbuf = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
+    gl_mock_clear_calls();
+    reset_log();
+    static const uint32_t args[4] = { 3, 1, 0, 0 };
+    sg_buffer abuf = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(args) });
+    T(sg_query_buffer_state(abuf) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED));
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glGenBuffers) == 0);
+    // indirect draws with the failed buffer are a silent no-op
+    sg_begin_pass(&(sg_pass){ .swapchain = test_swapchain });
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(abuf, 0);
+    sg_end_pass();
+    sg_reset_state_cache();
+    sg_commit();
+    T(gl_mock_count_calls(GL_MOCK_FUNC_glDrawArraysIndirect) == 0);
+    T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DRAW_INDIRECT_BUFFER) < 0);
+    T(find_call_arg0(GL_MOCK_FUNC_glBindBuffer, 0, GL_DISPATCH_INDIRECT_BUFFER) < 0);
     teardown();
 }
 #endif

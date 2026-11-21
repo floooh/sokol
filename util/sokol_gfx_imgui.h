@@ -441,7 +441,9 @@ typedef enum {
     _SGIMGUI_CMD_APPLY_UNIFORMS,
     _SGIMGUI_CMD_DRAW,
     _SGIMGUI_CMD_DRAW_EX,
+    _SGIMGUI_CMD_DRAW_INDIRECT,
     _SGIMGUI_CMD_DISPATCH,
+    _SGIMGUI_CMD_DISPATCH_INDIRECT,
     _SGIMGUI_CMD_END_PASS,
     _SGIMGUI_CMD_COMMIT,
     _SGIMGUI_CMD_ALLOC_BUFFER,
@@ -628,10 +630,20 @@ typedef struct {
 } _sgimgui_args_draw_ex_t;
 
 typedef struct {
+    sg_buffer buffer;
+    int offset;
+} _sgimgui_args_draw_indirect_t;
+
+typedef struct {
     int num_groups_x;
     int num_groups_y;
     int num_groups_z;
 } _sgimgui_args_dispatch_t;
+
+typedef struct {
+    sg_buffer buffer;
+    int offset;
+} _sgimgui_args_dispatch_indirect_t;
 
 typedef struct {
     sg_buffer result;
@@ -787,7 +799,9 @@ typedef union {
     _sgimgui_args_apply_uniforms_t apply_uniforms;
     _sgimgui_args_draw_t draw;
     _sgimgui_args_draw_ex_t draw_ex;
+    _sgimgui_args_draw_indirect_t draw_indirect;
     _sgimgui_args_dispatch_t dispatch;
+    _sgimgui_args_dispatch_indirect_t dispatch_indirect;
     _sgimgui_args_alloc_buffer_t alloc_buffer;
     _sgimgui_args_alloc_image_t alloc_image;
     _sgimgui_args_alloc_sampler_t alloc_sampler;
@@ -840,8 +854,9 @@ typedef struct {
 */
 typedef struct {
     bool open;
-    int bucket_index;      /* which bucket to record to, 0 or 1 */
-    int sel_item;          /* currently selected capture item by index */
+    int bucket_index;       // which bucket to record to, 0 or 1
+    uint32_t sel_key;       // stable key of selected capture list item
+    int sel_item;           // index of selected capture item in current frame, or -1
     _sgimgui_capture_bucket_t bucket[2];
 } _sgimgui_capture_window_t;
 
@@ -876,6 +891,7 @@ static _sgimgui_t _sgimgui;
 
 #define _SGIMGUI_SLOT_MASK (0xFFFF)
 #define _SGIMGUI_LIST_WIDTH (192)
+#define _SGIMGUI_LIST_CHILD_FLAGS (ImGuiChildFlags_Borders|ImGuiChildFlags_ResizeX)
 #define _SGIMGUI_COLOR_OTHER 0xFFCCCCCC
 #define _SGIMGUI_COLOR_RSRC 0xFF00FFFF
 #define _SGIMGUI_COLOR_PASS 0xFFFFFF00
@@ -2161,12 +2177,32 @@ _SOKOL_PRIVATE _sgimgui_str_t _sgimgui_capture_item_string(_sgimgui_t* ctx, int 
                 item->args.draw_ex.base_instance);
             break;
 
+        case _SGIMGUI_CMD_DRAW_INDIRECT:
+            {
+                _sgimgui_str_t res_id = _sgimgui_buffer_id_string(ctx, item->args.draw_indirect.buffer);
+                _sgimgui_snprintf(&str, "%d: sg_draw_indirect(buffer=%s, offset=%d)",
+                    index,
+                    res_id.buf,
+                    item->args.draw_indirect.offset);
+            }
+            break;
+
         case _SGIMGUI_CMD_DISPATCH:
             _sgimgui_snprintf(&str, "%d: sg_dispatch(num_groups_x=%d, num_groups_y=%d, num_groups_z=%d)",
                 index,
                 item->args.dispatch.num_groups_x,
                 item->args.dispatch.num_groups_y,
                 item->args.dispatch.num_groups_z);
+            break;
+
+        case _SGIMGUI_CMD_DISPATCH_INDIRECT:
+            {
+                _sgimgui_str_t res_id = _sgimgui_buffer_id_string(ctx, item->args.dispatch_indirect.buffer);
+                _sgimgui_snprintf(&str, "%d: sg_dispatch_indirect(buffer=%s, offset=%d)",
+                    index,
+                    res_id.buf,
+                    item->args.dispatch_indirect.offset);
+            }
             break;
 
         case _SGIMGUI_CMD_END_PASS:
@@ -2903,6 +2939,21 @@ _SOKOL_PRIVATE void _sgimgui_draw_ex(int base_element, int num_elements, int num
     }
 }
 
+_SOKOL_PRIVATE void _sgimgui_draw_indirect(sg_buffer buf, int offset, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_DRAW_INDIRECT;
+        item->color = _SGIMGUI_COLOR_DRAW;
+        item->args.draw_indirect.buffer = buf;
+        item->args.draw_indirect.offset = offset;
+    }
+    if (ctx->hooks.draw_indirect) {
+        ctx->hooks.draw_indirect(buf, offset, ctx->hooks.user_data);
+    }
+}
+
 _SOKOL_PRIVATE void _sgimgui_dispatch(int num_groups_x, int num_groups_y, int num_groups_z, void* user_data) {
     _sgimgui_t* ctx = (_sgimgui_t*) user_data;
     SOKOL_ASSERT(ctx);
@@ -2916,6 +2967,21 @@ _SOKOL_PRIVATE void _sgimgui_dispatch(int num_groups_x, int num_groups_y, int nu
     }
     if (ctx->hooks.dispatch) {
         ctx->hooks.dispatch(num_groups_x, num_groups_y, num_groups_z, ctx->hooks.user_data);
+    }
+}
+
+_SOKOL_PRIVATE void _sgimgui_dispatch_indirect(sg_buffer buf, int offset, void* user_data) {
+    _sgimgui_t* ctx = (_sgimgui_t*)user_data;
+    SOKOL_ASSERT(ctx);
+    _sgimgui_capture_item_t* item = _sgimgui_capture_next_write_item(ctx);
+    if (item) {
+        item->cmd = _SGIMGUI_CMD_DISPATCH_INDIRECT;
+        item->color = _SGIMGUI_COLOR_DRAW;
+        item->args.dispatch_indirect.buffer = buf;
+        item->args.dispatch_indirect.offset = offset;
+    }
+    if (ctx->hooks.dispatch_indirect) {
+        ctx->hooks.dispatch_indirect(buf, offset, ctx->hooks.user_data);
     }
 }
 
@@ -3406,7 +3472,7 @@ _SOKOL_PRIVATE void _sgimgui_fail_view(sg_view view_id, void* user_data) {
 _SOKOL_PRIVATE void _sgimgui_push_debug_group(const char* name, void* user_data) {
     _sgimgui_t* ctx = (_sgimgui_t*) user_data;
     SOKOL_ASSERT(ctx);
-    if (0 == strcmp(name, "sokol-imgui")) {
+    if (0 == strncmp(name, "sokol-imgui", sizeof("sokol-imgui") - 1)) {
         ctx->frame_stats_window.in_sokol_imgui = true;
         if (ctx->frame_stats_window.disable_sokol_imgui_stats) {
             sg_disable_stats();
@@ -3596,7 +3662,7 @@ _SOKOL_PRIVATE void _sgimgui_show_view(_sgimgui_t* ctx, sg_view view) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("buffer_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->buffer_window.num_slots; i++) {
         sg_buffer buf = ctx->buffer_window.slots[i].res_id;
         sg_resource_state state = sg_query_buffer_state(buf);
@@ -3611,7 +3677,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_image_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("image_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->image_window.num_slots; i++) {
         sg_image img = ctx->image_window.slots[i].res_id;
         sg_resource_state state = sg_query_image_state(img);
@@ -3626,7 +3692,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_image_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("sampler_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->sampler_window.num_slots; i++) {
         sg_sampler smp = ctx->sampler_window.slots[i].res_id;
         sg_resource_state state = sg_query_sampler_state(smp);
@@ -3641,7 +3707,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_sampler_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_shader_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("shader_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->shader_window.num_slots; i++) {
         sg_shader shd = ctx->shader_window.slots[i].res_id;
         sg_resource_state state = sg_query_shader_state(shd);
@@ -3656,7 +3722,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_shader_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("pipeline_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->pipeline_window.num_slots; i++) {
         sg_pipeline pip = ctx->pipeline_window.slots[i].res_id;
         sg_resource_state state = sg_query_pipeline_state(pip);
@@ -3671,7 +3737,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_pipeline_list(_sgimgui_t* ctx) {
 }
 
 _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("view_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("view_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     for (int i = 0; i < ctx->view_window.num_slots; i++) {
         sg_view view = ctx->view_window.slots[i].res_id;
         sg_resource_state state = sg_query_view_state(view);
@@ -3685,39 +3751,78 @@ _SOKOL_PRIVATE void _sgimgui_draw_view_list(_sgimgui_t* ctx) {
     _sgimgui_igendchild();
 }
 
+// FNV-1a hash over val seeded with h
+_SOKOL_PRIVATE uint32_t _sgimgui_hash_combine(uint32_t h, uint32_t val) {
+    for (int i = 0; i < 4; i++) {
+        h ^= (val >> (i * 8)) & 0xFF;
+        h *= 16777619u;
+    }
+    return h;
+}
+
 _SOKOL_PRIVATE void _sgimgui_draw_capture_list(_sgimgui_t* ctx) {
-    _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), ImGuiChildFlags_Borders, ImGuiWindowFlags_None);
+    _sgimgui_igbeginchild("capture_list", IMVEC2(_SGIMGUI_LIST_WIDTH,0), _SGIMGUI_LIST_CHILD_FLAGS, ImGuiWindowFlags_None);
     const int num_items = _sgimgui_capture_num_read_items(ctx);
-    uint64_t group_stack = 1;   /* bit set: group unfolded, cleared: folded */
+    uint64_t group_stack = 1;   // bit set: group unfolded, cleared: folded
+    int depth = 1;
+    int local_index[64];
+    _sgimgui_clear(local_index, sizeof(local_index));
+    uint32_t path_key[64];  // hash of group-local index path per nesting level
+    _sgimgui_clear(path_key, sizeof(path_key));
+    path_key[depth] = 2166136261u;
+    int sel_item = -1;
     for (int i = 0; i < num_items; i++) {
         const _sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, i);
         _sgimgui_str_t item_string = _sgimgui_capture_item_string(ctx, i, item);
         _sgimgui_igpushstylecolor(ImGuiCol_Text, item->color);
         if (item->cmd == _SGIMGUI_CMD_PUSH_DEBUG_GROUP) {
+            const int loc_idx = local_index[depth]++;
             if (group_stack & 1) {
                 group_stack <<= 1;
                 const char* group_name = item->args.push_debug_group.name.buf;
-                if (_sgimgui_igtreenodestr(group_name, "Group: %s", group_name)) {
+                _sgimgui_igpushidint(loc_idx);
+                const bool open = _sgimgui_igtreenodestr(group_name, "Group: %s", group_name);
+                _sgimgui_igpopid();
+                if (open) {
                     group_stack |= 1;
                 }
             } else {
                 group_stack <<= 1;
             }
+            SOKOL_ASSERT(depth < 63);
+            path_key[depth + 1] = _sgimgui_hash_combine(path_key[depth], (uint32_t)loc_idx);
+            local_index[++depth] = 0;
         } else if (item->cmd == _SGIMGUI_CMD_POP_DEBUG_GROUP) {
+            SOKOL_ASSERT(depth > 1);
             if (group_stack & 1) {
                 _sgimgui_igtreepop();
             }
             group_stack >>= 1;
-        } else if (group_stack & 1) {
-            if (_sgimgui_igselectableex(item_string.buf, ctx->capture_window.sel_item == i, 0, IMVEC2(0,0))) {
-                ctx->capture_window.sel_item = i;
+            depth -= 1;
+        } else {
+            const int loc_idx = local_index[depth]++;
+            const uint32_t key = _sgimgui_hash_combine(path_key[depth], (uint32_t)loc_idx);
+            if (key == ctx->capture_window.sel_key) {
+                sel_item = i;
             }
-            if (_sgimgui_igisitemhovered(0)) {
-                _sgimgui_igsettooltip("%s", item_string.buf);
+            if (group_stack & 1) {
+                // '###' makes the ID independent from the label text (which contains the global index)
+                char label[_SGIMGUI_STRBUF_LEN + 4];
+                snprintf(label, sizeof(label), "%s###", item_string.buf);
+                _sgimgui_igpushidint(loc_idx);
+                if (_sgimgui_igselectableex(label, key == ctx->capture_window.sel_key, 0, IMVEC2(0,0))) {
+                    ctx->capture_window.sel_key = key;
+                    sel_item = i;
+                }
+                if (_sgimgui_igisitemhovered(0)) {
+                    _sgimgui_igsettooltip("%s", item_string.buf);
+                }
+                _sgimgui_igpopid();
             }
         }
         _sgimgui_igpopstylecolor();
     }
+    ctx->capture_window.sel_item = sel_item;
     _sgimgui_igendchild();
 }
 
@@ -3734,6 +3839,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_buffer_panel(_sgimgui_t* ctx, sg_buffer buf) {
             _sgimgui_igtext("  vertex_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.vertex_buffer));
             _sgimgui_igtext("  index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.index_buffer));
             _sgimgui_igtext("  storage_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.storage_buffer));
+            _sgimgui_igtext("  indirect_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.indirect_buffer));
             _sgimgui_igtext("  staging_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.staging_buffer));
             _sgimgui_igtext("  staging_index_buffer: %s", _sgimgui_bool_string(buf_ui->desc.usage.staging_index_buffer));
             _sgimgui_igtext("  write_unsealed: %s", _sgimgui_bool_string(buf_ui->desc.usage.write_unsealed));
@@ -4543,7 +4649,7 @@ _SOKOL_PRIVATE void _sgimgui_draw_pass_panel(_sgimgui_t* ctx, sg_pass* pass) {
 
 _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
     int sel_item_index = ctx->capture_window.sel_item;
-    if (sel_item_index >= _sgimgui_capture_num_read_items(ctx)) {
+    if ((sel_item_index < 0) || (sel_item_index >= _sgimgui_capture_num_read_items(ctx))) {
         return;
     }
     _sgimgui_capture_item_t* item = _sgimgui_capture_read_item_at(ctx, sel_item_index);
@@ -4633,6 +4739,12 @@ _SOKOL_PRIVATE void _sgimgui_draw_capture_panel(_sgimgui_t* ctx) {
         case _SGIMGUI_CMD_DISPATCH:
         case _SGIMGUI_CMD_END_PASS:
         case _SGIMGUI_CMD_COMMIT:
+            break;
+        case _SGIMGUI_CMD_DRAW_INDIRECT:
+            _sgimgui_draw_buffer_panel(ctx, item->args.draw_indirect.buffer);
+            break;
+        case _SGIMGUI_CMD_DISPATCH_INDIRECT:
+            _sgimgui_draw_buffer_panel(ctx, item->args.dispatch_indirect.buffer);
             break;
         case _SGIMGUI_CMD_ALLOC_BUFFER:
             _sgimgui_draw_buffer_panel(ctx, item->args.alloc_buffer.result);
@@ -4744,6 +4856,8 @@ _SOKOL_PRIVATE void _sgimgui_draw_caps_panel(void) {
     _sgimgui_igtext("    separate_buffer_types: %s", _sgimgui_bool_string(f.separate_buffer_types));
     _sgimgui_igtext("    draw_base_vertex: %s", _sgimgui_bool_string(f.draw_base_vertex));
     _sgimgui_igtext("    draw_base_instance: %s", _sgimgui_bool_string(f.draw_base_instance));
+    _sgimgui_igtext("    draw_indirect_base_instance: %s", _sgimgui_bool_string(f.draw_indirect_base_instance));
+    _sgimgui_igtext("    draw_indirect_index_buffer_offset: %s", _sgimgui_bool_string(f.draw_indirect_index_buffer_offset));
     _sgimgui_igtext("    dual_source_blending: %s", _sgimgui_bool_string(f.dual_source_blending));
     _sgimgui_igtext("    vertexformat_int10_n2: %s", _sgimgui_bool_string(f.vertexformat_int10_n2));
     _sgimgui_igtext("    copy_buffer_to_image_relaxed_buffer_type: %s", _sgimgui_bool_string(f.copy_buffer_to_image_relaxed_buffer_type));
@@ -4829,7 +4943,9 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
         _sgimgui_frame_stats(prev_frame.num_apply_uniforms);
         _sgimgui_frame_stats(prev_frame.num_draw);
         _sgimgui_frame_stats(prev_frame.num_draw_ex);
+        _sgimgui_frame_stats(prev_frame.num_draw_indirect);
         _sgimgui_frame_stats(prev_frame.num_dispatch);
+        _sgimgui_frame_stats(prev_frame.num_dispatch_indirect);
         _sgimgui_frame_stats(prev_frame.num_write_buffer_transient);
         _sgimgui_frame_stats(prev_frame.num_write_image_transient);
         _sgimgui_frame_stats(prev_frame.num_write_buffer_unsealed);
@@ -4969,6 +5085,10 @@ _SOKOL_PRIVATE void _sgimgui_draw_frame_stats_panel(_sgimgui_t* ctx) {
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced);
                 _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_indexed_instanced_indirect);
+                _sgimgui_frame_stats(prev_frame.d3d11.draw.num_draw_instanced_indirect);
+                _sgimgui_frame_stats(prev_frame.d3d11.dispatch.num_dispatch);
+                _sgimgui_frame_stats(prev_frame.d3d11.dispatch.num_dispatch_indirect);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_update_subresource);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_copy_subresource_region);
                 _sgimgui_frame_stats(prev_frame.d3d11.num_map);
@@ -5080,7 +5200,9 @@ SOKOL_API_IMPL void sgimgui_setup(const sgimgui_desc_t* desc) {
     hooks.apply_uniforms = _sgimgui_apply_uniforms;
     hooks.draw = _sgimgui_draw;
     hooks.draw_ex = _sgimgui_draw_ex;
+    hooks.draw_indirect = _sgimgui_draw_indirect;
     hooks.dispatch = _sgimgui_dispatch;
+    hooks.dispatch_indirect = _sgimgui_dispatch_indirect;
     hooks.end_pass = _sgimgui_end_pass;
     hooks.commit = _sgimgui_commit;
     hooks.alloc_buffer = _sgimgui_alloc_buffer;

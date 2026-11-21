@@ -229,7 +229,7 @@
         to provide a base-vertex and/or base-instance which allows to render
         from different sections of a vertex buffer without rebinding the
         vertex buffer with a different offset. Note that `sg_draw_ex()`
-        only has limited portability on OpenGL, check the sg_limits struct
+        only has limited portability on OpenGL, check the sg_features struct
         members .draw_base_vertex and .draw_base_instance for runtime support,
         those are generally true on non-GL-backends, and on GL the feature
         flags are set according to the GL version:
@@ -239,12 +239,21 @@
             - on GLES3.x, base_vertex is only supported since GLES3.2
               (e.g. not supported on WebGL2)
 
-    --- ...or kick of a dispatch call to invoke a compute shader workload:
+    --- ...or kick off a dispatch call to invoke a compute shader workload:
 
             sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z)
 
         The dispatch args define the number of 'compute workgroups' processed
         by the currently applied compute shader.
+
+    --- on backends with compute support, indirect-draw or -dispatch is
+        supported via
+
+            sg_draw_indirect(sg_buffer buf, int offset)
+            sg_dispatch_indirect(sg_buffer buf, int offset)
+
+        For details on indirect-draw/dispatch see the doc section
+        'ON INDIRECT DRAW AND DISPATCH'.
 
     --- finish the current pass with:
 
@@ -1749,7 +1758,9 @@
           read from storage buffers, while compute- and fragment-shaders can both
           read and write storage buffers)
         - create one or more storage buffers via sg_make_buffer() with the
-          `.usage.storage_buffer = true`
+          `.usage.storage_buffer = true`, and matching storage buffer views
+          via `sg_make_view()` (a storage buffer view can define an offset
+          into a storage buffer)
         - when creating a shader via sg_make_shader(), populate the sg_shader_desc
           struct with binding info (when using sokol-shdc, this step will be taken care
           of automatically)
@@ -1759,9 +1770,8 @@
               bindings are required for vertex-shaders, and in fragment- and compute-
               shaders the readonly flag is used to control hazard tracking in some
               3D backends)
-
         - when calling sg_apply_bindings(), apply the matching bind slots with the previously
-          created storage buffers
+          created storage buffer views
         - ...and that's it.
 
     For more details, see the following backend-agnostic sokol samples:
@@ -1856,7 +1866,7 @@
     restrictions apply:
 
     A storage buffer that's written to in a fragment shader cannot be used
-    in another role in the same render pass, e.g. as vertex- or index-buffer,
+    in another role in the same render pass, e.g. as vertex-, index- or indirect-buffer,
     or bound as a readonly storage buffer. This means that writing to a storage
     buffer in one draw call, and then reading the results back in another draw
     call must happen in separate render passes (in compute passes this restriction
@@ -1948,6 +1958,127 @@
 
         - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/imageblur-sapp.c
         - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/imageblur-sapp.glsl
+
+
+    ON INDIRECT DRAW AND DISPATCH
+    =============================
+    On backends with compute support, indirect draw and dispatch allows a GPU
+    buffer to provide the arguments for a single draw- or dispatch-call.
+
+    Usually a compute shader writes the draw/dispatch args. This lets the GPU
+    decide how much work to do without a round trip to the CPU. For instance,
+    a compute shader can cull objects and write the number of visible objects
+    into the instance count of a draw call.
+
+    First, create a buffer with `usage.indirect_buffer`. If a compute shader
+    writes the arguments, also set `usage.storage_buffer`. The size of the
+    buffer must be a multiple of 4 and large enough for all argument sets.
+
+    Sokol-gfx provides 'reference structs' for the different argument sets:
+
+        - sg_draw_indirect_args: for non-indexed draws
+        - sg_draw_indirect_indexed_args: for indexed draws
+        - sg_dispatch_indirect_args: for compute dispatches
+
+    For instance to create an indirect buffer which will be populated
+    by a compute shader and which holds a single argument set for
+    an indexed draw-call:
+
+        sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+            .usage = {
+                .indirect_buffer = true,
+                .storage_buffer = true,
+            },
+            .size = sizeof(sg_draw_indirect_indexed_args),
+        });
+
+    In the shader, declare a matching struct, e.g. for the
+    `sg_draw_indirect_indexed_args` used above:
+
+        struct draw_args {
+            uint num_elements;
+            uint num_instances;
+            uint base_element;
+            int base_vertex;
+            uint base_instance;
+        };
+        layout(binding=0) buffer cs_args { draw_args args[]; };
+
+    After populating the draw args in a compute pass, call sg_draw_indirect()
+    in a render pass instead of sg_draw():
+
+        sg_begin_pass(...);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(...);
+        sg_apply_uniforms(...);
+        sg_draw_indirect(buf, offset);
+        sg_end_pass();
+
+    NOTE: the pipeline object's `sg_pipeline_desc.index_type` decides
+    whether indexed- or non-indexed draw argument layout is expected.
+
+    ...or to issue a dispatch, call sg_dispatch_indirect():
+
+        sg_begin_pass(&(sg_pass){ .compute = true });
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(...);
+        sg_dispatch_indirect(buf, offset);
+        sg_end_pass();
+
+    The offset is a byte offset into the indirect-buffer to the start of the
+    draw- or dispatch-arguments and must be a multiple of 4.
+
+    One sg_draw_indirect() or sg_dispatch_indirect() call reads exactly one
+    set of arguments (i.e. sokol-gfx does not support 'multi-draw-indirect').
+
+    Zero counts in the argument sets are allowed and will cause the GPU
+    to skip the draw- or dispatch-call.
+
+    The following restrictions are checked by the validation layer:
+
+        - sg_draw_indirect() can only be called in a render pass,
+          and sg_dispatch_indirect() only in a compute pass
+        - the buffer must have `.usage.indirect_buffer`
+        - writing an indirect buffer via a fragment shader cannot
+          happen in the same render pass the same indirect buffer is
+          used in a sg_draw_indirect() call
+        - in a compute pass, an indirect buffer cannot be used in
+          an sg_dispatch_indirect() call while it is also bound as
+          a read/write storage buffer (a read-only storage buffer binding
+          is fine)
+        - a write-transient indirect buffer must have been populated
+          in the same frame and before it is used in an sg_draw_indirect()
+          or sg_dispatch_indirect() call
+
+    The following draw/dispatch-arguments restrictions can *NOT* be
+    checked by the sokol-gfx validation layer and may result in
+    undefined GPU behaviour:
+
+        - the index and vertex ranges must be inside the bound
+          vertex- and index-buffers
+        - the dispatch workgroup counts must be less than 65536
+
+    Portability caveats:
+
+        - a base_instance value other than 0 needs
+          `sg_features.draw_indirect_base_instance`. This is always false
+          on GLES3, false on GL < 4.3, optional on WebGPU and Vulkan and
+          always true on D3D11 and Metal.
+        - an indexed sg_draw_indirect() with sg_bindings.index_buffer_offset != 0
+          needs `sg_features.draw_indirect_index_buffer_offset`. This is
+          always false on GL/GLES and true on all other backends. As a
+          workaround, use the base_element indirect draw arg to select
+          the start index.
+        - in shader code, the instance-id (e.g. gl_InstanceIndex) differs
+          between backends on whether base_instance is included or not:
+          on Metal, WebGPU and Vulkan the base_instance is included,
+          on GL and D3D11 the shader instance-id is always zero-based
+
+    For an example, see the draw-indirect-sapp sample:
+
+        - C code: https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.c
+        - shader: https://github.com/floooh/sokol-samples/blob/master/sapp/draw-indirect-sapp.glsl
+
 
     TRACE HOOKS:
     ============
@@ -2649,6 +2780,8 @@ typedef struct sg_features {
     bool separate_buffer_types;         // data can't move between index buffers and other buffer types, neither via usage combination nor copies (webgl2 restriction)
     bool draw_base_vertex;              // draw with (base vertex > 0) && (base_instance == 0) supported
     bool draw_base_instance;            // draw with (base instance > 0) supported
+    bool draw_indirect_base_instance;   // draw-indirect with (base instance > 0) supported
+    bool draw_indirect_index_buffer_offset; // draw-indirect with (sg_bindings.index_buffer_offset > 0) supported
     bool dual_source_blending;          // dual-source-blending supported
     bool vertexformat_int10_n2;         // SG_VERTEXFORMAT_INT10_N2 is supported
     bool copy_buffer_to_image_relaxed_buffer_type;      // if false: sg_copy_buffer_to_image source buffer must be .usage.staging_buffer (d3d11 restriction)
@@ -3619,6 +3752,13 @@ typedef struct sg_bindings {
     .storage_buffer (default: false)
         the buffer will be bound as storage buffer via storage-buffer-view
         in sg_bindings.views[]
+    .indirect_buffer (default: false)
+        the buffer will be used to provide indirect draw- or dispatch-
+        parameters in sg_draw_indirect() or sg_dispatch_indirect().
+        Requires sg_features.compute, and the buffer size must be
+        a multiple of 4. Combine with .storage_buffer to write the arguments
+        in a compute shader. Cannot be combined with .staging_buffer or
+        .staging_index_buffer.
     .staging_buffer (default: false)
         the buffer cannot be bound as rendering or compute resource and
         can only be used as copy source, used together with .write_transient
@@ -3650,6 +3790,7 @@ typedef struct sg_buffer_usage {
     bool vertex_buffer;
     bool index_buffer;
     bool storage_buffer;
+    bool indirect_buffer;
     bool staging_buffer;
     bool staging_index_buffer;
     bool write_unsealed;
@@ -4776,6 +4917,59 @@ typedef struct sg_view_desc {
 } sg_view_desc;
 
 /*
+    sg_draw_indirect_args
+    sg_draw_indirect_indexed_args
+    sg_dispatch_indirect_args
+
+    These are reference structs which define the layout of
+    indirect draw and dispatch arguments in indirect buffers. The
+    struct members have the same meaning as the same-named arguments
+    of sg_draw_ex() and sg_dispatch():
+
+    sg_draw_indirect_args: for non-indexed draws (16 bytes)
+        .num_elements:  number of vertices
+        .num_instances: number of instances
+        .base_element:  first vertex
+        .base_instance: first instance
+
+    sg_draw_indirect_indexed_args: for indexed draws (20 bytes)
+        .num_elements:  number of indices
+        .num_instances: number of instances
+        .base_element:  first index in the index buffer
+        .base_vertex:   signed value added to each index
+        .base_instance: first instance
+
+    sg_dispatch_indirect_args: for dispatches (12 bytes)
+        .num_groups_x/y/z: number of workgroups
+
+    The pipeline's index type selects the indexed or non-indexed
+    draw layout.
+
+    For details and caveats of indirect draw and dispatch
+    see the documentation section `ON INDIRECT DRAW AND DISPATCH`!
+*/
+typedef struct sg_draw_indirect_args {
+    uint32_t num_elements;
+    uint32_t num_instances;
+    uint32_t base_element;
+    uint32_t base_instance;
+} sg_draw_indirect_args;
+
+typedef struct sg_draw_indirect_indexed_args {
+    uint32_t num_elements;
+    uint32_t num_instances;
+    uint32_t base_element;
+    int32_t base_vertex;
+    uint32_t base_instance;
+} sg_draw_indirect_indexed_args;
+
+typedef struct sg_dispatch_indirect_args {
+    uint32_t num_groups_x;
+    uint32_t num_groups_y;
+    uint32_t num_groups_z;
+} sg_dispatch_indirect_args;
+
+/*
     sg_trace_hooks
 
     Installable callback functions to keep track of the sokol-gfx calls,
@@ -4819,7 +5013,9 @@ typedef struct sg_trace_hooks {
     void (*apply_uniforms)(int ub_index, const sg_range* data, void* user_data);
     void (*draw)(int base_element, int num_elements, int num_instances, void* user_data);
     void (*draw_ex)(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance, void* user_data);
+    void (*draw_indirect)(sg_buffer buf, int offset, void* user_data);
     void (*dispatch)(int num_groups_x, int num_groups_y, int num_groups_z, void* user_data);
+    void (*dispatch_indirect)(sg_buffer buf, int offset, void* user_data);
     void (*end_pass)(void* user_data);
     void (*commit)(void* user_data);
     void (*alloc_buffer)(sg_buffer result, void* user_data);
@@ -4974,13 +5170,21 @@ typedef struct sg_frame_stats_d3d11_draw {
     uint32_t num_draw_indexed;
     uint32_t num_draw_instanced;
     uint32_t num_draw;
+    uint32_t num_draw_indexed_instanced_indirect;
+    uint32_t num_draw_instanced_indirect;
 } sg_frame_stats_d3d11_draw;
+
+typedef struct sg_frame_stats_d3d11_dispatch {
+    uint32_t num_dispatch;
+    uint32_t num_dispatch_indirect;
+} sg_frame_stats_d3d11_dispatch;
 
 typedef struct sg_frame_stats_d3d11 {
     sg_frame_stats_d3d11_pass pass;
     sg_frame_stats_d3d11_pipeline pipeline;
     sg_frame_stats_d3d11_bindings bindings;
     sg_frame_stats_d3d11_draw draw;
+    sg_frame_stats_d3d11_dispatch dispatch;
     uint32_t num_update_subresource;
     uint32_t num_copy_subresource_region;
     uint32_t num_map;
@@ -5116,7 +5320,9 @@ typedef struct sg_frame_stats {
     uint32_t num_apply_uniforms;
     uint32_t num_draw;
     uint32_t num_draw_ex;
+    uint32_t num_draw_indirect;
     uint32_t num_dispatch;
+    uint32_t num_dispatch_indirect;
     uint32_t num_write_buffer_transient;
     uint32_t num_write_image_transient;
     uint32_t num_write_buffer_unsealed;
@@ -5344,6 +5550,8 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(COPY_IMAGE_TO_IMAGE_DST_ALIVE, "sg_copy_image_to_image: dst image no longer alive") \
     _SG_LOGITEM_XMACRO(COPY_IMAGE_TO_IMAGE_SRC_VALID, "sg_copy_image_to_image: src image not in state SG_RESOURCESTATE_VALID") \
     _SG_LOGITEM_XMACRO(COPY_IMAGE_TO_IMAGE_DST_VALID, "sg_copy_image_to_image: dst image not in state SG_RESOURCESTATE_VALID") \
+    _SG_LOGITEM_XMACRO(DRAW_INDIRECT_BUFFER_ALIVE, "sg_draw_indirect: buffer no longer alive") \
+    _SG_LOGITEM_XMACRO(DISPATCH_INDIRECT_BUFFER_ALIVE, "sg_dispatch_indirect: buffer no longer alive") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_VERTEXSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on vertex shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_FRAGMENTSTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on fragment shader stage (sg_limits.max_texture_bindings_per_stage)") \
     _SG_LOGITEM_XMACRO(SHADERDESC_TOO_MANY_COMPUTESTAGE_TEXTURES, "sg_shader_desc: too many texture bindings on compute shader stage (sg_limits.max_texture_bindings_per_stage)") \
@@ -5361,6 +5569,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .vertex_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .index_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .storage_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INDIRECTBUFFER, "sg_buffer_desc.usage: .staging_buffer or .staging_index_buffer cannot be combined with .indirect_buffer") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INJECTED, "sg_buffer_desc.usage: cannot inject backend-native buffers for .staging or .staging_index_buffer usage") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_COPYDST, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot be combined with .copy_dst") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STAGING_VS_INITIALDATA, "sg_buffer_desc.usage: .staging_buffer and .staging_index_buffer cannot have initial data") \
@@ -5375,8 +5584,10 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_MATCHING_DATA_SIZE, "sg_buffer_desc.size and .data.size must be equal") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_ZERO_DATA_SIZE, "sg_buffer_desc.data.size expected to be zero") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_EXPECT_DATA, "sg_buffer_desc: buffer content can never be initialized (provide .data, or set .usage.write_unsealed, .usage.write_transient or .usage.copy_dst)") \
-    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires OpenGL >= 4.3)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED, "storage buffers not supported by the backend 3D API (requires sg_features.compute)") \
     _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4, "size of storage buffers must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED, "indirect buffers not supported by the backend 3D API (requires sg_features.compute)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_BUFFERDESC_INDIRECTBUFFER_SIZE_MULTIPLE_4, "size of indirect buffers must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_DATA_SIZE, "sg_image_desc.data: data size doesn't match expected size (complete tightly packed size across all mip levels and slices) ") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_CANARY, "sg_image_desc not initialized") \
     _SG_LOGITEM_XMACRO(VALIDATE_IMAGEDESC_ANY_ATTACHMENT_VS_COPYDST, "sg_image_desc.usage: attachments cannot have usage .copy_dst") \
@@ -5633,7 +5844,7 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SBVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage buffer view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT, "sg_apply_bindings: a storage buffer bound as read/write cannot have usage.write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE, "sg_apply_bindings: same buffer cannot be bound as readonly and read/write storage buffer in one render pass") \
-    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_READ, "sg_apply_bindings: same buffer cannot be bound as read/write storage buffer and vertex, index or readonly storage buffer in one render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_ABND_SBVIEW_READWRITE_VS_READ, "sg_apply_bindings: same buffer cannot be bound as read/write storage buffer and vertex, index, indirect or readonly storage buffer in one render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_EXPECT_SIMGVIEW, "sg_apply_bindings: view type mismatch in bindslot (shader expects a storage image view)") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_IMAGETYPE_MISMATCH, "sg_apply_bindings: image type of bound texture doesn't match shader desc") \
     _SG_LOGITEM_XMACRO(VALIDATE_ABND_TEXVIEW_EXPECTED_MULTISAMPLED_IMAGE, "sg_apply_bindings: texture bindings expects image with sample_count > 1") \
@@ -5677,16 +5888,37 @@ typedef struct sg_stats {
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DRAW_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED, "sg_draw_indirect: must be called in a render pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_USAGE, "sg_draw_indirect: buffer must have usage.indirect_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_RANGE, "sg_draw_indirect: offset is out of range (must be >= 0 && <= (buf_size - sizeof(sg_draw_indirect[_indexed]_args)))") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4, "sg_draw_indirect: offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET, "sg_draw_indirect: indexed indirect draws require sg_bindings.index_buffer_offset == 0 on this backend (see sg_features.draw_indirect_index_buffer_offset)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_draw_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_draw_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING, "sg_draw_indirect: indirect buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DRAW_INDIRECT_BUFFER_VS_SBVIEW_READWRITE, "sg_draw_indirect: same buffer cannot be used as indirect buffer and read/write storage buffer in the same render pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_COMPUTEPASS_EXPECTED, "sg_dispatch: must be called in a compute pass") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSX, "sg_dispatch: num_groups_x must be >=0 and <65536") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSY, "sg_dispatch: num_groups_y must be >=0 and <65536") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_NUMGROUPSZ, "sg_dispatch: num_groups_z must be >=0 and <65536") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
     _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED, "sg_dispatch_indirect: must be called in a compute pass") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE, "sg_dispatch_indirect: buffer must have usage.indirect_buffer") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE, "sg_dispatch_indirect: offset is out of range (must be >= 0 && <= (buf_size - sizeof(sg_dispatch_indirect_args)))") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4, "sg_dispatch_indirect: offset must be a multiple of 4") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING, "sg_dispatch_indirect: call to sg_apply_bindings() and/or sg_apply_uniforms() missing after sg_apply_pipeline()") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient buffer hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING, "sg_dispatch_indirect: a bound usage.write_transient image hasn't been written this frame (missing sg_write_image_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING, "sg_dispatch_indirect: indirect buffer has usage.write_transient but hasn't been written this frame (missing sg_write_buffer_transient call)") \
+    _SG_LOGITEM_XMACRO(VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE, "sg_dispatch_indirect: same buffer cannot be used as indirect buffer and read/write storage buffer in the same dispatch") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERUNSEALED_USAGE, "sg_write_buffer_unsealed: buffer usage must be .write_unsealed") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_USAGE, "sg_write_buffer_transient: buffer usage must be .write_transient") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND, "sg_write_buffer_transient: cannot be called after buffer has already been bound in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY, "sg_write_buffer_transient: cannot be called after buffer has been copied from in this frame") \
+    _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT, "sg_write_buffer_transient: cannot be called after buffer has already been used in a draw/dispatch-indirect call in this frame") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT, "sg_write_buffer_transient: dst.offset must be a multiple of 4") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_POINTER, "sg_write_buffer_*: desc.src.data.ptr must be valid") \
     _SG_LOGITEM_XMACRO(VALIDATE_WRITEBUFFER_SRC_DATA_SIZE, "sg_write_buffer_*: desc.src.data.size must be > 0") \
@@ -6086,7 +6318,9 @@ SOKOL_GFX_API_DECL void sg_apply_bindings(const sg_bindings* bindings);
 SOKOL_GFX_API_DECL void sg_apply_uniforms(int ub_slot, const sg_range* data);
 SOKOL_GFX_API_DECL void sg_draw(int base_element, int num_elements, int num_instances);
 SOKOL_GFX_API_DECL void sg_draw_ex(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance);
+SOKOL_GFX_API_DECL void sg_draw_indirect(sg_buffer buf, int offset);
 SOKOL_GFX_API_DECL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z);
+SOKOL_GFX_API_DECL void sg_dispatch_indirect(sg_buffer buf, int offset);
 SOKOL_GFX_API_DECL void sg_end_pass(void);
 SOKOL_GFX_API_DECL void sg_commit(void);
 
@@ -6962,6 +7196,7 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #define GL_TEXTURE_UPDATE_BARRIER_BIT 0x00000100
         #define GL_BUFFER_UPDATE_BARRIER_BIT 0x00000200
         #define GL_FRAMEBUFFER_BARRIER_BIT 0x00000400
+        #define GL_COMMAND_BARRIER_BIT 0x00000040
         #define GL_MIN 0x8007
         #define GL_MAX 0x8008
         #define GL_WRITE_ONLY 0x88B9
@@ -6977,6 +7212,8 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
         #define GL_COPY_READ_BUFFER 0x8F36
         #define GL_COPY_WRITE_BUFFER 0x8F37
         #define GL_PIXEL_UNPACK_BUFFER 0x88EC
+        #define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+        #define GL_DISPATCH_INDIRECT_BUFFER 0x90EE
     #endif
 
     #ifndef GL_UNSIGNED_INT_2_10_10_10_REV
@@ -7074,6 +7311,15 @@ inline void sg_copy_image_to_image(const sg_copy_image_to_image_desc& desc) { re
     #endif
     #ifndef GL_COMPUTE_SHADER
     #define GL_COMPUTE_SHADER 0x91B9
+    #endif
+    #ifndef GL_DRAW_INDIRECT_BUFFER
+    #define GL_DRAW_INDIRECT_BUFFER 0x8F3F
+    #endif
+    #ifndef GL_DISPATCH_INDIRECT_BUFFER
+    #define GL_DISPATCH_INDIRECT_BUFFER 0x90EE
+    #endif
+    #ifndef GL_COMMAND_BARRIER_BIT
+    #define GL_COMMAND_BARRIER_BIT 0x00000040
     #endif
     #ifndef _SG_GL_CHECK_ERROR
         #if defined(__EMSCRIPTEN__)
@@ -7220,9 +7466,11 @@ typedef struct {
     uint32_t write_transient_frame_index; // last frame index when written to
     struct {
         uint32_t bind_frame_index;  // last frame index the buffer was bound
+        uint32_t indirect_frame_index;  // last frame index the buffer was used in a draw/dispatch-indirect call
         uint32_t copy_src_frame_index; // last frame index the buffer was used as copy-source
         uint32_t read_render_pass_index;    // last pass index the buffer was read in a render pass
         uint32_t write_render_pass_index;   // last pass index the buffer was written in a render pass
+        uint32_t write_bindings_index;      // last bindings index the buffer was bound as read/write storage buffer
     } validate;
     sg_buffer_usage usage;
 } _sg_buffer_common_t;
@@ -7385,7 +7633,8 @@ typedef enum {
     _SG_GL_GPUDIRTY_TEXTURE = (1<<3),
     _SG_GL_GPUDIRTY_STORAGEIMAGE = (1<<4),
     _SG_GL_GPUDIRTY_ATTACHMENT = (1<<5),
-    _SG_GL_GPUDIRTY_BUFFER_ALL = _SG_GL_GPUDIRTY_VERTEXBUFFER | _SG_GL_GPUDIRTY_INDEXBUFFER | _SG_GL_GPUDIRTY_STORAGEBUFFER,
+    _SG_GL_GPUDIRTY_INDIRECTBUFFER = (1<<6),
+    _SG_GL_GPUDIRTY_BUFFER_ALL = _SG_GL_GPUDIRTY_VERTEXBUFFER | _SG_GL_GPUDIRTY_INDEXBUFFER | _SG_GL_GPUDIRTY_STORAGEBUFFER | _SG_GL_GPUDIRTY_INDIRECTBUFFER,
     _SG_GL_GPUDIRTY_IMAGE_ALL = _SG_GL_GPUDIRTY_TEXTURE | _SG_GL_GPUDIRTY_STORAGEIMAGE | _SG_GL_GPUDIRTY_ATTACHMENT,
 } _sg_gl_gpudirty_t;
 
@@ -7523,11 +7772,15 @@ typedef struct {
     _sg_gl_cache_attr_t attrs[SG_MAX_VERTEX_ATTRIBUTES];
     GLuint vertex_buffer;
     GLuint index_buffer;
+    GLuint draw_indirect_buffer;
+    GLuint dispatch_indirect_buffer;
     GLuint storage_buffer;  // general bind point
     GLuint storage_buffers[_SG_GL_MAX_SBUF_BINDINGS];
     int storage_buffer_offsets[_SG_GL_MAX_SBUF_BINDINGS];
     GLuint stored_vertex_buffer;
     GLuint stored_index_buffer;
+    GLuint stored_draw_indirect_buffer;
+    GLuint stored_dispatch_indirect_buffer;
     GLuint stored_storage_buffer;
     GLuint prog;
     _sg_gl_cache_texture_sampler_bind_slot texture_samplers[_SG_GL_MAX_TEX_SMP_BINDINGS];
@@ -8062,14 +8315,15 @@ typedef enum {
     _SG_VK_ACCESS_STORAGEBUFFER_RO = (1<<4),
     _SG_VK_ACCESS_STORAGEBUFFER_RW_COMPUTE = (1<<5),
     _SG_VK_ACCESS_STORAGEBUFFER_RW_FRAGMENT = (1<<6),
-    _SG_VK_ACCESS_TEXTURE = (1<<7),
-    _SG_VK_ACCESS_STORAGEIMAGE = (1<<8),
-    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<9),
-    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<10),
-    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<11),
-    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<12),
-    _SG_VK_ACCESS_DISCARD = (1<<13),    // in combination with attachments
-    _SG_VK_ACCESS_PRESENT = (1<<14),
+    _SG_VK_ACCESS_INDIRECTBUFFER = (1<<7),
+    _SG_VK_ACCESS_TEXTURE = (1<<8),
+    _SG_VK_ACCESS_STORAGEIMAGE = (1<<9),
+    _SG_VK_ACCESS_COLOR_ATTACHMENT = (1<<10),
+    _SG_VK_ACCESS_RESOLVE_ATTACHMENT = (1<<11),
+    _SG_VK_ACCESS_DEPTH_ATTACHMENT = (1<<12),
+    _SG_VK_ACCESS_STENCIL_ATTACHMENT = (1<<13),
+    _SG_VK_ACCESS_DISCARD = (1<<14),    // in combination with attachments
+    _SG_VK_ACCESS_PRESENT = (1<<15),
 } _sg_vk_access_bits_t;
 typedef int _sg_vk_access_t;
 
@@ -8335,8 +8589,10 @@ typedef struct {
     bool use_instanced_draw;
     struct {
         uint32_t pass_index;    // running count of passes (keeps counting across frames)
+        uint32_t bindings_index;    // running count of sg_apply_pipeline() and sg_apply_bindings() calls
         uint32_t required_bindings_and_uniforms;    // used to check that bindings and uniforms are applied after applying pipeline
         uint32_t applied_bindings_and_uniforms;     // bits 0..7: uniform blocks, bit 8: bindings
+        int index_buffer_offset;                    // index buffer offset of the last sg_apply_bindings(), checked in sg_draw_indirect()
         bool write_buffer_transient_missing;        // used for 'deferred validation' in draw/dispatch when sg_write_buffer_transient() hasn't been called in current frame
         bool write_image_transient_missing;         // ditto for transient images
     } validate;
@@ -9249,9 +9505,11 @@ _SOKOL_PRIVATE void _sg_buffer_common_init(_sg_buffer_common_t* cmn, const sg_bu
     cmn->active_slot = 0;
     cmn->write_transient_frame_index = 0;
     cmn->validate.bind_frame_index = 0;
+    cmn->validate.indirect_frame_index = 0;
     cmn->validate.copy_src_frame_index = 0;
     cmn->validate.read_render_pass_index = 0;
     cmn->validate.write_render_pass_index = 0;
+    cmn->validate.write_bindings_index = 0;
     cmn->usage = desc->usage;
 }
 
@@ -10167,10 +10425,24 @@ _SOKOL_PRIVATE void _sg_dummy_draw(int base_element, int num_elements, int num_i
     _SOKOL_UNUSED(base_instance);
 }
 
+_SOKOL_PRIVATE void _sg_dummy_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(offset);
+}
+
 _SOKOL_PRIVATE void _sg_dummy_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     _SOKOL_UNUSED(num_groups_x);
     _SOKOL_UNUSED(num_groups_y);
     _SOKOL_UNUSED(num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_dummy_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    _SOKOL_UNUSED(buf);
+    _SOKOL_UNUSED(offset);
 }
 
 _SOKOL_PRIVATE void _sg_dummy_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -10373,6 +10645,9 @@ _SOKOL_PRIVATE void _sg_dummy_copy_image_to_image(_sg_image_t* src_img, _sg_imag
     _SG_XMACRO(glDrawArraysInstancedBaseInstance, void, (GLenum mode, GLint first, GLsizei count, GLsizei instancecount, GLuint baseinstance)) \
     _SG_XMACRO(glCopyBufferSubData,               void, (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size)) \
     _SG_XMACRO(glCopyImageSubData,                void, (GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth)) \
+    _SG_XMACRO(glDrawArraysIndirect,              void, (GLenum mode, const void* indirect)) \
+    _SG_XMACRO(glDrawElementsIndirect,            void, (GLenum mode, GLenum type, const void* indirect)) \
+    _SG_XMACRO(glDispatchComputeIndirect,         void, (GLintptr indirect)) \
 
 // generate GL function pointer typedefs
 #define _SG_XMACRO(name, ret, args) typedef ret (GL_APIENTRY* PFN_ ## name) args;
@@ -10427,6 +10702,8 @@ _SOKOL_PRIVATE GLenum _sg_gl_buffer_target(const sg_buffer_usage* usg) {
         return GL_ELEMENT_ARRAY_BUFFER;
     } else if (usg->storage_buffer) {
         return GL_SHADER_STORAGE_BUFFER;
+    } else if (usg->indirect_buffer) {
+        return GL_DRAW_INDIRECT_BUFFER;
     } else {
         SOKOL_UNREACHABLE; return 0;
     }
@@ -11177,6 +11454,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_glcore(void) {
     #endif
     _sg.features.draw_base_vertex = version >= 320;
     _sg.features.draw_base_instance = version >= 420;
+    _sg.features.draw_indirect_base_instance = version >= 430;
+    _sg.features.draw_indirect_index_buffer_offset = false;
     _sg.features.dual_source_blending = version >= 330;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -11316,6 +11595,8 @@ _SOKOL_PRIVATE void _sg_gl_init_caps_gles3(void) {
     _sg.features.draw_base_vertex = false;
     #endif
     _sg.features.draw_base_instance = false;
+    _sg.features.draw_indirect_base_instance = false;
+    _sg.features.draw_indirect_index_buffer_offset = false;
     _sg.features.dual_source_blending = false;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -11433,6 +11714,20 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
         _sg.gl.cache.index_buffer = 0;
         _sg_stats_inc(gl.num_bind_buffer);
     }
+    if (force || (_sg.gl.cache.draw_indirect_buffer != 0)) {
+        if (_sg.features.compute) {
+            glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+        }
+        _sg.gl.cache.draw_indirect_buffer = 0;
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (force || (_sg.gl.cache.dispatch_indirect_buffer != 0)) {
+        if (_sg.features.compute) {
+            glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
+        }
+        _sg.gl.cache.dispatch_indirect_buffer = 0;
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
     if (force || (_sg.gl.cache.storage_buffer != 0)) {
         if (_sg.features.compute) {
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -11452,7 +11747,11 @@ _SOKOL_PRIVATE void _sg_gl_cache_clear_buffer_bindings(bool force) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
-    SOKOL_ASSERT((GL_ARRAY_BUFFER == target) || (GL_ELEMENT_ARRAY_BUFFER == target) || (GL_SHADER_STORAGE_BUFFER == target));
+    SOKOL_ASSERT((GL_ARRAY_BUFFER == target)
+        || (GL_ELEMENT_ARRAY_BUFFER == target)
+        || (GL_SHADER_STORAGE_BUFFER == target)
+        || (GL_DRAW_INDIRECT_BUFFER == target)
+        || (GL_DISPATCH_INDIRECT_BUFFER == target));
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.vertex_buffer != buffer) {
             _sg.gl.cache.vertex_buffer = buffer;
@@ -11463,6 +11762,22 @@ _SOKOL_PRIVATE void _sg_gl_cache_bind_buffer(GLenum target, GLuint buffer) {
         if (_sg.gl.cache.index_buffer != buffer) {
             _sg.gl.cache.index_buffer = buffer;
             glBindBuffer(target, buffer);
+            _sg_stats_inc(gl.num_bind_buffer);
+        }
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.draw_indirect_buffer != buffer) {
+            _sg.gl.cache.draw_indirect_buffer = buffer;
+            if (_sg.features.compute) {
+                glBindBuffer(target, buffer);
+            }
+            _sg_stats_inc(gl.num_bind_buffer);
+        }
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.dispatch_indirect_buffer != buffer) {
+            _sg.gl.cache.dispatch_indirect_buffer = buffer;
+            if (_sg.features.compute) {
+                glBindBuffer(target, buffer);
+            }
             _sg_stats_inc(gl.num_bind_buffer);
         }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
@@ -11500,6 +11815,10 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
         _sg.gl.cache.stored_vertex_buffer = _sg.gl.cache.vertex_buffer;
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         _sg.gl.cache.stored_index_buffer = _sg.gl.cache.index_buffer;
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        _sg.gl.cache.stored_draw_indirect_buffer = _sg.gl.cache.draw_indirect_buffer;
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        _sg.gl.cache.stored_dispatch_indirect_buffer = _sg.gl.cache.dispatch_indirect_buffer;
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         _sg.gl.cache.stored_storage_buffer = _sg.gl.cache.storage_buffer;
     } else {
@@ -11508,21 +11827,29 @@ _SOKOL_PRIVATE void _sg_gl_cache_store_buffer_binding(GLenum target) {
 }
 
 _SOKOL_PRIVATE void _sg_gl_cache_restore_buffer_binding(GLenum target) {
+    // NOTE: we only care about restoring valid ids
     if (target == GL_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_vertex_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_vertex_buffer);
             _sg.gl.cache.stored_vertex_buffer = 0;
         }
     } else if (target == GL_ELEMENT_ARRAY_BUFFER) {
         if (_sg.gl.cache.stored_index_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_index_buffer);
             _sg.gl.cache.stored_index_buffer = 0;
         }
+    } else if (target == GL_DRAW_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.stored_draw_indirect_buffer != 0) {
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_draw_indirect_buffer);
+            _sg.gl.cache.stored_draw_indirect_buffer = 0;
+        }
+    } else if (target == GL_DISPATCH_INDIRECT_BUFFER) {
+        if (_sg.gl.cache.stored_dispatch_indirect_buffer != 0) {
+            _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_dispatch_indirect_buffer);
+            _sg.gl.cache.stored_dispatch_indirect_buffer = 0;
+        }
     } else if (target == GL_SHADER_STORAGE_BUFFER) {
         if (_sg.gl.cache.stored_storage_buffer != 0) {
-            // we only care about restoring valid ids
             _sg_gl_cache_bind_buffer(target, _sg.gl.cache.stored_storage_buffer);
             _sg.gl.cache.stored_storage_buffer = 0;
         }
@@ -11541,6 +11868,16 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     if (buf == _sg.gl.cache.index_buffer) {
         _sg.gl.cache.index_buffer = 0;
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (buf == _sg.gl.cache.draw_indirect_buffer) {
+        _sg.gl.cache.draw_indirect_buffer = 0;
+        glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
+        _sg_stats_inc(gl.num_bind_buffer);
+    }
+    if (buf == _sg.gl.cache.dispatch_indirect_buffer) {
+        _sg.gl.cache.dispatch_indirect_buffer = 0;
+        glBindBuffer(GL_DISPATCH_INDIRECT_BUFFER, 0);
         _sg_stats_inc(gl.num_bind_buffer);
     }
     if (buf == _sg.gl.cache.storage_buffer) {
@@ -11563,6 +11900,12 @@ _SOKOL_PRIVATE void _sg_gl_cache_invalidate_buffer(GLuint buf) {
     }
     if (buf == _sg.gl.cache.stored_index_buffer) {
         _sg.gl.cache.stored_index_buffer = 0;
+    }
+    if (buf == _sg.gl.cache.stored_draw_indirect_buffer) {
+        _sg.gl.cache.stored_draw_indirect_buffer = 0;
+    }
+    if (buf == _sg.gl.cache.stored_dispatch_indirect_buffer) {
+        _sg.gl.cache.stored_dispatch_indirect_buffer = 0;
     }
     if (buf == _sg.gl.cache.stored_storage_buffer) {
         _sg.gl.cache.stored_storage_buffer = 0;
@@ -13509,6 +13852,39 @@ _SOKOL_PRIVATE void _sg_gl_draw(int base_element, int num_elements, int num_inst
     }
 }
 
+#if defined(_SOKOL_GL_HAS_COMPUTE)
+_SOKOL_PRIVATE void _sg_gl_handle_indirect_memory_barrier(_sg_buffer_t* buf) {
+    SOKOL_ASSERT(buf);
+    if (buf->gl.gpu_dirty_flags & _SG_GL_GPUDIRTY_INDIRECTBUFFER) {
+        glMemoryBarrier(GL_COMMAND_BARRIER_BIT);
+        buf->gl.gpu_dirty_flags &= (uint8_t)~_SG_GL_GPUDIRTY_INDIRECTBUFFER;
+        _sg_stats_inc(gl.num_memory_barriers);
+    }
+}
+#endif
+
+_SOKOL_PRIVATE void _sg_gl_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        SOKOL_ASSERT(_sg.features.compute);
+        _sg_gl_handle_indirect_memory_barrier(buf);
+        const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
+        _sg_gl_cache_bind_buffer(GL_DRAW_INDIRECT_BUFFER, gl_buf);
+        const GLenum prim_type = _sg.gl.cache.cur_primitive_type;
+        const GLvoid* indirect = (const GLvoid*)(GLintptr)offset;
+        if (_sg.use_indexed_draw) {
+            const GLenum index_type = _sg.gl.cache.cur_index_type;
+            glDrawElementsIndirect(prim_type, index_type, indirect);
+        } else {
+            glDrawArraysIndirect(prim_type, indirect);
+        }
+    #else
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
+    #endif
+}
+
 _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if defined(_SOKOL_GL_HAS_COMPUTE)
         if (!_sg.features.compute) {
@@ -13517,6 +13893,21 @@ _SOKOL_PRIVATE void _sg_gl_dispatch(int num_groups_x, int num_groups_y, int num_
         glDispatchCompute((GLuint)num_groups_x, (GLuint)num_groups_y, (GLuint)num_groups_z);
     #else
         (void)num_groups_x; (void)num_groups_y; (void)num_groups_z;
+    #endif
+}
+
+_SOKOL_PRIVATE void _sg_gl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    #if defined(_SOKOL_GL_HAS_COMPUTE)
+        SOKOL_ASSERT(_sg.features.compute);
+        _sg_gl_handle_indirect_memory_barrier(buf);
+        const GLuint gl_buf = buf->gl.buf[buf->cmn.active_slot];
+        _sg_gl_cache_bind_buffer(GL_DISPATCH_INDIRECT_BUFFER, gl_buf);
+        glDispatchComputeIndirect((GLintptr)offset);
+    #else
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
     #endif
 }
 
@@ -14260,11 +14651,35 @@ static inline void _sg_d3d11_DrawInstanced(ID3D11DeviceContext* self, UINT Verte
     #endif
 }
 
+static inline void _sg_d3d11_DrawIndexedInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DrawIndexedInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DrawIndexedInstancedIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
+    #endif
+}
+
+static inline void _sg_d3d11_DrawInstancedIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DrawInstancedIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DrawInstancedIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
+    #endif
+}
+
 static inline void _sg_d3d11_Dispatch(ID3D11DeviceContext* self, UINT ThreadGroupCountX, UINT ThreadGroupCountY, UINT ThreadGroupCountZ) {
     #if defined(__cplusplus)
         self->Dispatch(ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
     #else
         self->lpVtbl->Dispatch(self, ThreadGroupCountX, ThreadGroupCountY, ThreadGroupCountZ);
+    #endif
+}
+
+static inline void _sg_d3d11_DispatchIndirect(ID3D11DeviceContext* self, ID3D11Buffer* pBufferForArgs, UINT AlignedByteOffsetForArgs) {
+    #if defined(__cplusplus)
+        self->DispatchIndirect(pBufferForArgs, AlignedByteOffsetForArgs);
+    #else
+        self->lpVtbl->DispatchIndirect(self, pBufferForArgs, AlignedByteOffsetForArgs);
     #endif
 }
 
@@ -14355,11 +14770,23 @@ _SOKOL_PRIVATE UINT _sg_d3d11_buffer_bind_flags(const sg_buffer_usage* usg) {
             res |= D3D11_BIND_UNORDERED_ACCESS;
         }
     }
+    // workaround: write_transient implies D3D11_USAGE_DYNAMIC, but
+    // dynamic d3d11 buffers need at least one bind flag
+    if (usg->indirect_buffer && usg->write_transient && (0 == res)) {
+        res |= D3D11_BIND_SHADER_RESOURCE;
+    }
     return res;
 }
 
 _SOKOL_PRIVATE UINT _sg_d3d11_buffer_misc_flags(const sg_buffer_usage* usg) {
-    return usg->storage_buffer ? D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS : 0;
+    UINT flags = 0;
+    if (usg->storage_buffer) {
+        flags |= D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+    }
+    if (usg->indirect_buffer) {
+        flags |= D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+    }
+    return flags;
 }
 
 _SOKOL_PRIVATE DXGI_FORMAT _sg_d3d11_base_pixel_format(sg_pixel_format fmt) {
@@ -14688,6 +15115,8 @@ _SOKOL_PRIVATE void _sg_d3d11_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.draw_indirect_base_instance = true;
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = false;
     // can only copy from staging buffer
@@ -16093,8 +16522,32 @@ _SOKOL_PRIVATE void _sg_d3d11_draw(int base_element, int num_elements, int num_i
     }
 }
 
+_SOKOL_PRIVATE void _sg_d3d11_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    if (_sg.use_indexed_draw) {
+        _sg_d3d11_DrawIndexedInstancedIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+        _sg_stats_inc(d3d11.draw.num_draw_indexed_instanced_indirect);
+    } else {
+        _sg_d3d11_DrawInstancedIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+        _sg_stats_inc(d3d11.draw.num_draw_instanced_indirect);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_d3d11_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     _sg_d3d11_Dispatch(_sg.d3d11.ctx, (UINT)num_groups_x, (UINT)num_groups_y, (UINT)num_groups_z);
+    _sg_stats_inc(d3d11.dispatch.num_dispatch);
+}
+
+_SOKOL_PRIVATE void _sg_d3d11_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.d3d11.ctx);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(buf->d3d11.buf);
+    _sg_d3d11_DispatchIndirect(_sg.d3d11.ctx, buf->d3d11.buf, (UINT)offset);
+    _sg_stats_inc(d3d11.dispatch.num_dispatch_indirect);
 }
 
 _SOKOL_PRIVATE void _sg_d3d11_commit(void) {
@@ -16922,6 +17375,8 @@ _SOKOL_PRIVATE void _sg_mtl_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.draw_indirect_base_instance = true;
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = true;
     _sg.features.vertexformat_int10_n2 = true;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -18628,6 +19083,34 @@ _SOKOL_PRIVATE void _sg_mtl_draw(int base_element, int num_elements, int num_ins
     }
 }
 
+_SOKOL_PRIVATE void _sg_mtl_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(nil != _sg.mtl.render_cmd_encoder);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (buf->cmn.usage.write_transient) {
+        _sg_mtl_commit_buffer_write_range(buf);
+    }
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    if (_sg.use_indexed_draw) {
+        // indexed indirect rendering
+        const _sg_buffer_t* ib = _sg_buffer_ref_ptr(&_sg.mtl.cache.cur_ibuf);
+        SOKOL_ASSERT(ib && (ib->mtl.buf[ib->cmn.active_slot] != _SG_MTL_INVALID_SLOT_INDEX));
+        const NSUInteger index_buffer_offset = (NSUInteger)_sg.mtl.cache.cur_ibuf_offset;
+        [_sg.mtl.render_cmd_encoder drawIndexedPrimitives:pip->mtl.prim_type
+            indexType:pip->mtl.index_type
+            indexBuffer:_sg_mtl_id(ib->mtl.buf[ib->cmn.active_slot])
+            indexBufferOffset:index_buffer_offset
+            indirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+            indirectBufferOffset:(NSUInteger)offset];
+    } else {
+        // non-indexed indirect rendering
+        [_sg.mtl.render_cmd_encoder drawPrimitives:pip->mtl.prim_type
+            indirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+            indirectBufferOffset:(NSUInteger)offset];
+    }
+}
+
 _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
     const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
@@ -18638,6 +19121,20 @@ _SOKOL_PRIVATE void _sg_mtl_dispatch(int num_groups_x, int num_groups_y, int num
         (NSUInteger)num_groups_z);
     const MTLSize threads_per_threadgroup = pip->mtl.threads_per_threadgroup;
     [_sg.mtl.compute_cmd_encoder dispatchThreadgroups:thread_groups threadsPerThreadgroup:threads_per_threadgroup];
+}
+
+_SOKOL_PRIVATE void _sg_mtl_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(nil != _sg.mtl.compute_cmd_encoder);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (buf->cmn.usage.write_transient) {
+        _sg_mtl_commit_buffer_write_range(buf);
+    }
+    const _sg_pipeline_t* pip = _sg_pipeline_ref_ptr(&_sg.cur_pip);
+    SOKOL_ASSERT(pip);
+    [_sg.mtl.compute_cmd_encoder dispatchThreadgroupsWithIndirectBuffer:_sg_mtl_id(buf->mtl.buf[buf->cmn.active_slot])
+        indirectBufferOffset:(NSUInteger)offset
+        threadsPerThreadgroup:pip->mtl.threads_per_threadgroup];
 }
 
 _SOKOL_PRIVATE void _sg_mtl_write_buffer_common(_sg_buffer_t* buf, const sg_write_buffer_desc* desc) {
@@ -18887,6 +19384,9 @@ _SOKOL_PRIVATE WGPUBufferUsage _sg_wgpu_buffer_usage(const sg_buffer_usage* usg)
     }
     if (usg->storage_buffer) {
         res |= (int)WGPUBufferUsage_Storage;
+    }
+    if (usg->indirect_buffer) {
+        res |= (int)WGPUBufferUsage_Indirect;
     }
     if (usg->copy_src) {
         res |= (int)WGPUBufferUsage_CopySrc;
@@ -19281,6 +19781,8 @@ _SOKOL_PRIVATE void _sg_wgpu_init_caps(void) {
     _sg.features.msaa_texture_bindings = true;
     _sg.features.draw_base_vertex = true;
     _sg.features.draw_base_instance = true;
+    _sg.features.draw_indirect_base_instance = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_IndirectFirstInstance);
+    _sg.features.draw_indirect_index_buffer_offset = true;
     _sg.features.dual_source_blending = wgpuDeviceHasFeature(_sg.wgpu.dev, WGPUFeatureName_DualSourceBlending);
     _sg.features.vertexformat_int10_n2 = false;
     _sg.features.copy_buffer_to_image_relaxed_buffer_type = true;
@@ -21012,6 +21514,20 @@ _SOKOL_PRIVATE void _sg_wgpu_draw(int base_element, int num_elements, int num_in
     }
 }
 
+_SOKOL_PRIVATE void _sg_wgpu_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.wgpu.rpass_enc);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
+    if (_sg.use_indexed_draw) {
+        wgpuRenderPassEncoderDrawIndexedIndirect(_sg.wgpu.rpass_enc, buf->wgpu.buf, (uint64_t)offset);
+    } else {
+        wgpuRenderPassEncoderDrawIndirect(_sg.wgpu.rpass_enc, buf->wgpu.buf, (uint64_t)offset);
+    }
+}
+
 _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.wgpu.cpass_enc);
     if (_sg.wgpu.uniform.dirty) {
@@ -21021,6 +21537,16 @@ _SOKOL_PRIVATE void _sg_wgpu_dispatch(int num_groups_x, int num_groups_y, int nu
         (uint32_t)num_groups_x,
         (uint32_t)num_groups_y,
         (uint32_t)num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_wgpu_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.wgpu.cpass_enc);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    if (_sg.wgpu.uniform.dirty) {
+        _sg_wgpu_uniform_system_set_bindgroup();
+    }
+    wgpuComputePassEncoderDispatchWorkgroupsIndirect(_sg.wgpu.cpass_enc, buf->wgpu.buf, (uint64_t)offset);
 }
 
 _SOKOL_PRIVATE void _sg_wgpu_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -21205,6 +21731,9 @@ _SOKOL_PRIVATE _sg_vk_access_t _sg_vk_default_buffer_access_mask(const _sg_buffe
     if (buf->cmn.usage.storage_buffer) {
         res |= _SG_VK_ACCESS_STORAGEBUFFER_RO;
     }
+    if (buf->cmn.usage.indirect_buffer) {
+        res |= _SG_VK_ACCESS_INDIRECTBUFFER;
+    }
     if (buf->cmn.usage.copy_src) {
         res |= _SG_VK_ACCESS_COPY_SRC;
     }
@@ -21241,6 +21770,7 @@ _SOKOL_PRIVATE bool _sg_vk_is_read_access(_sg_vk_access_t access) {
     _sg_vk_access_t read_bits =
         _SG_VK_ACCESS_VERTEXBUFFER |
         _SG_VK_ACCESS_INDEXBUFFER |
+        _SG_VK_ACCESS_INDIRECTBUFFER |
         _SG_VK_ACCESS_STORAGEBUFFER_RO |
         _SG_VK_ACCESS_COPY_SRC |
         _SG_VK_ACCESS_TEXTURE |
@@ -21268,6 +21798,9 @@ _SOKOL_PRIVATE VkPipelineStageFlags2 _sg_vk_stage_mask(_sg_vk_access_t access, b
     }
     if (access & _SG_VK_ACCESS_INDEXBUFFER) {
         f |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+    }
+    if (access & _SG_VK_ACCESS_INDIRECTBUFFER) {
+        f |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
     }
     if (access & (_SG_VK_ACCESS_STORAGEBUFFER_RO|_SG_VK_ACCESS_TEXTURE)) {
         f |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
@@ -21322,6 +21855,9 @@ _SOKOL_PRIVATE VkAccessFlags2 _sg_vk_access_mask(_sg_vk_access_t access, bool is
         }
         if (access & _SG_VK_ACCESS_INDEXBUFFER) {
             f |= VK_ACCESS_2_INDEX_READ_BIT;
+        }
+        if (access & _SG_VK_ACCESS_INDIRECTBUFFER) {
+            f |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
         }
         if (access & _SG_VK_ACCESS_STORAGEBUFFER_RO) {
             f |= VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
@@ -21503,8 +22039,15 @@ _SOKOL_PRIVATE void _sg_vk_image_barrier(VkCommandBuffer cmd_buf, _sg_image_t* i
 
 _SOKOL_PRIVATE void _sg_vk_buffer_barrier(VkCommandBuffer cmd_buf, _sg_buffer_t* buf, _sg_vk_access_t new_access) {
     SOKOL_ASSERT(cmd_buf && buf && buf->vk.buf);
+    // skip read/read transition only if the new read stages can already
+    // see the last write
     if (_sg_vk_is_read_access(buf->vk.cur_access) && _sg_vk_is_read_access(new_access)) {
-        return;
+        if (0 == (new_access & ~buf->vk.cur_access)) {
+            // last write is already visible to all new read stages
+            return;
+        }
+        // extend visibility of last write to the new read stages
+        new_access |= buf->vk.cur_access;
     }
     _SG_STRUCT(VkBufferMemoryBarrier2, barrier);
     barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
@@ -22747,6 +23290,9 @@ _SOKOL_PRIVATE VkBufferUsageFlags _sg_vk_buffer_usage(const sg_buffer_usage* usg
     if (usg->index_buffer) {
         res |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     }
+    if (usg->indirect_buffer) {
+        res |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
+    }
     if (usg->storage_buffer) {
         res |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     }
@@ -23166,6 +23712,8 @@ _SOKOL_PRIVATE void _sg_vk_init_caps(void) {
     vkGetPhysicalDeviceProperties2(_sg.vk.phys_dev, &_sg.vk.dev_props);
     _sg.vk.dev_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     vkGetPhysicalDeviceFeatures2(_sg.vk.phys_dev, &_sg.vk.dev_features);
+    _sg.features.draw_indirect_base_instance = _sg.vk.dev_features.features.drawIndirectFirstInstance;
+    _sg.features.draw_indirect_index_buffer_offset = true;
 
     const VkPhysicalDeviceLimits* l = &_sg.vk.dev_props.properties.limits;
     _sg.limits.max_image_size_2d = (int)l->maxImageDimension2D;
@@ -24477,6 +25025,25 @@ _SOKOL_PRIVATE void _sg_vk_draw(int base_element, int num_elements, int num_inst
     }
 }
 
+_SOKOL_PRIVATE void _sg_vk_draw_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    SOKOL_ASSERT(0 != (buf->vk.cur_access & _SG_VK_ACCESS_INDIRECTBUFFER));
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    if (_sg.vk.uniforms.dirty) {
+        if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
+            return;
+        }
+    }
+    const VkDeviceSize vk_offset = (VkDeviceSize)offset;
+    if (_sg.use_indexed_draw) {
+        vkCmdDrawIndexedIndirect(cmd_buf, buf->vk.buf, vk_offset, 1, sizeof(sg_draw_indirect_indexed_args));
+    } else {
+        vkCmdDrawIndirect(cmd_buf, buf->vk.buf, vk_offset, 1, sizeof(sg_draw_indirect_args));
+    }
+}
+
 _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
     VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
@@ -24486,6 +25053,21 @@ _SOKOL_PRIVATE void _sg_vk_dispatch(int num_groups_x, int num_groups_y, int num_
         }
     }
     vkCmdDispatch(cmd_buf, (uint32_t)num_groups_x, (uint32_t)num_groups_y, (uint32_t)num_groups_z);
+}
+
+_SOKOL_PRIVATE void _sg_vk_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    SOKOL_ASSERT(_sg.vk.frame.cmd_buf);
+    SOKOL_ASSERT(buf && buf->cmn.usage.indirect_buffer);
+    SOKOL_ASSERT(offset >= 0);
+    VkCommandBuffer cmd_buf = _sg.vk.frame.cmd_buf;
+    _sg_vk_buffer_barrier(cmd_buf, buf, _sg_vk_default_buffer_access_mask(buf));
+    if (_sg.vk.uniforms.dirty) {
+        if (!_sg_vk_bind_uniform_descriptor_set(cmd_buf)) {
+            return;
+        }
+    }
+    const VkDeviceSize vk_offset = (VkDeviceSize)offset;
+    vkCmdDispatchIndirect(cmd_buf, buf->vk.buf, vk_offset);
 }
 
 _SOKOL_PRIVATE void _sg_vk_write_buffer_transient(_sg_buffer_t* buf, const sg_write_buffer_desc* desc, bool first_time_in_frame) {
@@ -25101,19 +25683,37 @@ static inline void _sg_apply_uniforms(int ub_slot, const sg_range* data) {
     #endif
 }
 
-static inline void _sg_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_index) {
+static inline void _sg_draw(int base_element, int num_elements, int num_instances, int base_vertex, int base_instance) {
     #if defined(_SOKOL_ANY_GL)
-    _sg_gl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_gl_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_METAL)
-    _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_mtl_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_D3D11)
-    _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_d3d11_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_WGPU)
-    _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_wgpu_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_VULKAN)
-    _sg_vk_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_vk_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
     #elif defined(SOKOL_DUMMY_BACKEND)
-    _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_index);
+    _sg_dummy_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
+static inline void _sg_draw_indirect(_sg_buffer_t* buf, int offset) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_draw_indirect(buf, offset);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_draw_indirect(buf, offset);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_draw_indirect(buf, offset);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_draw_indirect(buf, offset);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_draw_indirect(buf, offset);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_draw_indirect(buf, offset);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -25132,6 +25732,24 @@ static inline void _sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     _sg_vk_dispatch(num_groups_x, num_groups_y, num_groups_z);
     #elif defined(SOKOL_DUMMY_BACKEND)
     _sg_dummy_dispatch(num_groups_x, num_groups_y, num_groups_z);
+    #else
+    #error("INVALID BACKEND");
+    #endif
+}
+
+static inline void _sg_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    #if defined(_SOKOL_ANY_GL)
+    _sg_gl_dispatch_indirect(buf, offset);
+    #elif defined(SOKOL_METAL)
+    _sg_mtl_dispatch_indirect(buf, offset);
+    #elif defined(SOKOL_D3D11)
+    _sg_d3d11_dispatch_indirect(buf, offset);
+    #elif defined(SOKOL_WGPU)
+    _sg_wgpu_dispatch_indirect(buf, offset);
+    #elif defined(SOKOL_VULKAN)
+    _sg_vk_dispatch_indirect(buf, offset);
+    #elif defined(SOKOL_DUMMY_BACKEND)
+    _sg_dummy_dispatch_indirect(buf, offset);
     #else
     #error("INVALID BACKEND");
     #endif
@@ -25379,6 +25997,7 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
             _SG_VALIDATE(!desc->usage.vertex_buffer, VALIDATE_BUFFERDESC_STAGING_VS_VERTEXBUFFER);
             _SG_VALIDATE(!desc->usage.index_buffer, VALIDATE_BUFFERDESC_STAGING_VS_INDEXBUFFER);
             _SG_VALIDATE(!desc->usage.storage_buffer, VALIDATE_BUFFERDESC_STAGING_VS_STORAGEBUFFER);
+            _SG_VALIDATE(!desc->usage.indirect_buffer, VALIDATE_BUFFERDESC_STAGING_VS_INDIRECTBUFFER);
             // staging buffers cannot be injected
             _SG_VALIDATE(!injected, VALIDATE_BUFFERDESC_STAGING_VS_INJECTED);
             // staging cannot (yet?) be combined with copy_dst
@@ -25420,6 +26039,10 @@ _SOKOL_PRIVATE bool _sg_validate_buffer_desc(const sg_buffer_desc* desc) {
         if (desc->usage.storage_buffer) {
             _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_STORAGEBUFFER_SUPPORTED);
             _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_STORAGEBUFFER_SIZE_MULTIPLE_4);
+        }
+        if (desc->usage.indirect_buffer) {
+            _SG_VALIDATE(_sg.features.compute, VALIDATE_BUFFERDESC_INDIRECTBUFFER_SUPPORTED);
+            _SG_VALIDATE(_sg_multiple_u64(desc->size, 4), VALIDATE_BUFFERDESC_INDIRECTBUFFER_SIZE_MULTIPLE_4);
         }
         return _sg_validate_end();
     #endif
@@ -26461,6 +27084,9 @@ _SOKOL_PRIVATE bool _sg_validate_apply_pipeline(sg_pipeline pip_id) {
         // set the expected bindings and uniform block flags for deferred validation in draw/dispatch
         _sg.validate.required_bindings_and_uniforms = pip->cmn.required_bindings_and_uniforms | shd->cmn.required_bindings_and_uniforms;
         _sg.validate.applied_bindings_and_uniforms = 0;
+        // not a bug! old read/write bindings can't be written by the new shader
+        _sg.validate.bindings_index += 1;
+        _sg.validate.index_buffer_offset = 0;
         // resetting the write-transient flags here prevents potential validation misfires when sg_apply_bindings() isn't called
         _sg.validate.write_buffer_transient_missing = false;
         _sg.validate.write_image_transient_missing = false;
@@ -26521,6 +27147,8 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
         _sg_validate_begin();
 
         _sg.validate.applied_bindings_and_uniforms |= (1 << SG_MAX_UNIFORMBLOCK_BINDSLOTS);
+        _sg.validate.bindings_index += 1;
+        _sg.validate.index_buffer_offset = bindings->index_buffer_offset;
         _sg.validate.write_buffer_transient_missing = false;
         _sg.validate.write_image_transient_missing = false;
 
@@ -26664,6 +27292,7 @@ _SOKOL_PRIVATE bool _sg_validate_apply_bindings(const sg_bindings* bindings) {
                                         _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READONLY_VS_READWRITE);
                                     } else {
                                         buf->cmn.validate.write_render_pass_index = _sg.validate.pass_index;
+                                        buf->cmn.validate.write_bindings_index = _sg.validate.bindings_index;
                                         _SG_VALIDATE(_sg.cur_pass.is_compute || (buf->cmn.validate.read_render_pass_index != _sg.validate.pass_index), VALIDATE_ABND_SBVIEW_READWRITE_VS_READ);
                                         _SG_VALIDATE(!buf->cmn.usage.write_transient, VALIDATE_ABND_SBVIEW_READWRITE_VS_WRITETRANSIENT);
                                     }
@@ -26858,6 +27487,43 @@ _SOKOL_PRIVATE bool _sg_validate_draw_ex(int base_element, int num_elements, int
     #endif
 }
 
+_SOKOL_PRIVATE bool _sg_validate_draw_indirect(_sg_buffer_t* buf, int offset) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
+        buf->cmn.validate.indirect_frame_index = _sg.frame_index;
+        const int item_size = _sg.use_indexed_draw
+            ? (int)sizeof(sg_draw_indirect_indexed_args)
+            : (int)sizeof(sg_draw_indirect_args);
+        _sg_validate_begin();
+        _SG_VALIDATE(_sg.cur_pass.in_pass && !_sg.cur_pass.is_compute, VALIDATE_DRAW_INDIRECT_RENDERPASS_EXPECTED);
+        _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DRAW_INDIRECT_BUFFER_USAGE);
+        _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - item_size)), VALIDATE_DRAW_INDIRECT_OFFSET_RANGE);
+        if (offset >= 0) {
+            _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4);
+        }
+        // indirect buffer counts as read access
+        buf->cmn.validate.read_render_pass_index = _sg.validate.pass_index;
+        _SG_VALIDATE(buf->cmn.validate.write_render_pass_index != _sg.validate.pass_index, VALIDATE_DRAW_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+        if (_sg.use_indexed_draw && !_sg.features.draw_indirect_index_buffer_offset) {
+            _SG_VALIDATE(_sg.validate.index_buffer_offset == 0, VALIDATE_DRAW_INDIRECT_INDEX_BUFFER_OFFSET);
+        }
+        if (buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+        }
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DRAW_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
+        return _sg_validate_end();
+    #endif
+}
+
 _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     #if !defined(SOKOL_DEBUG)
         _SOKOL_UNUSED(num_groups_x);
@@ -26873,9 +27539,38 @@ _SOKOL_PRIVATE bool _sg_validate_dispatch(int num_groups_x, int num_groups_y, in
         _SG_VALIDATE((num_groups_x >= 0) && (num_groups_x < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSX);
         _SG_VALIDATE((num_groups_y >= 0) && (num_groups_y < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSY);
         _SG_VALIDATE((num_groups_z >= 0) && (num_groups_z < (1<<16)), VALIDATE_DISPATCH_NUMGROUPSZ);
-        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DRAW_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
         _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_WRITE_BUFFER_TRANSIENT_MISSING);
         _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_WRITE_IMAGE_TRANSIENT_MISSING);
+        return _sg_validate_end();
+    #endif
+}
+
+_SOKOL_PRIVATE bool _sg_validate_dispatch_indirect(_sg_buffer_t* buf, int offset) {
+    #if !defined(SOKOL_DEBUG)
+        _SOKOL_UNUSED(buf);
+        _SOKOL_UNUSED(offset);
+        return true;
+    #else
+        if (_sg.desc.disable_validation) {
+            return true;
+        }
+        SOKOL_ASSERT(buf && (buf->slot.state == SG_RESOURCESTATE_VALID));
+        buf->cmn.validate.indirect_frame_index = _sg.frame_index;
+        _sg_validate_begin();
+        _SG_VALIDATE(_sg.cur_pass.in_pass && _sg.cur_pass.is_compute, VALIDATE_DISPATCH_INDIRECT_COMPUTEPASS_EXPECTED);
+        _SG_VALIDATE(buf->cmn.usage.indirect_buffer, VALIDATE_DISPATCH_INDIRECT_BUFFER_USAGE);
+        _SG_VALIDATE((offset >= 0) && (offset <= (buf->cmn.size - (int)sizeof(sg_dispatch_indirect_args))), VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE);
+        if (offset >= 0) {
+            _SG_VALIDATE(_sg_multiple(offset, 4), VALIDATE_DISPATCH_INDIRECT_OFFSET_MULTIPLE_4);
+        }
+        _SG_VALIDATE(buf->cmn.validate.write_bindings_index != _sg.validate.bindings_index, VALIDATE_DISPATCH_INDIRECT_BUFFER_VS_SBVIEW_READWRITE);
+        if (buf->cmn.usage.write_transient) {
+            _SG_VALIDATE(buf->cmn.write_transient_frame_index == _sg.frame_index, VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING);
+        }
+        _SG_VALIDATE(_sg.validate.required_bindings_and_uniforms == _sg.validate.applied_bindings_and_uniforms, VALIDATE_DISPATCH_INDIRECT_REQUIRED_BINDINGS_OR_UNIFORMS_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_buffer_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_BUFFER_TRANSIENT_MISSING);
+        _SG_VALIDATE(!_sg.validate.write_image_transient_missing, VALIDATE_DISPATCH_INDIRECT_WRITE_IMAGE_TRANSIENT_MISSING);
         return _sg_validate_end();
     #endif
 }
@@ -26906,6 +27601,7 @@ _SOKOL_PRIVATE bool _sg_validate_write_buffer_transient(const _sg_buffer_t* buf,
         // write-transient is only allowed before resource is 'used' in current frame
         _SG_VALIDATE(buf->cmn.validate.bind_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_BIND);
         _SG_VALIDATE(buf->cmn.validate.copy_src_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_COPY);
+        _SG_VALIDATE(buf->cmn.validate.indirect_frame_index != _sg.frame_index, VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT);
         // WebGPU restriction: offset must be a multiple of 4 (odd size is allowed and specifically handled)
         _SG_VALIDATE(_sg_multiple_u64(desc->dst.offset, 4), VALIDATE_WRITEBUFFERTRANSIENT_DST_OFFSET_ALIGNMENT);
         _sg_validate_write_buffer_common(buf, desc);
@@ -27362,7 +28058,13 @@ _SOKOL_PRIVATE bool _sg_validate_pass_attachment_limits(const sg_pass* pass) {
 // >>resources
 _SOKOL_PRIVATE sg_buffer_usage _sg_buffer_usage_defaults(const sg_buffer_usage* usg) {
     sg_buffer_usage def = *usg;
-    if (!(def.vertex_buffer || def.index_buffer || def.storage_buffer || def.staging_buffer || def.staging_index_buffer)) {
+    if (!(def.vertex_buffer
+        || def.index_buffer
+        || def.storage_buffer
+        || def.staging_buffer
+        || def.staging_index_buffer
+        || def.indirect_buffer))
+    {
         def.vertex_buffer = true;
     }
     return def;
@@ -29067,6 +29769,32 @@ SOKOL_API_IMPL void sg_draw_ex(int base_element, int num_elements, int num_insta
     _sg_draw(base_element, num_elements, num_instances, base_vertex, base_instance);
 }
 
+SOKOL_API_IMPL void sg_draw_indirect(sg_buffer buf_id, int offset) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_draw_indirect);
+    _SG_TRACE_ARGS(draw_indirect, buf_id, offset);
+    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
+    if (_sg_skipdraw_any()) {
+        return;
+    }
+    if (!buf) {
+        _SG_ERROR(DRAW_INDIRECT_BUFFER_ALIVE);
+        return;
+    }
+    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
+        return;
+    }
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_draw_indirect(buf, offset)) {
+        return;
+    }
+    #endif
+    _sg_draw_indirect(buf, offset);
+}
+
 SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_groups_z) {
     SOKOL_ASSERT(_sg.valid);
     _sg_stats_inc(num_dispatch);
@@ -29084,6 +29812,32 @@ SOKOL_API_IMPL void sg_dispatch(int num_groups_x, int num_groups_y, int num_grou
     }
     #endif
     _sg_dispatch(num_groups_x, num_groups_y, num_groups_z);
+}
+
+SOKOL_API_IMPL void sg_dispatch_indirect(sg_buffer buf_id, int offset) {
+    SOKOL_ASSERT(_sg.valid);
+    _sg_stats_inc(num_dispatch_indirect);
+    _SG_TRACE_ARGS(dispatch_indirect, buf_id, offset);
+    _sg_buffer_t* buf = _sg_lookup_buffer(buf_id.id);
+    if (!_sg.cur_pass.valid) {
+        return;
+    }
+    if (_sg_skipdraw_any()) {
+        return;
+    }
+    if (!buf) {
+        _SG_ERROR(DISPATCH_INDIRECT_BUFFER_ALIVE);
+        return;
+    }
+    if (buf->slot.state != SG_RESOURCESTATE_VALID) {
+        return;
+    }
+    #if defined(SOKOL_DEBUG)
+    if (!_sg_validate_dispatch_indirect(buf, offset)) {
+        return;
+    }
+    #endif
+    _sg_dispatch_indirect(buf, offset);
 }
 
 SOKOL_API_IMPL void sg_end_pass(void) {

@@ -273,6 +273,8 @@ static gl_mock_buffer_info_t* _glm_cur_buf(GLenum target) {
         case GL_COPY_READ_BUFFER: name = _glm.bindings.copy_read_buffer; break;
         case GL_COPY_WRITE_BUFFER: name = _glm.bindings.copy_write_buffer; break;
         case GL_PIXEL_UNPACK_BUFFER: name = _glm.bindings.pixel_unpack_buffer; break;
+        case GL_DRAW_INDIRECT_BUFFER: name = _glm.bindings.draw_indirect_buffer; break;
+        case GL_DISPATCH_INDIRECT_BUFFER: name = _glm.bindings.dispatch_indirect_buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, name)) {
@@ -390,6 +392,8 @@ static void _glm_unbind_buffer(GLuint name) {
     if (_glm.bindings.copy_read_buffer == name) { _glm.bindings.copy_read_buffer = 0; }
     if (_glm.bindings.copy_write_buffer == name) { _glm.bindings.copy_write_buffer = 0; }
     if (_glm.bindings.pixel_unpack_buffer == name) { _glm.bindings.pixel_unpack_buffer = 0; }
+    if (_glm.bindings.draw_indirect_buffer == name) { _glm.bindings.draw_indirect_buffer = 0; }
+    if (_glm.bindings.dispatch_indirect_buffer == name) { _glm.bindings.dispatch_indirect_buffer = 0; }
     for (int i = 0; i < GL_MOCK_MAX_BUFFER_BINDINGS; i++) {
         if (_glm.sbuf_bindings[i].buffer == name) {
             memset(&_glm.sbuf_bindings[i], 0, sizeof(_glm.sbuf_bindings[i]));
@@ -737,6 +741,8 @@ void glBindBuffer(GLenum target, GLuint buffer) {
         case GL_COPY_READ_BUFFER: _glm.bindings.copy_read_buffer = buffer; break;
         case GL_COPY_WRITE_BUFFER: _glm.bindings.copy_write_buffer = buffer; break;
         case GL_PIXEL_UNPACK_BUFFER: _glm.bindings.pixel_unpack_buffer = buffer; break;
+        case GL_DRAW_INDIRECT_BUFFER: _glm.bindings.draw_indirect_buffer = buffer; break;
+        case GL_DISPATCH_INDIRECT_BUFFER: _glm.bindings.dispatch_indirect_buffer = buffer; break;
         default: assert(false && "gl_mock: unknown buffer target"); break;
     }
     if (_glm_valid(GL_MOCK_OBJ_BUFFER, buffer)) {
@@ -1734,6 +1740,19 @@ void glDispatchCompute(GLuint num_groups_x, GLuint num_groups_y, GLuint num_grou
 
 void glMemoryBarrier(GLbitfield barriers) {
     _GLM_REC(glMemoryBarrier, _glm_ai(barriers));
+}
+
+// the indirect calls record the bound indirect buffer as extra last argument
+void glDrawArraysIndirect(GLenum mode, const void* indirect) {
+    _GLM_REC(glDrawArraysIndirect, _glm_ai(mode), _glm_ai((int64_t)(intptr_t)indirect), _glm_ai(_glm.bindings.draw_indirect_buffer));
+}
+
+void glDrawElementsIndirect(GLenum mode, GLenum type, const void* indirect) {
+    _GLM_REC(glDrawElementsIndirect, _glm_ai(mode), _glm_ai(type), _glm_ai((int64_t)(intptr_t)indirect), _glm_ai(_glm.bindings.draw_indirect_buffer));
+}
+
+void glDispatchComputeIndirect(GLintptr indirect) {
+    _GLM_REC(glDispatchComputeIndirect, _glm_ai(indirect), _glm_ai(_glm.bindings.dispatch_indirect_buffer));
 }
 
 void glCopyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size) {

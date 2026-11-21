@@ -17,6 +17,7 @@
 //    - View creation (SRV / UAV / RTV / DSV)       _sg_d3d11_create_view
 //    - Pass begin/end (swapchain, offscreen, MSAA) _sg_d3d11_begin_pass / _sg_d3d11_end_pass
 //    - Draw / dispatch                             _sg_d3d11_draw / _sg_d3d11_dispatch
+//    - Draw / dispatch indirect                    _sg_d3d11_draw_indirect / _sg_d3d11_dispatch_indirect
 //    - Fragment UAVs (register checks, binding)    _sg_validate_pipeline_desc / _sg_d3d11_apply_bindings
 //    - Resource updates (Map / UpdateSubresource)  _sg_d3d11_update_* / _sg_d3d11_write_*
 //    - Injected native handles                     sg_*_desc.d3d11_buffer / .d3d11_texture
@@ -1148,6 +1149,17 @@ UTEST(sokol_gfx_d3d11, buffer_usage_matrix) {
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .index_buffer = true, .write_unsealed = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, IB, 0, 0));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage.copy_dst = true, .size = 64 }, 64, D3D11_USAGE_DEFAULT, VB, 0, 0));
     T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .index_buffer = true, .copy_dst = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, IB, 0, 0));
+    // indirect buffers => DRAWINDIRECT_ARGS misc flag, no bind flag of their own
+    const UINT DIA = D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = data }, 64, D3D11_USAGE_DEFAULT, 0, 0, DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .vertex_buffer = true, .indirect_buffer = true }, .data = data }, 64, D3D11_USAGE_DEFAULT, VB, 0, DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .index_buffer = true, .indirect_buffer = true }, .data = data }, 64, D3D11_USAGE_DEFAULT, IB, 0, DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .indirect_buffer = true }, .size = 256 }, 256, D3D11_USAGE_DEFAULT, SRV|UAV, 0, RAW|DIA));
+    // dynamic buffers need at least one bind flag, sokol adds a dummy SRV bind flag
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 128 }, 128, D3D11_USAGE_DYNAMIC, SRV, W, DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .storage_buffer = true, .indirect_buffer = true, .write_transient = true }, .size = 128 }, 128, D3D11_USAGE_DYNAMIC, SRV, W, RAW|DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_unsealed = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, 0, 0, DIA));
+    T(check_buffer_desc(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .copy_dst = true }, .size = 64 }, 64, D3D11_USAGE_DEFAULT, 0, 0, DIA));
     teardown();
 }
 
@@ -3202,6 +3214,408 @@ UTEST(sokol_gfx_d3d11, shader_constant_buffer_create_fail) {
     T(logged(SG_LOGITEM_D3D11_CREATE_CONSTANT_BUFFER_FAILED));
     sg_destroy_shader(shd);
     T(d3d11_mock_live_object_count() == before);
+    teardown();
+}
+
+//------------------------------------------------------------------------------
+//  draw / dispatch indirect
+//------------------------------------------------------------------------------
+// call log index of the n-th call of a kind, -1 if there are fewer
+static int call_index(d3d11_mock_call_kind_t kind, int n) {
+    for (int i = 0; i < d3d11_mock_num_calls(); i++) {
+        if (d3d11_mock_get_call(i)->kind == kind) {
+            if (n == 0) { return i; }
+            n--;
+        }
+    }
+    return -1;
+}
+#define IDX(kind, n) call_index(D3D11_MOCK_CALL_##kind, n)
+
+// true if a call of a kind is in the call log between index first and last (exclusive)
+static bool has_call_between(d3d11_mock_call_kind_t kind, int first, int last) {
+    for (int i = first + 1; i < last; i++) {
+        if (d3d11_mock_get_call(i)->kind == kind) { return true; }
+    }
+    return false;
+}
+
+// true if c is an indirect call the D3D11 runtime accepts, on the native buffer of buf at offset
+static bool check_indirect_call(const d3d11_mock_call_t* c, sg_buffer buf, UINT offset) {
+    return c && (c->result == S_OK) && (c->dst == nbuf(buf)) && (c->args[0] == offset)
+        && (0 != (c->buffer_desc.MiscFlags & D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS));
+}
+
+static int count_direct_draws(void) {
+    return COUNT(DRAW) + COUNT(DRAW_INSTANCED) + COUNT(DRAW_INDEXED) + COUNT(DRAW_INDEXED_INSTANCED);
+}
+
+static sg_pipeline make_draw_pipeline(sg_shader shd, sg_index_type index_type) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = shd, .index_type = index_type,
+        .layout = { .attrs = { [0] = { .format = SG_VERTEXFORMAT_FLOAT3 }, [1] = { .format = SG_VERTEXFORMAT_UBYTE4N } } },
+        .depth.pixel_format = SG_PIXELFORMAT_NONE,
+    });
+}
+
+static sg_pipeline make_compute_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){ .compute_func = { .source = "cs", .d3d11_target = "cs_5_0" } }),
+        .compute = true,
+    });
+}
+
+// compute pipeline with a read/write storage buffer in register u0
+static sg_pipeline make_rw_sbuf_compute_pipeline(void) {
+    return sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = sg_make_shader(&(sg_shader_desc){
+            .compute_func = { .source = "cs", .d3d11_target = "cs_5_0" },
+            .views[0] = { .storage_buffer = { .stage = SG_SHADERSTAGE_COMPUTE, .readonly = false, .hlsl_register_u_n = 0 } },
+        }),
+        .compute = true,
+    });
+}
+
+static sg_buffer make_vertex_buffer(void) {
+    static const float verts[24] = {0};
+    return sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
+}
+
+UTEST(sokol_gfx_d3d11, buffer_staging_vs_indirect_rejected) {
+    setup();
+    d3d11_mock_clear_calls();
+    sg_buffer buf = sg_make_buffer(&(sg_buffer_desc){
+        .size = 64, .usage = { .staging_buffer = true, .indirect_buffer = true, .copy_src = true, .write_transient = true },
+    });
+    T(sg_query_buffer_state(buf) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_VALIDATE_BUFFERDESC_STAGING_VS_INDIRECTBUFFER));
+    T(COUNT(CREATE_BUFFER) == 0);
+    sg_destroy_buffer(buf);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, draw_indirect_non_indexed) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_pipeline pip = make_draw_pipeline(make_test_shader(), SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    const sg_draw_indirect_args draw_args[2] = { { 3, 1, 0, 0 }, { 6, 2, 3, 1 } };
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(draw_args) });
+    d3d11_mock_clear_calls();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 0);
+    sg_draw_indirect(args, (int)sizeof(sg_draw_indirect_args));
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    T(COUNT(DRAW_INSTANCED_INDIRECT) == 2);
+    T(check_indirect_call(NTH(DRAW_INSTANCED_INDIRECT, 0), args, 0));
+    T(check_indirect_call(NTH(DRAW_INSTANCED_INDIRECT, 1), args, 16));
+    T(COUNT(DRAW_INDEXED_INSTANCED_INDIRECT) == 0);
+    T(count_direct_draws() == 0);
+    // vertex buffer is bound and index buffer slot is cleared before the draw
+    T(LAST(IA_SET_VERTEX_BUFFERS) && (LAST(IA_SET_VERTEX_BUFFERS)->dst == nbuf(vbuf)));
+    T(LAST(IA_SET_INDEX_BUFFER) && (LAST(IA_SET_INDEX_BUFFER)->dst == NULL));
+    T(IDX(IA_SET_VERTEX_BUFFERS, 0) < IDX(DRAW_INSTANCED_INDIRECT, 0));
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, draw_indirect_indexed_then_non_indexed) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_shader shd = make_test_shader();
+    sg_pipeline indexed_pip = make_draw_pipeline(shd, SG_INDEXTYPE_UINT32);
+    sg_pipeline pip = make_draw_pipeline(shd, SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    static const uint32_t indices[8] = { 0, 1, 2, 0, 2, 3, 0, 0 };
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
+    const sg_draw_indirect_indexed_args draw_args[2] = { { 6, 1, 0, 0, 0 }, { 3, 4, 2, -1, 2 } };
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(draw_args) });
+    d3d11_mock_clear_calls();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf, .index_buffer_offset = 8 });
+    sg_draw_indirect(args, 0);
+    sg_draw_indirect(args, (int)sizeof(sg_draw_indirect_indexed_args));
+    // a non-indexed pipeline in the same pass switches to DrawInstancedIndirect
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 4);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    T(COUNT(DRAW_INDEXED_INSTANCED_INDIRECT) == 2);
+    T(check_indirect_call(NTH(DRAW_INDEXED_INSTANCED_INDIRECT, 0), args, 0));
+    T(check_indirect_call(NTH(DRAW_INDEXED_INSTANCED_INDIRECT, 1), args, 20));
+    T(COUNT(DRAW_INSTANCED_INDIRECT) == 1);
+    T(check_indirect_call(LAST(DRAW_INSTANCED_INDIRECT), args, 4));
+    T(count_direct_draws() == 0);
+    // index buffer (format + offset) comes from sg_apply_bindings()
+    const d3d11_mock_call_t* c = NTH(IA_SET_INDEX_BUFFER, 0);
+    T(c && (c->dst == nbuf(ibuf)) && (c->args[0] == DXGI_FORMAT_R32_UINT) && (c->args[1] == 8));
+    T(IDX(IA_SET_INDEX_BUFFER, 0) < IDX(DRAW_INDEXED_INSTANCED_INDIRECT, 0));
+    T(IDX(DRAW_INDEXED_INSTANCED_INDIRECT, 1) < IDX(DRAW_INSTANCED_INDIRECT, 0));
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+// a compute pass writes the args through an UAV, a render pass reads them
+UTEST(sokol_gfx_d3d11, draw_indirect_args_written_by_compute) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_pipeline cpip = make_rw_sbuf_compute_pipeline();
+    sg_pipeline pip = make_draw_pipeline(make_test_shader(), SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .indirect_buffer = true },
+        .size = sizeof(sg_draw_indirect_args),
+    });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    d3d11_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    const d3d11_mock_call_t* c = LAST(CS_SET_UNORDERED_ACCESS_VIEWS);
+    T(c && (c->ptrs[0] == nuav(args_view)));
+    c = LAST(DRAW_INSTANCED_INDIRECT);
+    T(check_indirect_call(c, args, 0));
+    T(c && (c->buffer_desc.BindFlags == (D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS)));
+    // a ClearState() between the passes unbinds the UAV before the args are
+    // read, and the render pass doesn't bind UAVs again
+    const int disp = IDX(DISPATCH, 0);
+    const int draw = IDX(DRAW_INSTANCED_INDIRECT, 0);
+    T((disp >= 0) && (draw > disp));
+    T(has_call_between(D3D11_MOCK_CALL_CLEAR_STATE, disp, draw));
+    T(!has_call_between(D3D11_MOCK_CALL_CS_SET_UNORDERED_ACCESS_VIEWS, disp, draw));
+    T(COUNT(OM_SET_RENDER_TARGETS_AND_UNORDERED_ACCESS_VIEWS) == 0);
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, dispatch_indirect) {
+    setup();
+    sg_pipeline pip = make_compute_pipeline();
+    const sg_dispatch_indirect_args dispatch_args[2] = { { 2, 3, 4 }, { 5, 6, 7 } };
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = SG_RANGE(dispatch_args) });
+    d3d11_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_dispatch_indirect(args, 0);
+    sg_dispatch_indirect(args, (int)sizeof(sg_dispatch_indirect_args));
+    sg_dispatch(1, 2, 3);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    T(COUNT(DISPATCH_INDIRECT) == 2);
+    T(check_indirect_call(NTH(DISPATCH_INDIRECT, 0), args, 0));
+    T(check_indirect_call(NTH(DISPATCH_INDIRECT, 1), args, 12));
+    // a direct dispatch after indirect dispatches still takes the direct path
+    T(COUNT(DISPATCH) == 1);
+    const d3d11_mock_call_t* c = LAST(DISPATCH);
+    T(c && (c->args[0] == 1) && (c->args[1] == 2) && (c->args[2] == 3));
+    T(IDX(DISPATCH_INDIRECT, 1) < IDX(DISPATCH, 0));
+    // render-stage draws are not touched
+    T(COUNT(DRAW_INSTANCED_INDIRECT) == 0);
+    T(COUNT(DRAW_INDEXED_INSTANCED_INDIRECT) == 0);
+    teardown();
+}
+
+// a compute pass writes the args through an UAV, the next compute pass reads them
+UTEST(sokol_gfx_d3d11, dispatch_indirect_args_written_by_compute) {
+    setup();
+    sg_pipeline rw_pip = make_rw_sbuf_compute_pipeline();
+    sg_pipeline pip = make_compute_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){
+        .usage = { .storage_buffer = true, .indirect_buffer = true },
+        .size = sizeof(sg_dispatch_indirect_args),
+    });
+    sg_view args_view = sg_make_view(&(sg_view_desc){ .storage_buffer.buffer = args });
+    d3d11_mock_clear_calls();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(rw_pip);
+    sg_apply_bindings(&(sg_bindings){ .views[0] = args_view });
+    sg_dispatch(1, 1, 1);
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_dispatch_indirect(args, 0);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    T(LAST(CS_SET_UNORDERED_ACCESS_VIEWS) && (LAST(CS_SET_UNORDERED_ACCESS_VIEWS)->ptrs[0] == nuav(args_view)));
+    T(check_indirect_call(LAST(DISPATCH_INDIRECT), args, 0));
+    const int disp = IDX(DISPATCH, 0);
+    const int disp_indirect = IDX(DISPATCH_INDIRECT, 0);
+    T((disp >= 0) && (disp_indirect > disp));
+    T(has_call_between(D3D11_MOCK_CALL_CLEAR_STATE, disp, disp_indirect));
+    T(!has_call_between(D3D11_MOCK_CALL_CS_SET_UNORDERED_ACCESS_VIEWS, disp, disp_indirect));
+    teardown();
+}
+
+// write_transient args: Map(WRITE_DISCARD) before the draw in each frame,
+// a write after the indirect draw is rejected and doesn't reach Map()
+UTEST(sokol_gfx_d3d11, draw_indirect_write_transient) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_pipeline pip = make_draw_pipeline(make_test_shader(), SG_INDEXTYPE_NONE);
+    sg_buffer vbuf = make_vertex_buffer();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 32 });
+    const void* nargs = nbuf(args);
+    for (int frame = 0; frame < 2; frame++) {
+        const sg_draw_indirect_args draw_args = { .num_elements = (uint32_t)(3 + frame), .num_instances = 1 };
+        reset_log();
+        d3d11_mock_clear_calls();
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+        begin_swapchain_pass(rtv);
+        sg_apply_pipeline(pip);
+        sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+        sg_draw_indirect(args, 0);
+        T(no_errors());
+        sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(draw_args), .dst.buffer = args });
+        T(logged(SG_LOGITEM_VALIDATE_WRITEBUFFERTRANSIENT_WRITE_BEFORE_INDIRECT));
+        sg_end_pass();
+        sg_commit();
+        T(COUNT(MAP) == 1);
+        T(COUNT(UNMAP) == 1);
+        const d3d11_mock_call_t* c = LAST(MAP);
+        T(c && (c->dst == nargs) && (c->map_type == D3D11_MAP_WRITE_DISCARD));
+        size_t size = 0;
+        const void* mapped = d3d11_mock_mapped_data(nargs, &size);
+        T(mapped && (size >= sizeof(draw_args)) && (0 == memcmp(mapped, &draw_args, sizeof(draw_args))));
+        c = LAST(DRAW_INSTANCED_INDIRECT);
+        T(check_indirect_call(c, args, 0));
+        T(c && (c->buffer_desc.Usage == D3D11_USAGE_DYNAMIC));
+        T(IDX(UNMAP, 0) < IDX(DRAW_INSTANCED_INDIRECT, 0));
+    }
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, dispatch_indirect_write_transient) {
+    setup();
+    sg_pipeline pip = make_compute_pipeline();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 24 });
+    const sg_dispatch_indirect_args dispatch_args = { 8, 4, 1 };
+    d3d11_mock_clear_calls();
+    sg_write_buffer_transient(&(sg_write_buffer_desc){ .src.data = SG_RANGE(dispatch_args), .dst = { .buffer = args, .offset = 12 } });
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(pip);
+    sg_dispatch_indirect(args, 12);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    size_t size = 0;
+    const uint8_t* mapped = (const uint8_t*)d3d11_mock_mapped_data(nbuf(args), &size);
+    T(mapped && (size >= 24) && (0 == memcmp(mapped + 12, &dispatch_args, sizeof(dispatch_args))));
+    const d3d11_mock_call_t* c = LAST(DISPATCH_INDIRECT);
+    T(check_indirect_call(c, args, 12));
+    T(c && (c->buffer_desc.Usage == D3D11_USAGE_DYNAMIC));
+    T(IDX(UNMAP, 0) < IDX(DISPATCH_INDIRECT, 0));
+    teardown();
+}
+
+// failed validation, failed buffers and skipped draws must not reach D3D11
+UTEST(sokol_gfx_d3d11, draw_dispatch_indirect_rejected) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_pipeline pip = make_draw_pipeline(make_test_shader(), SG_INDEXTYPE_NONE);
+    sg_pipeline cpip = make_compute_pipeline();
+    sg_buffer vbuf = make_vertex_buffer();
+    fill_pattern();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { pattern, 32 } });
+    sg_buffer tra_args = sg_make_buffer(&(sg_buffer_desc){ .usage = { .indirect_buffer = true, .write_transient = true }, .size = 32 });
+    d3d11_mock_fail_next_create(1);
+    sg_buffer failed_args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { pattern, 32 } });
+    T(sg_query_buffer_state(failed_args) == SG_RESOURCESTATE_FAILED);
+    T(logged(SG_LOGITEM_D3D11_CREATE_BUFFER_FAILED));
+    d3d11_mock_clear_calls();
+    reset_log();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 2);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_MULTIPLE_4));
+    sg_draw_indirect(args, 20);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_OFFSET_RANGE));
+    sg_draw_indirect(vbuf, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_USAGE));
+    sg_draw_indirect(tra_args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DRAW_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING));
+    sg_draw_indirect(failed_args, 0);
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_dispatch_indirect(args, 24);
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_OFFSET_RANGE));
+    sg_dispatch_indirect(tra_args, 0);
+    T(logged(SG_LOGITEM_VALIDATE_DISPATCH_INDIRECT_BUFFER_WRITE_BUFFER_TRANSIENT_MISSING));
+    sg_dispatch_indirect(failed_args, 0);
+    sg_end_pass();
+    sg_commit();
+    T(COUNT(DRAW_INSTANCED_INDIRECT) == 0);
+    T(COUNT(DRAW_INDEXED_INSTANCED_INDIRECT) == 0);
+    T(COUNT(DISPATCH_INDIRECT) == 0);
+    rtv->lpVtbl->Release(rtv);
+    teardown();
+}
+
+UTEST(sokol_gfx_d3d11, draw_dispatch_indirect_frame_stats) {
+    setup();
+    ID3D11RenderTargetView* rtv = d3d11_mock_create_rtv(mock_dev);
+    sg_shader shd = make_test_shader();
+    sg_pipeline indexed_pip = make_draw_pipeline(shd, SG_INDEXTYPE_UINT16);
+    sg_pipeline pip = make_draw_pipeline(shd, SG_INDEXTYPE_NONE);
+    sg_pipeline cpip = make_compute_pipeline();
+    sg_buffer vbuf = make_vertex_buffer();
+    static const uint16_t indices[4] = { 0, 1, 2, 0 };
+    sg_buffer ibuf = sg_make_buffer(&(sg_buffer_desc){ .usage.index_buffer = true, .data = SG_RANGE(indices) });
+    fill_pattern();
+    sg_buffer args = sg_make_buffer(&(sg_buffer_desc){ .usage.indirect_buffer = true, .data = { pattern, 64 } });
+    sg_enable_stats();
+    begin_swapchain_pass(rtv);
+    sg_apply_pipeline(indexed_pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf, .index_buffer = ibuf });
+    sg_draw_indirect(args, 0);
+    sg_apply_pipeline(pip);
+    sg_apply_bindings(&(sg_bindings){ .vertex_buffers[0] = vbuf });
+    sg_draw_indirect(args, 0);
+    sg_draw_indirect(args, 16);
+    sg_end_pass();
+    sg_begin_pass(&(sg_pass){ .compute = true });
+    sg_apply_pipeline(cpip);
+    sg_dispatch(1, 1, 1);
+    sg_dispatch_indirect(args, 0);
+    sg_dispatch_indirect(args, 12);
+    sg_end_pass();
+    sg_commit();
+    T(no_errors());
+    const sg_stats stats = sg_query_stats();
+    const sg_frame_stats_d3d11* d3d11 = &stats.prev_frame.d3d11;
+    T(stats.prev_frame.num_draw_indirect == 3);
+    T(stats.prev_frame.num_dispatch_indirect == 2);
+    T(d3d11->draw.num_draw_indexed_instanced_indirect == 1);
+    T(d3d11->draw.num_draw_instanced_indirect == 2);
+    T(d3d11->dispatch.num_dispatch == 1);
+    T(d3d11->dispatch.num_dispatch_indirect == 2);
+    // indirect draws don't count as direct draws
+    T(d3d11->draw.num_draw == 0);
+    T(d3d11->draw.num_draw_instanced == 0);
+    T(d3d11->draw.num_draw_indexed == 0);
+    T(d3d11->draw.num_draw_indexed_instanced == 0);
+    sg_disable_stats();
+    rtv->lpVtbl->Release(rtv);
     teardown();
 }
 

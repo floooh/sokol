@@ -160,6 +160,8 @@ typedef struct {
     GLuint copy_read_buffer;
     GLuint copy_write_buffer;
     GLuint pixel_unpack_buffer;
+    GLuint draw_indirect_buffer;
+    GLuint dispatch_indirect_buffer;
     GLenum active_texture;      // GL_TEXTURE0 + unit
 } gl_mock_bindings_t;
 
@@ -230,6 +232,9 @@ extern bool gl_mock_shader_info(GLuint name, gl_mock_shader_info_t* out);
 extern bool gl_mock_program_info(GLuint name, gl_mock_program_info_t* out);
 
 // call log
+// NOTE: glDrawArraysIndirect, glDrawElementsIndirect and glDispatchComputeIndirect
+// record one extra argument after the GL arguments: the buffer bound to
+// GL_DRAW_INDIRECT_BUFFER / GL_DISPATCH_INDIRECT_BUFFER at call time
 extern int gl_mock_num_calls(void);
 extern const gl_mock_call_t* gl_mock_call(int index);
 extern int gl_mock_count_calls(gl_mock_func_t func);
