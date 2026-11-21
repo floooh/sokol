@@ -2062,7 +2062,7 @@
 
         - a base_instance value other than 0 needs
           `sg_features.draw_indirect_base_instance`. This is always false
-          on GLES3, false on GL < 4.3, optional on WebGPU on Vulkan and
+          on GLES3, false on GL < 4.3, optional on WebGPU and Vulkan and
           always true on D3D11 and Metal.
         - an indexed sg_draw_indirect() with sg_bindings.index_buffer_offset != 0
           needs `sg_features.draw_indirect_index_buffer_offset`. This is
