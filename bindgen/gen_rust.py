@@ -15,6 +15,8 @@ module_root = f'{lib_root}/sokol'
 c_root = f'{module_root}/c'
 
 module_requires_rust_feature = {
+    'spine': 'spine',
+    'fontstash': 'fontstash',
     'imgui': 'imgui',
     'gfximgui': 'imgui',
     'appimgui': 'imgui',
@@ -36,6 +38,8 @@ c_callbacks = ["slog_func"]
 # NOTE: syntax for function results: "func_name.RESULT"
 # CAREFUL: DON"T ADD ANY STRUCT ITEMS HERE SINCE THIS MAY CAUSE MEMORY CORRUPTION
 overrides = {
+    "override": "r#override",
+    "loop": "r#loop",
     "type": "_type",
     "ref": "_ref",
 
@@ -119,6 +123,7 @@ special_constant_types = {
 }
 
 struct_types = []
+opaque_types = {}
 enum_types = []
 enum_items = {}
 out_lines = ""
@@ -251,6 +256,8 @@ def as_c_arg_type(arg_prefix, arg_type, prefix):
 
     if arg_type == "void":
         return ""
+    elif arg_type in opaque_types:
+        return f"{pre}*mut {opaque_types[arg_type]}"
     elif is_prim_type(arg_type):
         return pre + as_rust_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -281,6 +288,8 @@ def as_rust_arg_type(arg_prefix, arg_type, prefix):
 
     if arg_type == "void":
         return ""
+    elif arg_type in opaque_types:
+        return f"{pre}*mut {opaque_types[arg_type]}"
     elif is_prim_type(arg_type):
         return pre + as_rust_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -350,6 +359,7 @@ def funcdecl_args_c(decl, prefix):
         param_type = check_override(
             f"{func_name}.{param_name}", default=param_decl["type"]
         )
+        param_name = check_override(param_name)
         s += f"{as_c_arg_type(f'{param_name}: ', param_type, prefix)}"
     return s
 
@@ -364,6 +374,7 @@ def funcdecl_args_rust(decl, prefix):
         param_type = check_override(
             f"{func_name}.{param_name}", default=param_decl["type"]
         )
+        param_name = check_override(param_name)
         s += f"{as_rust_arg_type(f'{param_name}: ', param_type, prefix)}"
     return s
 
@@ -441,6 +452,9 @@ def gen_struct(decl, prefix):
             default_lines.append(
                 f"{field_name}: core::ptr::null()"
             )
+        elif field_type == 'char **':
+            struct_lines.append(f"pub {field_name}: *mut *mut core::ffi::c_char")
+            default_lines.append(f"{field_name}: core::ptr::null_mut()")
         elif util.is_const_void_ptr(field_type):
             struct_lines.append(
                 f"pub {field_name}: *const core::ffi::c_void"
@@ -666,7 +680,7 @@ def gen_func_rust(decl, prefix):
         for i, param_decl in enumerate(decl["params"]):
             if i > 0:
                 s += ", "
-            arg_name = param_decl["name"]
+            arg_name = check_override(param_decl["name"])
             s += arg_name
         s += ")"
         l(s)
@@ -674,9 +688,10 @@ def gen_func_rust(decl, prefix):
         l("}")
     else:
         l("#[inline]")
-        l(f"pub fn {rust_func_name}({funcdecl_args_rust(decl, prefix)}){rust_res_type} {{")
+        safety = "unsafe " if any(param['type'] in opaque_types for param in decl['params']) else ""
+        l(f"pub {safety}fn {rust_func_name}({funcdecl_args_rust(decl, prefix)}){rust_res_type} {{")
         for i, param_decl in enumerate(decl["params"]):
-            arg_name = param_decl["name"]
+            arg_name = check_override(param_decl["name"])
             arg_type = param_decl["type"]
             if util.is_string_ptr(arg_type):
                 l(f"        let tmp_{i} = std::ffi::CString::new({arg_name}).unwrap();")
@@ -691,7 +706,7 @@ def gen_func_rust(decl, prefix):
         for i, param_decl in enumerate(decl["params"]):
             if i > 0:
                 s += ", "
-            arg_name = param_decl["name"]
+            arg_name = check_override(param_decl["name"])
             arg_type = param_decl["type"]
 
             if util.is_string_ptr(arg_type):
@@ -791,6 +806,8 @@ def gen_helpers(inp):
 
 
 def gen_module(inp):
+    global opaque_types
+    opaque_types = inp['opaque_types']
     module = inp['module']
     if module in module_requires_rust_feature:
         feature = module_requires_rust_feature[module]
@@ -804,6 +821,12 @@ def gen_module(inp):
     l("#![allow(unused_imports)]")
     l("")
     gen_imports(inp)
+    for name in opaque_types.values():
+        l('#[repr(C)]')
+        l(f'pub struct {name} {{')
+        l('    _private: [u8; 0],')
+        l('}')
+        l('')
     gen_helpers(inp)
     pre_parse(inp)
     prefix = inp["prefix"]

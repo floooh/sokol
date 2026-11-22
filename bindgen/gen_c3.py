@@ -29,6 +29,10 @@ module_names = {
     'sfb_':     'sfb',
     'slbx_':    'slbx',
     'scb_':     'scb',
+    'sargs_':   'sargs',
+    'smemtrack_': 'smemtrack',
+    'sspine_':  'sspine',
+    'sfons_':   'sfons',
 }
 
 ignores = [
@@ -106,7 +110,7 @@ aliases = {
     "void *(*)(size_t, void *)":
         ("AllocCb", "fn void*(usz, void*)"),
     "void (*)(void *, void *)":
-        ("FreeCb", "fn void*(usz, void*)"),
+        ("FreeCb", "fn void(void*, void*)"),
     "void (*)(const char *, uint32_t, uint32_t, const char *, uint32_t, const char *, void *)":
         ("LogCb", "fn void(ZString, uint, uint, ZString, uint, ZString, void*)"),
     "void (*)(void)":
@@ -128,6 +132,7 @@ aliases = {
 }
 
 struct_types = []
+opaque_types = {}
 enum_types = []
 enum_items = {}
 # Which alias were used in current module.
@@ -258,6 +263,8 @@ def map_type(type, prefix, sub_type):
         sys.exit(f"Error: map_type(): unknown sub_type '{sub_type}")
     if type == "void":
         return ""
+    elif type in opaque_types:
+        return opaque_types[type]
     elif is_prim_type(type):
         return as_prim_type(type)
     elif is_struct_type(type):
@@ -270,6 +277,8 @@ def map_type(type, prefix, sub_type):
         return "void*"
     elif util.is_string_ptr(type):
         return "ZString"
+    elif type == 'char **':
+        return 'char**'
     elif is_const_struct_ptr(type):
         return f"{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}*"
     elif is_struct_ptr(type):
@@ -381,6 +390,8 @@ def gen_function_pointer_aliases():
     l('')
 
 def gen_module(inp):
+    global opaque_types
+    opaque_types = inp['opaque_types']
     module_names = inp['module_names']
     prefix = inp['prefix']
     pre_parse(inp)
@@ -388,6 +399,8 @@ def gen_module(inp):
     l('')
     l(f"module sokol::{module_names[prefix]};")
     gen_imports()
+    for name in opaque_types.values():
+        l(f'alias {name} = void*;')
     gen_c_imports(inp)
     for decl in inp['decls']:
         if not decl['is_dep']:

@@ -13,6 +13,7 @@ c_root = f'{module_root}/c'
 
 # will be overwritten in gen-func
 module_names = {}
+opaque_types = {}
 
 c_callbacks = [
     'slog_func',
@@ -23,6 +24,8 @@ c_callbacks = [
 # for these so consumers can point their build at their own vendored
 # dependency (see the README's "Dear ImGui integration" section).
 prefixes_with_external_deps = [
+    'sspine_',
+    'sfons_',
     'simgui_',
     'sgimgui_',
     'sappimgui_',
@@ -299,6 +302,8 @@ def funcptr_result(field_type, prefix):
 def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
     if ctype == "void":
         return ""
+    elif ctype in opaque_types:
+        return opaque_types[ctype]
     elif is_prim_type(ctype):
         return as_nim_prim_type(ctype)
     elif is_struct_type(ctype):
@@ -307,6 +312,8 @@ def as_nim_type(ctype, prefix, struct_ptr_as_value=False):
         return as_nim_type_name(ctype, prefix)
     elif util.is_string_ptr(ctype):
         return "nil cstring"
+    elif ctype == 'char **':
+        return 'cstringArray'
     elif util.is_void_ptr(ctype) or util.is_const_void_ptr(ctype):
         return "nil pointer"
     elif is_const_struct_ptr(ctype):
@@ -592,6 +599,8 @@ def gen_extra(inp):
         l(f'{{.compile:"{rel_c_source_path}".}}')
 
 def gen_module(inp):
+    global opaque_types
+    opaque_types = inp['opaque_types']
     # the lenientconverters are used for the converters of arrays, which are now kinda deprecated in nimony
     # The reqires macro implements the directive of the same name that exists in nimony
     l("## machine generated, do not edit")
@@ -607,6 +616,8 @@ def gen_module(inp):
     l("        doAssert `condition`, \"Precondition failed: \" + astToStr(`condition`)")
     l("    result.body.insert(0, assertStmt)")
     gen_imports(inp)
+    for name in opaque_types.values():
+        l(f'type {name}* = distinct pointer')
     pre_parse(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:

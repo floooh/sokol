@@ -31,7 +31,7 @@ remote before the user creates the feature branch from it -- an outdated
 base would make the eventual PR contain unrelated commits or fall behind
 upstream. From within the repo, run:
 
-```
+```bash
 git fetch origin
 git rev-list --count master..origin/master   # 0 == up to date; non-zero == behind
 ```
@@ -45,7 +45,7 @@ they can fast-forward before branching.
 Add an entry to the `tasks` list in `gen_all.py`:
 
 ```python
-[ '../util/sokol_newmodule.h', 'snm_', ['sg_'] ],   # c_path, prefix, deps
+(["../util/sokol_newmodule.h", "snm_", ["sg_"]],)  # c_path, prefix, deps
 ```
 
 Add the prefix → module name mapping in the `module_names` dict in the same
@@ -56,6 +56,7 @@ one (see below). Missing entries cause `gen_all.py` to skip that language for
 the new header and emit `>> warning: skipping generation for {c_prefix} …`.
 
 Per-generator module maps to update:
+
 - `gen_c3.py`
 - `gen_d.py`
 - `gen_jai.py`
@@ -105,9 +106,9 @@ Static-lib builds (`sokol/build_clibs_*.sh` / `.cmd`) use one entry per
 config × backend. Insert `sokol_newmodule` lines after the last existing
 module in each block, mirroring the existing pattern. Files to touch:
 
-- `sokol/build_clibs_macos.sh`  -- 8 lines (arm64/x64 × release/debug × metal/gl)
-- `sokol/build_clibs_linux.sh`  -- 2 lines (x64 × release/debug × gl)
-- `sokol/build_clibs_wasm.sh`   -- 2 lines (release/debug × gles3)
+- `sokol/build_clibs_macos.sh` -- 8 lines (arm64/x64 × release/debug × metal/gl)
+- `sokol/build_clibs_linux.sh` -- 2 lines (x64 × release/debug × gl)
+- `sokol/build_clibs_wasm.sh` -- 2 lines (release/debug × gles3)
 - `sokol/build_clibs_windows.cmd` -- add `newmodule` to the `set sources=…` list
 - `sokol/build_clibs_macos_dylib.sh` -- **no per-module change**; it builds a
   single unified dylib from `sokol/c/sokol.c` (see next bullet)
@@ -119,10 +120,10 @@ Windows DLL builds): add `#include "sokol_newmodule.h"`.
 
 Same shape as sokol-jai. Files to touch:
 
-- `sokol/build_clibs_macos.sh`  -- 8 lines
-- `sokol/build_clibs_linux.sh`  -- 2 lines
-- `sokol/build_clibs_wasm.sh`   -- add `"newmodule"` to the bash `libs=(…)` array
-- `sokol/build_clibs_wasm.cmd`  -- add `newmodule` to `set sources=…` (kept in sync with `wasm.sh` even though it may be stale for prior modules)
+- `sokol/build_clibs_macos.sh` -- 8 lines
+- `sokol/build_clibs_linux.sh` -- 2 lines
+- `sokol/build_clibs_wasm.sh` -- add `"newmodule"` to the bash `libs=(…)` array
+- `sokol/build_clibs_wasm.cmd` -- add `newmodule` to `set sources=…` (kept in sync with `wasm.sh` even though it may be stale for prior modules)
 - `sokol/build_clibs_windows.cmd` -- add `newmodule` to `set sources=…`
 - `sokol/build_clibs_macos_dylib.sh` -- **no per-module change**
 - `sokol/c/sokol.c` -- add `#include "sokol_newmodule.h"`
@@ -149,7 +150,7 @@ example still links the stale `.a` from a previous run. Commands from
 each repo's `README.md`:
 
 | repo | rebuild C libs first | build/run example |
-|---|---|---|
+| --- | --- | --- |
 | sokol-zig | not needed (build.zig compiles C from source) | `cd sokol-zig && zig build examples` |
 | sokol-rust | not needed (build.rs compiles C from source) | `cd sokol-rust && cargo build --all-targets` |
 | sokol-nim | not needed (`.compile` pragma in each `.nim` module) | `cd sokol-nim && nimble clear` |
@@ -228,4 +229,3 @@ keeps the C implementation in sync with `sokol_gfx.h`. The Jai bindings
 in `sokol-jai/sokol/fontstash/module.jai` are written by hand. Update them
 manually only when the public `sfons_*` API changes. `fontstash.h` and
 `stb_truetype.h` in the same dir are vendored and are not copied.
-

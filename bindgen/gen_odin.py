@@ -109,6 +109,7 @@ prim_defaults = {
 }
 
 struct_types = []
+opaque_types = {}
 enum_types = []
 enum_items = {}
 out_lines = ''
@@ -234,6 +235,8 @@ def map_type(type, prefix, sub_type):
         sys.exit(f"Error: map_type(): unknown sub_type '{sub_type}")
     if type == "void":
         return ""
+    elif type in opaque_types:
+        return f'^{opaque_types[type]}'
     elif is_prim_type(type):
         if sub_type == 'odin_arg':
             # for Odin args, maps C int (32-bit) to Odin int (pointer-sized),
@@ -243,16 +246,14 @@ def map_type(type, prefix, sub_type):
             elif type == 'bool':
                 return 'bool'
         return as_prim_type(type)
-    elif is_struct_type(type):
+    elif is_struct_type(type) or is_enum_type(type):
         return as_struct_or_enum_type(type, prefix)
-    elif is_enum_type(type):
-        return as_struct_or_enum_type(type, prefix)
-    elif util.is_void_ptr(type):
-        return "rawptr"
-    elif util.is_const_void_ptr(type):
+    elif util.is_void_ptr(type) or util.is_const_void_ptr(type):
         return "rawptr"
     elif util.is_string_ptr(type):
         return "cstring"
+    elif type == 'char **':
+        return '[^]cstring'
     elif is_const_struct_ptr(type):
         # pass Odin struct args by value, not by pointer
         if sub_type == 'odin_arg':
@@ -261,9 +262,7 @@ def map_type(type, prefix, sub_type):
             return f"^{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
     elif is_struct_ptr(type):
         return f"^{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
-    elif is_prim_ptr(type):
-        return f"^{as_prim_type(util.extract_ptr_type(type))}"
-    elif is_const_prim_ptr(type):
+    elif is_prim_ptr(type) or is_const_prim_ptr(type):
         return f"^{as_prim_type(util.extract_ptr_type(type))}"
     elif util.is_1d_array_type(type):
         array_type = util.extract_array_type(type)
@@ -288,6 +287,9 @@ def funcdecl_args_c(decl, prefix):
             s += ', '
         param_name = param_decl['name']
         param_type = check_override(f'{func_name}.{param_name}', default=param_decl['type'])
+        # Additional check to prevent collisions with exiting Odin keywords.
+        # Odin reserves `context`, so `sspine_context_valid` uses `ctx` in the binding.
+        param_name = check_override(param_name)
         if is_const_struct_ptr(param_type):
             s += f"#by_ptr {param_name}: {map_type(param_type, prefix, 'odin_arg')}"
         elif is_int_type(param_type):
@@ -487,6 +489,8 @@ def gen_helpers(inp):
         l('}')
 
 def gen_module(inp):
+    global opaque_types
+    opaque_types = inp['opaque_types']
     pre_parse(inp)
     l('// machine generated, do not edit')
     l('')
@@ -495,6 +499,8 @@ def gen_module(inp):
         l('')
         c(inp['comment'])
     gen_imports(inp)
+    for name in opaque_types.values():
+        l(f'{name} :: struct {{}}')
     gen_helpers(inp)
     prefix = inp['prefix']
     gen_c_imports(inp)

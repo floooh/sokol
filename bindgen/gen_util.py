@@ -1,6 +1,8 @@
 # LLM maintained.
 # common utility functions for all bindings generators
 import re, shutil, os
+from contextlib import contextmanager
+from pathlib import Path
 import gen_ir as ir
 
 re_1d_array = re.compile(r"^(?:const )?\w*\s*\*?\[\d*\]$")
@@ -43,15 +45,13 @@ def extract_ptr_type(s):
 # PREFIX_BLA_BLUB to bla_blub
 def as_lower_snake_case(s, prefix):
     outp = s.lower()
-    if outp.startswith(prefix):
-        outp = outp[len(prefix):]
+    outp = outp.removeprefix(prefix)
     return outp
 
 # prefix_bla_blub => blaBlub, PREFIX_BLA_BLUB => blaBlub
 def as_lower_camel_case(s, prefix):
     outp = s.lower()
-    if outp.startswith(prefix):
-        outp = outp[len(prefix):]
+    outp = outp.removeprefix(prefix)
     parts = outp.split('_')
     outp = parts[0]
     for part in parts[1:]:
@@ -65,6 +65,18 @@ def prepare(language_name, rel_mod_root_dir, rel_c_root_dir):
     if not os.path.isdir(rel_c_root_dir):
         os.makedirs(rel_c_root_dir, exist_ok = True)
     shutil.copyfile('impl/sokol_defines.h', f'{rel_c_root_dir}/sokol_defines.h')
+
+@contextmanager
+def stage_nuklear(c_root):
+    header = Path(c_root) / 'nuklear.h'
+    if header.exists():
+        yield
+    else:
+        try:
+            shutil.copyfile('../tests/ext/nuklear.h', header)
+            yield
+        finally:
+            header.unlink(missing_ok=True)
 
 def gen_ir(opts, c_root, with_comments=False):
     c_src_header_path = opts['c_header_path']
@@ -80,5 +92,6 @@ def gen_ir(opts, c_root, with_comments=False):
     shutil.copyfile(c_src_header_path, c_dst_header_path)
     shutil.copyfile(c_src_source_path, c_dst_source_path)
     module_name = module_names[c_prefix]
-    res = ir.gen(c_dst_header_path, c_dst_source_path, module_name, module_names, c_prefix, dep_c_prefixes, with_comments)
+    res = ir.gen(c_dst_header_path, c_dst_source_path, module_name, module_names, c_prefix,
+                 dep_c_prefixes, with_comments, opaque_types=opts.get('opaque_types'))
     return True, res

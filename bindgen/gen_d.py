@@ -9,7 +9,6 @@
 #   - Doc-comments: /++ ... +/ for declarations, /// for fields, with proper wrapping
 #-------------------------------------------------------------------------------
 import os
-import shutil
 import logging
 
 import gen_util as util
@@ -31,6 +30,7 @@ c_callbacks = [
 ]
 
 overrides = {
+    'override': 'override_',
     'ref':                                  '_ref',
     'sgl_error':                            'sgl_get_error',
     'sgl_deg':                              'sgl_as_degrees',
@@ -91,13 +91,16 @@ prim_defaults = {
 }
 
 class TypeConverter:
-    def __init__(self, prefix, struct_types, enum_types):
+    def __init__(self, prefix, struct_types, enum_types, opaque_types):
         self.prefix = prefix
         self.struct_types = struct_types
         self.enum_types = enum_types
+        self.opaque_types = opaque_types
 
     def as_d_type(self, c_type, is_param=False, decl_name=None):
         c_type = c_type.strip()
+        if c_type in self.opaque_types:
+            return f'{self.opaque_types[c_type]}*'
         # Check for override first
         if c_type in overrides:
             return overrides[c_type]
@@ -140,6 +143,9 @@ class TypeConverter:
 
         if util.is_string_ptr(c_type):
             return "const(char)*"
+
+        if c_type == 'char **':
+            return 'char**'
 
         if self.is_struct_ptr(c_type) or self.is_const_struct_ptr(c_type):
             struct_type = util.extract_ptr_type(c_type.strip())
@@ -397,13 +403,17 @@ def gen_func(decl, type_converter, prefix):
         else:
             call_args.append(param_name)
 
-    result_type = type_converter.as_d_type(decl['type'][:decl['type'].index('(')].strip(), decl_name=c_func_name)
+    c_result_type = decl['type'][:decl['type'].index('(')].strip()
+    result_type = type_converter.as_d_type(c_result_type, decl_name=c_func_name)
     params_str = ", ".join(params) if params else ""
     wrapper_params_str = ", ".join(wrapper_params) if wrapper_params else ""
     call_args_str = ", ".join(call_args) if call_args else ""
+    opaque_arg = any(param['type'] in type_converter.opaque_types for param in decl['params'])
+    safety = '@system' if opaque_arg else '@trusted'
+    purity = '' if opaque_arg or c_result_type in type_converter.opaque_types else ' pure'
 
-    l(f"extern(C) {result_type} {c_func_name}({params_str}) @system @nogc nothrow pure;")
-    l(f"{result_type} {d_func_name}({wrapper_params_str}) @trusted @nogc nothrow pure {{")
+    l(f"extern(C) {result_type} {c_func_name}({params_str}) @system @nogc nothrow{purity};")
+    l(f"{result_type} {d_func_name}({wrapper_params_str}) {safety} @nogc nothrow{purity} {{")
     l(f"    {'return ' if result_type != 'void' else ''}{c_func_name}({call_args_str});")
     l("}")
 
@@ -432,8 +442,10 @@ def gen_module(inp):
     # Add Nuklear types for the nuklear module
     if inp['module'] == 'nuklear':
         gen_nuklear_types()
+    for name in inp['opaque_types'].values():
+        l(f'extern(C) struct {name};')
     pre_parse(inp)
-    type_converter = TypeConverter(inp['prefix'], struct_types, enum_types)
+    type_converter = TypeConverter(inp['prefix'], struct_types, enum_types, inp['opaque_types'])
     for decl in inp['decls']:
         if not decl.get('is_dep', False) and (decl.get('kind', '') != 'func' or decl['name'] not in ignores):
             if decl['kind'] == 'consts':
@@ -448,14 +460,6 @@ def gen_module(inp):
 def prepare():
     logging.info("Preparing directories for D bindings generation")
     util.prepare('D', module_root, c_root)
-    # stage the third-party nuklear.h so clang can parse sokol_nuklear.h;
-    # cleanup() removes it after generation so it's not shipped.
-    shutil.copy('../tests/ext/nuklear.h', f'{c_root}/nuklear.h')
-
-def cleanup():
-    nuklear_dst = f'{c_root}/nuklear.h'
-    if os.path.exists(nuklear_dst):
-        os.remove(nuklear_dst)
 
 def gen(opts):
     reset_globals()

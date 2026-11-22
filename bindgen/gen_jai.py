@@ -229,6 +229,8 @@ def map_type(type, prefix, sub_type):
         return "*void"
     elif util.is_string_ptr(type):
         return "*u8"
+    elif type == 'char **':
+        return '**u8'
     elif is_const_struct_ptr(type):
         return f"*{as_struct_or_enum_type(util.extract_ptr_type(type), prefix)}"
     elif is_struct_ptr(type):
@@ -482,9 +484,8 @@ def pre_parse(inp):
 
 def prepare():
     util.prepare('Jai', module_root, c_root)
-    # sokol_fontstash.h has foreign types (FONScontext*) in its public API and
-    # cannot be generated. Copy only the C header to keep the implementation in
-    # sync. The sokol/fontstash/module.jai bindings are written by hand.
+    # Jai's handwritten module also exposes Fontstash and stb_truetype APIs.
+    # Keep its C adapter header in sync.
     shutil.copyfile('../util/sokol_fontstash.h', f'{c_root}/sokol_fontstash.h')
 
 def gen(opts):

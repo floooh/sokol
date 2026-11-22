@@ -127,7 +127,7 @@ def clang(csrc_path, with_comments=False):
         cmd.append('-fparse-all-comments')
     return subprocess.check_output(cmd)
 
-def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixes, with_comments=False):
+def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixes, with_comments=False, opaque_types=None):
     os.makedirs('out', exist_ok = True)
     ast = clang(source_path, with_comments=with_comments)
     inp = json.loads(ast)
@@ -138,7 +138,18 @@ def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixe
     outp['module_names'] = module_names
     outp['prefix'] = main_prefix
     outp['dep_prefixes'] = dep_prefixes
+    outp['opaque_types'] = opaque_types or {}
     outp['decls'] = []
+    dep_types = {
+        decl['name'] for decl in inp['inner']
+        if decl['kind'] in ('RecordDecl', 'EnumDecl') and is_dep_decl(decl, dep_prefixes)
+        and 'name' in decl
+    }
+    aliases = {
+        decl['name']: decl['type']['qualType'] for decl in inp['inner']
+        if decl['kind'] == 'TypedefDecl' and is_api_decl(decl, main_prefix)
+        and decl['type']['qualType'] in dep_types
+    }
     # load string with original line endings (otherwise Clang's output ranges
     # for comments are off)
     # NOTE: that same problem might exist for non-ASCII characters,
@@ -153,6 +164,11 @@ def gen(header_path, source_path, module, module_names, main_prefix, dep_prefixe
             if is_api_decl(decl, main_prefix) or is_dep:
                 outp_decl = parse_decl(decl, source)
                 if outp_decl is not None:
+                    if aliases:
+                        typed_decls = [outp_decl, *outp_decl.get('fields', ()), *outp_decl.get('params', ())]
+                        for typed_decl in typed_decls:
+                            if 'type' in typed_decl:
+                                typed_decl['type'] = re.sub(r'\w+', lambda name: aliases.get(name[0], name[0]), typed_decl['type'])
                     outp_decl['is_dep'] = is_dep
                     outp_decl['dep_prefix'] = dep_prefix(decl, dep_prefixes)
                     outp['decls'].append(outp_decl)

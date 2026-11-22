@@ -1,5 +1,5 @@
 # LLM maintained.
-import argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3
+import argparse, gen_nim, gen_zig, gen_odin, gen_rust, gen_d, gen_jai, gen_c3, gen_util
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--zig-tiger-style", action="store_true", help="Enable zig tiger style mode.")
@@ -19,6 +19,8 @@ tasks = [
     [ '../util/sokol_framebuffer.h', 'sfb_',      ['sg_'] ],
     [ '../util/sokol_letterbox.h',   'slbx_',     [] ],
     [ '../util/sokol_cmdbuf.h',      'scb_',      ['sg_'] ],
+    [ '../sokol_args.h',             'sargs_',    [] ],
+    [ '../util/sokol_memtrack.h',    'smemtrack_', [] ],
 ]
 
 # imgui bindings: shipped by every binding. sokol-zig and sokol-d wire
@@ -31,6 +33,21 @@ imgui_tasks = [
     [ '../util/sokol_gfx_imgui.h',   'sgimgui_',   [] ],
     [ '../util/sokol_app_imgui.h',   'sappimgui_', ['sapp_'] ],
 ]
+
+spine_tasks = [
+    [ '../util/sokol_spine.h', 'sspine_', ['sg_'] ],
+]
+
+fontstash_tasks = [
+    [ '../util/sokol_fontstash.h', 'sfons_', [] ],
+]
+
+opaque_types = {
+    'sfons_': {'FONScontext *': 'FonsContext'},
+}
+
+# Nuklear needs bindings for its C types.
+nuklear_task = [ '../util/sokol_nuklear.h', 'snk_', ['sg_', 'sapp_'] ]
 
 # common prefix- to module-names mapping table
 # (language bindings may decide to ignore those and use their own idiomatic mapping)
@@ -54,90 +71,55 @@ module_names = {
     'sfb_':       'framebuffer',
     'slbx_':      'letterbox',
     'scb_':       'cmdbuf',
+    'sspine_':    'spine',
+    'sfons_':     'fontstash',
 }
 
 # common to every binding
-common_tasks = tasks + imgui_tasks
+common_tasks = tasks + imgui_tasks + spine_tasks
+tasks_with_fontstash = common_tasks + fontstash_tasks
 
-# Jai
+def gen_tasks(generator, tasks, **options):
+    for header_path, prefix, dep_prefixes in tasks:
+        generator.gen({
+            'c_header_path': header_path,
+            'c_prefix': prefix,
+            'dep_c_prefixes': dep_prefixes,
+            'module_names': module_names,
+            'opaque_types': opaque_types.get(prefix, {}),
+            **options,
+        })
+
+# Jai keeps its handwritten Fontstash module.
 gen_jai.prepare()
-for task in common_tasks:
-    gen_jai.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
+gen_tasks(gen_jai, common_tasks)
 
 # Odin
 gen_odin.prepare()
-for task in common_tasks:
-    gen_odin.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
+gen_tasks(gen_odin, tasks_with_fontstash)
 
 # Nim
 gen_nim.prepare()
-for task in common_tasks:
-    gen_nim.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
+gen_tasks(gen_nim, tasks_with_fontstash)
 
 # Zig
 gen_zig.prepare()
-for task in common_tasks:
-    gen_zig.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-        'tiger-style': args.zig_tiger_style,
-    })
+zig_options = {'tiger-style': args.zig_tiger_style}
+gen_tasks(gen_zig, tasks_with_fontstash, **zig_options)
+with gen_util.stage_nuklear(gen_zig.c_root):
+    gen_tasks(gen_zig, [nuklear_task], **zig_options)
+gen_zig.gen_color(args.zig_tiger_style)
 
 # D
-# nuklear is D-only: sokol_nuklear.h's public API uses foreign nk_* types
-# so each generator needs opaque-type declarations (see gen_d.py's
-# gen_nuklear_types()). gen_d.prepare() stages tests/ext/nuklear.h into
-# sokol-d/src/sokol/c so clang can parse it; gen_d.cleanup() removes it
-# after generation so it's not shipped.
-d_tasks = [
-    *common_tasks,
-    [ '../util/sokol_nuklear.h',  'snk_',       ['sg_', 'sapp_'] ],
-    [ '../sokol_args.h',          'sargs_',     [] ],
-    [ '../util/sokol_memtrack.h', 'smemtrack_', [] ],
-]
 gen_d.prepare()
-for task in d_tasks:
-    gen_d.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
-gen_d.cleanup()
+gen_tasks(gen_d, tasks_with_fontstash)
+with gen_util.stage_nuklear(gen_d.c_root):
+    gen_tasks(gen_d, [nuklear_task])
 
 # Rust
 gen_rust.prepare()
-for task in common_tasks:
-    gen_rust.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
+gen_tasks(gen_rust, tasks_with_fontstash)
 
 # C3
 gen_c3.prepare()
-for task in common_tasks:
-    gen_c3.gen({
-        'c_header_path': task[0],
-        'c_prefix': task[1],
-        'dep_c_prefixes': task[2],
-        'module_names': module_names,
-    })
+gen_tasks(gen_c3, tasks_with_fontstash)

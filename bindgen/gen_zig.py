@@ -7,7 +7,7 @@
 #   - functions are camelCase
 #   - otherwise snake_case
 #-------------------------------------------------------------------------------
-import os, sys
+import re, sys
 import textwrap
 
 import gen_util as util
@@ -22,7 +22,9 @@ ignores = [
 
 # functions that need to be exposed as 'raw' C callbacks without a Zig wrapper function
 c_callbacks = [
-    'slog_func'
+    'slog_func',
+    'smemtrack_alloc',
+    'smemtrack_free',
 ]
 
 # NOTE: syntax for function results: "func_name.RESULT"
@@ -64,6 +66,7 @@ prim_types = {
 prim_defaults = {
     'int':          '0',
     'bool':         'false',
+    'char':         '0',
     'int8_t':       '0',
     'uint8_t':      '0',
     'int16_t':      '0',
@@ -79,18 +82,28 @@ prim_defaults = {
     'size_t':       '0'
 }
 
+foreign_types = {
+    'struct nk_context *': '?*NkContext',
+    'nk_flags':           'u32',
+    'nk_handle':          'NkHandle',
+    'nk_plugin_filter':   'NkPluginFilter',
+}
+
 
 struct_types = []
+opaque_types = {}
 enum_types = []
 enum_items = {}
 out_lines = ''
 
 def reset_globals():
     global struct_types
+    global opaque_types
     global enum_types
     global enum_items
     global out_lines
     struct_types = []
+    opaque_types = {}
     enum_types = []
     enum_items = {}
     out_lines = ''
@@ -190,6 +203,10 @@ def type_default_value(s):
 def as_c_arg_type(arg_type, prefix):
     if arg_type == "void":
         return "void"
+    elif arg_type in foreign_types:
+        return foreign_types[arg_type]
+    elif arg_type in opaque_types:
+        return f'?*{opaque_types[arg_type]}'
     elif is_prim_type(arg_type):
         return as_zig_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -221,6 +238,10 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
             return "void"
         else:
             return ""
+    elif arg_type in foreign_types:
+        return pre + foreign_types[arg_type]
+    elif arg_type in opaque_types:
+        return f'{pre}?*{opaque_types[arg_type]}'
     elif is_prim_type(arg_type):
         return pre + as_zig_prim_type(arg_type)
     elif is_struct_type(arg_type):
@@ -233,6 +254,8 @@ def as_zig_arg_type(arg_prefix, arg_type, prefix):
         return pre + "?*const anyopaque"
     elif util.is_string_ptr(arg_type):
         return pre + "[:0]const u8"
+    elif arg_type == 'char *':
+        return pre + '[*]u8'
     elif is_const_struct_ptr(arg_type):
         # not a bug, pass const structs by value
         return pre + f"{as_zig_struct_type(util.extract_ptr_type(arg_type), prefix)}"
@@ -328,6 +351,8 @@ def gen_struct(decl, prefix):
             l(f"    {field_name}: {as_zig_enum_type(field_type, prefix)} = .{enum_default_item(field_type)},")
         elif util.is_string_ptr(field_type):
             l(f"    {field_name}: [*c]const u8 = null,")
+        elif field_type == 'char **':
+            l(f"    {field_name}: [*c][*c]u8 = null,")
         elif util.is_const_void_ptr(field_type):
             l(f"    {field_name}: ?*const anyopaque = null,")
         elif util.is_void_ptr(field_type):
@@ -403,12 +428,21 @@ def gen_func_c(decl, prefix):
     l(f"extern fn {decl['name']}({funcdecl_args_c(decl, prefix)}) {funcdecl_result_c(decl, prefix)};")
     l('')
 
+def as_zig_func_name(name, prefix, tiger_style):
+    name = check_override(name)
+    if tiger_style:
+        return util.as_lower_snake_case(name, prefix)
+    return util.as_lower_camel_case(name, prefix)
+
 def gen_func_zig(decl, prefix, tiger_style=False):
     c_func_name = decl['name']
-    if not tiger_style:
-        zig_func_name = util.as_lower_camel_case(check_override(decl['name']), prefix)
-    else:
-        zig_func_name = util.as_lower_snake_case(check_override(decl['name']), prefix)
+    zig_func_name = as_zig_func_name(c_func_name, prefix, tiger_style)
+    if tiger_style and prefix == 'sshape_' and c_func_name.endswith('_sizes'):
+        # Keep the parameter distinct from the vertex_size function.
+        decl = {**decl, 'params': [
+            {**param, 'name': 'vertex_byte_size'} if param['name'] == 'vertex_size' else param
+            for param in decl['params']
+        ]}
 
     c(decl.get('comment'))
     if c_func_name in c_callbacks:
@@ -465,7 +499,16 @@ def gen_imports(inp):
         l(f'const {dep_prefix[:-1]} = @import("{dep_module_name}.zig");')
     l('')
 
-def gen_helpers(inp):
+def gen_helpers(inp, tiger_style):
+    if inp['prefix'] == 'snk_':
+        l('pub const NkContext = opaque {};')
+        l('pub const NkTextEdit = opaque {};')
+        l('pub const NkHandle = extern union { ptr: ?*anyopaque, id: c_int };')
+        l('pub const NkPluginFilter = ?*const fn (*const NkTextEdit, u32) callconv(.c) c_int;')
+        l('')
+    elif inp['prefix'] == 'sspine_':
+        l('pub const Color = sg.Color;')
+        l('')
     l('// helper function to convert a C string to a Zig string slice')
     l('fn cStrToZig(c_str: [*c]const u8) [:0]const u8 {')
     l('    return @import("std").mem.span(c_str);')
@@ -497,7 +540,8 @@ def gen_helpers(inp):
     if inp['prefix'] == 'sdtx_':
         l('// std.fmt-style formatted print')
         l('pub fn print(comptime fmt: anytype, args: anytype) void {')
-        l('    const cbuf = getClearedFmtBuffer();')
+        buffer_fn = as_zig_func_name('sdtx_get_cleared_fmt_buffer', 'sdtx_', tiger_style)
+        l(f'    const cbuf = {buffer_fn}();')
         l('    const p: [*]u8 = @constCast(@ptrCast(cbuf.ptr));')
         l('    const buf = p[0..cbuf.size];')
         l('    const out = @import("std").fmt.bufPrint(buf, fmt, args) catch "";')
@@ -506,13 +550,17 @@ def gen_helpers(inp):
         l('')
 
 def gen_module(inp, tiger_style):
+    global opaque_types
+    opaque_types = inp['opaque_types']
     l('// machine generated, do not edit')
     if inp.get('comment'):
         l('')
         c(inp['comment'], comment="//")
     l('')
     gen_imports(inp)
-    gen_helpers(inp)
+    for name in opaque_types.values():
+        l(f'pub const {name} = opaque {{}};')
+    gen_helpers(inp, tiger_style)
     pre_parse(inp)
     prefix = inp['prefix']
     for decl in inp['decls']:
@@ -540,3 +588,39 @@ def gen(opts):
         output_path = f'{module_root}/{ir['module']}.zig'
         with open(output_path, 'w', newline='\n') as f_outp:
             f_outp.write(out_lines)
+
+def gen_color(tiger_style):
+    reset_globals()
+    header_path = '../util/sokol_color.h'
+    _, ir = util.gen_ir({
+        'c_header_path': header_path,
+        'c_prefix': 'sg_',
+        'dep_c_prefixes': [],
+        'module_names': {'sg_': 'color'},
+    }, c_root, with_comments=True)
+    struct_types.append('sg_color')
+    l('// LLM maintained. Machine generated.')
+    l('const sg = @import("gfx.zig");')
+    l('pub const Color = sg.Color;')
+    l('')
+    for decl in ir['decls']:
+        if decl['kind'] == 'func' and decl['name'].startswith(('sg_make_color_', 'sg_color_')):
+            gen_func_c(decl, 'sg_')
+            gen_func_zig(decl, 'sg_', tiger_style=tiger_style)
+
+    with open(header_path, encoding='utf-8') as header:
+        for line in header:
+            rgba = re.fullmatch(r'#define SG_(\w+) \{ ([\d.f, ]+) \}', line.rstrip())
+            rgba32 = re.fullmatch(r'#define SG_(\w+_RGBA32) (0x[0-9A-Fa-f]{8})', line.rstrip())
+            if rgba:
+                name, values = rgba.groups()
+                fields = ', '.join(
+                    f'.{channel} = {value.strip().removesuffix("f")}'
+                    for channel, value in zip('rgba', values.split(','), strict=True)
+                )
+                l(f'pub const {name.lower()}: Color = .{{ {fields} }};')
+            elif rgba32:
+                name, value = rgba32.groups()
+                l(f'pub const {name.lower()}: u32 = {value};')
+    with open(f'{module_root}/color.zig', 'w', newline='\n') as output:
+        output.write(out_lines)
