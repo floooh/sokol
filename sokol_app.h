@@ -6162,6 +6162,10 @@ _SOKOL_PRIVATE void _sapp_wgl_swap_buffers(void) {
 
 //>>glx
 #if defined(_SAPP_GLX)
+
+_SOKOL_PRIVATE void _sapp_x11_grab_error_handler(void);
+_SOKOL_PRIVATE void _sapp_x11_release_error_handler(void);
+
 _SOKOL_PRIVATE bool _sapp_glx_has_ext(const char* ext, const char* extensions) {
     SOKOL_ASSERT(ext);
     const char* start = extensions;
