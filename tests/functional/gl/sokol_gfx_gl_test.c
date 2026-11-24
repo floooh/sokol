@@ -1588,9 +1588,11 @@ UTEST(sokol_gfx_gl, buffer_usage_combinations) {
     };
     for (size_t ci = 0; ci < sizeof(cases) / sizeof(cases[0]); ci++) {
         const buffer_usage_case_t* c = &cases[ci];
-        if (c->needs_compute && !TEST_HAS_COMPUTE) {
+        #if !TEST_HAS_COMPUTE
+        if (c->needs_compute) {
             continue;
         }
+        #endif
         setup();
         gl_mock_clear_calls();
         sg_buffer_desc desc = { .usage = c->usage, .size = sizeof(data) };
