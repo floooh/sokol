@@ -2532,7 +2532,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
     #endif
 
     #if !defined(SOKOL_NO_ENTRY)    // if SOKOL_NO_ENTRY is defined, it's the application's responsibility to use the right subsystem
-
         #if defined(SOKOL_WIN32_FORCE_MAIN) && defined(SOKOL_WIN32_FORCE_WINMAIN)
             // If both are defined, it's the application's responsibility to use the right subsystem
         #elif defined(SOKOL_WIN32_FORCE_MAIN)
@@ -7329,15 +7328,6 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
     // must be put into applicationWillTerminate
 }
 
-/* MacOS entry function */
-#if !defined(SOKOL_NO_ENTRY)
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_macos_run(&desc);
-    return 0;
-}
-#endif /* SOKOL_NO_ENTRY */
-
 _SOKOL_PRIVATE uint32_t _sapp_macos_mods(NSEvent* ev) {
     const NSEventModifierFlags f = (ev == nil) ? NSEvent.modifierFlags : ev.modifierFlags;
     const NSUInteger b = NSEvent.pressedMouseButtons;
@@ -8183,15 +8173,6 @@ _SOKOL_PRIVATE void _sapp_ios_run(const sapp_desc* desc) {
     static char* argv[] = { (char*)"sokol_app" };
     UIApplicationMain(argc, argv, nil, NSStringFromClass([_sapp_scene_delegate class]));
 }
-
-// iOS entry function
-#if !defined(SOKOL_NO_ENTRY)
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_ios_run(&desc);
-    return 0;
-}
-#endif // SOKOL_NO_ENTRY
 
 _SOKOL_PRIVATE void _sapp_ios_app_event(sapp_event_type type) {
     if (_sapp_events_enabled()) {
@@ -9673,17 +9654,9 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     // NOT A BUG: do not call _sapp_discard_state() here, instead this is
     // called in _sapp_emsc_frame() when the application is ordered to quit
 }
-
-#if !defined(SOKOL_NO_ENTRY)
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_emsc_run(&desc);
-    return 0;
-}
-#endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_EMSCRIPTEN */
 
-// >>windows
+//>>windows
 #if defined(_SAPP_WIN32)
 _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
     SOKOL_ASSERT(src && dst && (dst_num_bytes > 1));
@@ -11046,38 +11019,13 @@ _SOKOL_PRIVATE void _sapp_win32_destroy_custom_mouse_cursor(sapp_mouse_cursor cu
         _SAPP_WARN(WIN32_DESTROYICON_FOR_CURSOR_FAILED);
     }
 }
-
-#if !defined(SOKOL_NO_ENTRY)
-#if defined(SOKOL_WIN32_FORCE_MAIN)
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_win32_run(&desc);
-    return 0;
-}
-#endif /* SOKOL_WIN32_FORCE_MAIN */
-#if defined(SOKOL_WIN32_FORCE_WINMAIN) || !defined(SOKOL_WIN32_FORCE_MAIN)
-int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    _SOKOL_UNUSED(hInstance);
-    _SOKOL_UNUSED(hPrevInstance);
-    _SOKOL_UNUSED(lpCmdLine);
-    _SOKOL_UNUSED(nCmdShow);
-    int argc_utf8 = 0;
-    char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
-    sapp_desc desc = sokol_main(argc_utf8, argv_utf8);
-    _sapp_win32_run(&desc);
-    _sapp_free(argv_utf8);
-    return 0;
-}
-#endif // SOKOL_WIN32_FORCE_WINMAIN
-#endif // SOKOL_NO_ENTRY
-
 #ifdef _MSC_VER
     #pragma warning(pop)
 #endif
 
 #endif // windows
 
-// >>android
+//>>android
 #if defined(_SAPP_ANDROID)
 
 // android loop thread
@@ -14338,17 +14286,10 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
     XCloseDisplay(_sapp.x11.display);
     _sapp_discard_state();
 }
-
-#if !defined(SOKOL_NO_ENTRY)
-int main(int argc, char* argv[]) {
-    sapp_desc desc = sokol_main(argc, argv);
-    _sapp_linux_run(&desc);
-    return 0;
-}
-#endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_LINUX */
 
-// >>private
+//>>private
+#if !defined(_SAPP_ANDROID)
 _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     #if defined(_SAPP_MACOS)
@@ -14365,6 +14306,7 @@ _SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     #error "sapp_run() not supported on this platform"
     #endif
 }
+#endif
 
 _SOKOL_PRIVATE double _sapp_frame_duration(void) {
     // when vsync is disabled, always return unfiltered frame duration,
@@ -15038,7 +14980,7 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
 }
 
-// >>public
+//>>public
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
@@ -15337,4 +15279,45 @@ SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
     _sapp.html5_ask_leave_site = ask;
 }
 
-#endif /* SOKOL_APP_IMPL */
+//>>entry
+#if !defined(SOKOL_NO_ENTRY) && !defined(_SAPP_ANDROID)
+_SOKOL_PRIVATE int _sapp_main(int argc, char* argv[]) {
+    sapp_desc desc = sokol_main(argc, argv);
+    _sapp_run(&desc);
+    return 0;
+}
+
+#if defined(_SAPP_WIN32)
+// NOTE: both entry points use GetCommandLineW() for UTF-8 args
+_SOKOL_PRIVATE int _sapp_win32_main(void) {
+    int argc_utf8 = 0;
+    char** argv_utf8 = _sapp_win32_command_line_to_utf8_argv(GetCommandLineW(), &argc_utf8);
+    int res = _sapp_main(argc_utf8, argv_utf8);
+    _sapp_free(argv_utf8);
+    return res;
+}
+
+#if defined(SOKOL_WIN32_FORCE_MAIN)
+int main(int argc, char* argv[]) {
+    _SOKOL_UNUSED(argc);
+    _SOKOL_UNUSED(argv);
+    return _sapp_win32_main();
+}
+#endif
+#if defined(SOKOL_WIN32_FORCE_WINMAIN) || !defined(SOKOL_WIN32_FORCE_MAIN)
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    _SOKOL_UNUSED(hInstance);
+    _SOKOL_UNUSED(hPrevInstance);
+    _SOKOL_UNUSED(lpCmdLine);
+    _SOKOL_UNUSED(nCmdShow);
+    return _sapp_win32_main();
+}
+#endif
+#else // _SAPP_WIN32
+int main(int argc, char* argv[]) {
+    return _sapp_main(argc, argv);
+}
+#endif // !_SAPP_WIN32
+#endif // !SOKOL_NO_ENTRY && !_SAPP_ANDROID
+
+#endif // SOKOL_APP_IMPL
