@@ -3372,6 +3372,11 @@ typedef struct {
 } _sapp_t;
 static _sapp_t _sapp;
 
+// >>forward-references
+_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc);
+_SOKOL_PRIVATE void _sapp_discard_state(void);
+_SOKOL_PRIVATE void _sapp_set_icon(const sapp_icon_desc* desc);
+
 // >>logging
 #if defined(SOKOL_DEBUG)
 #define _SAPP_LOGITEM_XMACRO(item,msg) #item ": " msg,
@@ -3546,39 +3551,6 @@ _SOKOL_PRIVATE bool _sapp_strcpy(const char* src, char* dst, size_t dst_buf_len)
     return _sapp_strcpy_range(src, 0, dst, dst_buf_len);
 }
 
-_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
-    sapp_desc res = *desc;
-    res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
-    res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
-    res.sample_count = _sapp_def(res.sample_count, 1);
-    res.swap_interval = _sapp_def(res.swap_interval, 1);
-    if (0 == res.gl.major_version) {
-        #if defined(SOKOL_GLCORE)
-            res.gl.major_version = 4;
-            #if defined(_SAPP_APPLE)
-                res.gl.minor_version = 1;
-            #else
-                res.gl.minor_version = 3;
-            #endif
-        #elif defined(SOKOL_GLES3)
-            res.gl.major_version = 3;
-            #if defined(_SAPP_ANDROID) || defined(_SAPP_LINUX)
-                res.gl.minor_version = 1;
-            #else
-                res.gl.minor_version = 0;
-            #endif
-        #endif
-    }
-    res.html5.canvas_selector = _sapp_def(res.html5.canvas_selector, "#canvas");
-    res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
-    res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
-    res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
-    res.window_title = _sapp_def(res.window_title, "sokol");
-    return res;
-}
-
 _SOKOL_PRIVATE void _sapp_assert_desc(const sapp_desc* desc) {
     switch (desc->depth_format) {
         case SAPP_PIXELFORMAT_NONE:
@@ -3588,65 +3560,6 @@ _SOKOL_PRIVATE void _sapp_assert_desc(const sapp_desc* desc) {
         default:
             _SAPP_PANIC(SWAPCHAIN_DEPTHFORMAT_INVALID);
     }
-}
-
-_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
-    SOKOL_ASSERT(desc);
-    SOKOL_ASSERT(desc->width >= 0);
-    SOKOL_ASSERT(desc->height >= 0);
-    SOKOL_ASSERT(desc->sample_count >= 0);
-    SOKOL_ASSERT(desc->swap_interval >= 0);
-    SOKOL_ASSERT(desc->clipboard_size >= 0);
-    SOKOL_ASSERT(desc->max_dropped_files >= 0);
-    SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
-    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
-    _sapp.desc = _sapp_desc_defaults(desc);
-    _sapp_assert_desc(&_sapp.desc);
-    _sapp.first_frame = true;
-    // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
-    _sapp.window_width = _sapp.desc.width;
-    _sapp.window_height = _sapp.desc.height;
-    _sapp.framebuffer_width = _sapp.window_width;
-    _sapp.framebuffer_height = _sapp.window_height;
-    _sapp_strcpy(_sapp.desc.html5.canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
-    _sapp.desc.html5.canvas_selector = _sapp.html5_canvas_selector;
-    _sapp.html5_ask_leave_site = _sapp.desc.html5.ask_leave_site;
-    _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
-    if (_sapp.clipboard.enabled) {
-        _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
-        _sapp.clipboard.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.clipboard.buf_size);
-    }
-    _sapp.drop.enabled = _sapp.desc.enable_dragndrop;
-    if (_sapp.drop.enabled) {
-        _sapp.drop.max_files = _sapp.desc.max_dropped_files;
-        _sapp.drop.max_path_length = _sapp.desc.max_dropped_file_path_length;
-        _sapp.drop.buf_size = _sapp.drop.max_files * _sapp.drop.max_path_length;
-        _sapp.drop.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.drop.buf_size);
-    }
-    _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
-    _sapp.desc.window_title = _sapp.window_title;
-    _sapp.dpi_scale = 1.0f;
-    _sapp.fullscreen = _sapp.desc.fullscreen;
-    _sapp.mouse.shown = true;
-    _sapp_timing_init(&_sapp.timing);
-}
-
-_SOKOL_PRIVATE void _sapp_discard_state(void) {
-    if (_sapp.clipboard.enabled) {
-        SOKOL_ASSERT(_sapp.clipboard.buffer);
-        _sapp_free((void*)_sapp.clipboard.buffer);
-    }
-    if (_sapp.drop.enabled) {
-        SOKOL_ASSERT(_sapp.drop.buffer);
-        _sapp_free((void*)_sapp.drop.buffer);
-    }
-    if (_sapp.default_icon_pixels) {
-        _sapp_free((void*)_sapp.default_icon_pixels);
-    }
-    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
-        sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
-    }
-    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
 }
 
 _SOKOL_PRIVATE void _sapp_init_event(sapp_event_type type) {
@@ -5822,7 +5735,7 @@ _SOKOL_PRIVATE void _sapp_macos_run(const sapp_desc* desc) {
 
     // set the application dock icon as early as possible, otherwise
     // the dummy icon will be visible for a short time
-    sapp_set_icon(&_sapp.desc.icon);
+    _sapp_set_icon(&_sapp.desc.icon);
     _sapp.macos.app_dlg = [[_sapp_macos_app_delegate alloc] init];
     NSApp.delegate = _sapp.macos.app_dlg;
 
@@ -8345,7 +8258,7 @@ _SOKOL_PRIVATE void _sapp_emsc_run(const sapp_desc* desc) {
     #endif
     _sapp.valid = true;
     _sapp_emsc_register_eventhandlers();
-    sapp_set_icon(&desc->icon);
+    _sapp_set_icon(&desc->icon);
 
     // start the frame loop
     if (_sapp.desc.html5.use_emsc_set_main_loop) {
@@ -10570,7 +10483,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
     _sapp_win32_init_dpi();
     _sapp_win32_init_cursors();
     _sapp_win32_create_window();
-    sapp_set_icon(&desc->icon);
+    _sapp_set_icon(&desc->icon);
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_create_device_and_swapchain();
         _sapp_d3d11_create_default_render_target();
@@ -14387,7 +14300,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
         _sapp_x11_create_window(0, 0);
         _sapp_vk_init();
     #endif
-    sapp_set_icon(&desc->icon);
+    _sapp_set_icon(&desc->icon);
     _sapp.valid = true;
     _sapp_x11_show_window();
     if (_sapp.fullscreen) {
@@ -14442,10 +14355,7 @@ int main(int argc, char* argv[]) {
 #endif /* _SAPP_LINUX */
 
 // >>private
-
-// >>public
-#if defined(SOKOL_NO_ENTRY)
-SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
+_SOKOL_PRIVATE void _sapp_run(const sapp_desc* desc) {
     SOKOL_ASSERT(desc);
     #if defined(_SAPP_MACOS)
         _sapp_macos_run(desc);
@@ -14462,37 +14372,7 @@ SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
     #endif
 }
 
-/* this is just a stub so the linker doesn't complain */
-sapp_desc sokol_main(int argc, char* argv[]) {
-    _SOKOL_UNUSED(argc);
-    _SOKOL_UNUSED(argv);
-    _SAPP_STRUCT(sapp_desc, desc);
-    return desc;
-}
-#else
-/* likewise, in normal mode, sapp_run() is just an empty stub */
-SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
-    _SOKOL_UNUSED(desc);
-}
-#endif
-
-SOKOL_API_IMPL bool sapp_isvalid(void) {
-    return _sapp.valid;
-}
-
-SOKOL_API_IMPL void* sapp_userdata(void) {
-    return _sapp.desc.user_data;
-}
-
-SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
-    return _sapp.desc;
-}
-
-SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
-    return _sapp.frame_count;
-}
-
-SOKOL_API_IMPL double sapp_frame_duration(void) {
+_SOKOL_PRIVATE double _sapp_frame_duration(void) {
     // when vsync is disabled, always return unfiltered frame duration,
     // this is because frame pacing on some platforms is entirely
     // unpredictable with vsync disabled
@@ -14509,27 +14389,15 @@ SOKOL_API_IMPL double sapp_frame_duration(void) {
     }
 }
 
-SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
-    return _sapp.timing.dt;
-}
-
-SOKOL_API_IMPL int sapp_width(void) {
+_SOKOL_PRIVATE int _sapp_width(void) {
     return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
-SOKOL_API_IMPL float sapp_widthf(void) {
-    return (float)sapp_width();
-}
-
-SOKOL_API_IMPL int sapp_height(void) {
+_SOKOL_PRIVATE int _sapp_height(void) {
     return (_sapp.framebuffer_height > 0) ? _sapp.framebuffer_height : 1;
 }
 
-SOKOL_API_IMPL float sapp_heightf(void) {
-    return (float)sapp_height();
-}
-
-SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
+_SOKOL_PRIVATE sapp_pixel_format _sapp_color_format(void) {
     #if defined(SOKOL_WGPU)
         switch (_sapp.wgpu.swapchain_view_format) {
             case WGPUTextureFormat_RGBA8Unorm:
@@ -14598,45 +14466,15 @@ SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
     #endif
 }
 
-SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+_SOKOL_PRIVATE sapp_pixel_format _sapp_depth_format(void) {
     return _sapp.desc.depth_format;
 }
 
-SOKOL_API_IMPL int sapp_sample_count(void) {
+_SOKOL_PRIVATE int _sapp_sample_count(void) {
     return _sapp.desc.sample_count;
 }
 
-SOKOL_API_IMPL bool sapp_high_dpi(void) {
-    return _sapp.desc.high_dpi && (_sapp.dpi_scale >= 1.5f);
-}
-
-SOKOL_API_IMPL float sapp_dpi_scale(void) {
-    return _sapp.dpi_scale;
-}
-
-SOKOL_API_IMPL const void* sapp_egl_get_display(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_ANDROID)
-        return _sapp.android.display;
-    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
-        return _sapp.egl.display;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
-    SOKOL_ASSERT(_sapp.valid);
-    #if defined(_SAPP_ANDROID)
-        return _sapp.android.context;
-    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
-        return _sapp.egl.context;
-    #else
-        return 0;
-    #endif
-}
-
-SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
+_SOKOL_PRIVATE void _sapp_show_keyboard(bool show) {
     #if defined(_SAPP_IOS)
     _sapp_ios_show_keyboard(show);
     #elif defined(_SAPP_ANDROID)
@@ -14646,15 +14484,7 @@ SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
     #endif
 }
 
-SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
-    return _sapp.onscreen_keyboard_shown;
-}
-
-SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
-    return _sapp.fullscreen;
-}
-
-SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
+_SOKOL_PRIVATE void _sapp_toggle_fullscreen(void) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_toggle_fullscreen();
     #elif defined(_SAPP_WIN32)
@@ -14667,6 +14497,7 @@ SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     #if defined(_SAPP_MACOS)
     _sapp_macos_update_cursor(cursor, shown);
     #elif defined(_SAPP_WIN32)
@@ -14680,18 +14511,7 @@ _SOKOL_PRIVATE void _sapp_update_cursor(sapp_mouse_cursor cursor, bool shown) {
     _sapp.mouse.shown = shown;
 }
 
-/* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
-SOKOL_API_IMPL void sapp_show_mouse(bool show) {
-    if (_sapp.mouse.shown != show) {
-        _sapp_update_cursor(_sapp.mouse.current_cursor, show);
-    }
-}
-
-SOKOL_API_IMPL bool sapp_mouse_shown(void) {
-    return _sapp.mouse.shown;
-}
-
-SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
+_SOKOL_PRIVATE void _sapp_lock_mouse(bool lock) {
     #if defined(_SAPP_MACOS)
     _sapp_macos_lock_mouse(lock);
     #elif defined(_SAPP_EMSCRIPTEN)
@@ -14705,23 +14525,44 @@ SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
     #endif
 }
 
-SOKOL_API_IMPL bool sapp_mouse_locked(void) {
-    return _sapp.mouse.locked;
+_SOKOL_PRIVATE void _sapp_show_mouse(bool show) {
+    if (_sapp.mouse.shown != show) {
+        _sapp_update_cursor(_sapp.mouse.current_cursor, show);
+    }
 }
 
-SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
+_SOKOL_PRIVATE void _sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
     if (_sapp.mouse.current_cursor != cursor) {
         _sapp_update_cursor(cursor, _sapp.mouse.shown);
     }
 }
 
-SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
-    return _sapp.mouse.current_cursor;
+_SOKOL_PRIVATE void _sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    if (_sapp.custom_cursor_bound[(int)cursor]) {
+        // if this is the active cursor, first restore it to its default image,
+        // this must be done before attempting to destroy any cursor image
+        // resources which at least on win32 would fail if the cursor is still in use
+        _sapp.custom_cursor_bound[(int)cursor] = false;
+        if (_sapp.mouse.current_cursor == cursor) {
+            _sapp_update_cursor(cursor, _sapp.mouse.shown);
+        }
+        #if defined(_SAPP_MACOS)
+        _sapp_macos_destroy_custom_mouse_cursor(cursor);
+        #elif defined(_SAPP_EMSCRIPTEN)
+        _sapp_emsc_destroy_custom_mouse_cursor(cursor);
+        #elif defined(_SAPP_WIN32)
+        _sapp_win32_destroy_custom_mouse_cursor(cursor);
+        #elif defined(_SAPP_LINUX)
+        _sapp_x11_destroy_custom_mouse_cursor(cursor);
+        #endif
+    }
 }
 
-SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+_SOKOL_PRIVATE sapp_mouse_cursor _sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
     SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
+    SOKOL_ASSERT(desc);
     // NOTE: It seems that for some reason, the hotspot doesn't work if it is one less
     //       than the dimension of the cursor image (or more), on windows. So for a cursor
     //       that is 32 by 32 px, a hotspot of x = 30 works, but not x = 31.
@@ -14730,7 +14571,7 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
     SOKOL_ASSERT(desc->cursor_hotspot_x < desc->width - 1 && desc->cursor_hotspot_y < desc->height - 1);
     SOKOL_ASSERT(desc->width * desc->height * 4 == (int) desc->pixels.size);
 
-    sapp_unbind_mouse_cursor_image(cursor);
+    _sapp_unbind_mouse_cursor_image(cursor);
 
     bool res = false;
     #if defined(_SAPP_MACOS)
@@ -14753,50 +14594,11 @@ SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor 
     return cursor; // returning the passed-in cursor puerly for convenience, in case you want to asign the value to a variable.
 }
 
-SOKOL_API_IMPL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
-    SOKOL_ASSERT((cursor >= 0) && (cursor < _SAPP_MOUSECURSOR_NUM));
-    if (_sapp.custom_cursor_bound[(int)cursor]) {
-        // if this is the active cursor, first restore it to its default image,
-        // this must be done before attempting to destroy any cursor image
-        // resources which at least on win32 would fail if the cursor is still in use
-        _sapp.custom_cursor_bound[(int)cursor] = false;
-        if (_sapp.mouse.current_cursor == cursor) {
-            _sapp_update_cursor(cursor, _sapp.mouse.shown);
-        }
-        #if defined(_SAPP_MACOS)
-        _sapp_macos_destroy_custom_mouse_cursor(cursor);
-        #elif defined(_SAPP_EMSCRIPTEN)
-        _sapp_emsc_destroy_custom_mouse_cursor(cursor);
-        #elif defined(_SAPP_WIN32)
-        _sapp_win32_destroy_custom_mouse_cursor(cursor);
-        #elif defined(_SAPP_LINUX)
-        _sapp_x11_destroy_custom_mouse_cursor(cursor);
-        #endif
-    }
-}
-
-SOKOL_API_IMPL void sapp_request_quit(void) {
-    _sapp.quit_requested = true;
-}
-
-SOKOL_API_IMPL void sapp_cancel_quit(void) {
-    _sapp.quit_requested = false;
-}
-
-SOKOL_API_IMPL void sapp_quit(void) {
-    _sapp.quit_ordered = true;
-}
-
-SOKOL_API_IMPL void sapp_consume_event(void) {
-    _sapp.event_consumed = true;
-}
-
-/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
-SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+_SOKOL_PRIVATE void _sapp_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(str);
     if (!_sapp.clipboard.enabled) {
         return;
     }
-    SOKOL_ASSERT(str);
     #if defined(_SAPP_MACOS)
         _sapp_macos_set_clipboard_string(str);
     #elif defined(_SAPP_EMSCRIPTEN)
@@ -14811,7 +14613,7 @@ SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
     _sapp_strcpy(str, _sapp.clipboard.buffer, (size_t)_sapp.clipboard.buf_size);
 }
 
-SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+_SOKOL_PRIVATE const char* _sapp_get_clipboard_string(void) {
     if (!_sapp.clipboard.enabled) {
         return "";
     }
@@ -14829,7 +14631,7 @@ SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
+_SOKOL_PRIVATE void _sapp_set_window_title(const char* title) {
     SOKOL_ASSERT(title);
     _sapp_strcpy(title, _sapp.window_title, sizeof(_sapp.window_title));
     #if defined(_SAPP_MACOS)
@@ -14841,7 +14643,7 @@ SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
+_SOKOL_PRIVATE void _sapp_set_icon(const sapp_icon_desc* desc) {
     SOKOL_ASSERT(desc);
     if (desc->sokol_default) {
         if (0 == _sapp.default_icon_pixels) {
@@ -14869,14 +14671,15 @@ SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
     #endif
 }
 
-SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
+_SOKOL_PRIVATE int _sapp_get_num_dropped_files(void) {
     if (!_sapp.drop.enabled) {
         return 0;
     }
     return _sapp.drop.num_files;
 }
 
-SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
+
+_SOKOL_PRIVATE const char* _sapp_get_dropped_file_path(int index) {
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     if (!_sapp.drop.enabled) {
         return "";
@@ -14888,7 +14691,7 @@ SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
     return (const char*) _sapp_dropped_file_path_ptr(index);
 }
 
-SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
+_SOKOL_PRIVATE uint32_t _sapp_html5_get_dropped_file_size(int index) {
     SOKOL_ASSERT((index >= 0) && (index < _sapp.drop.num_files));
     #if defined(_SAPP_EMSCRIPTEN)
         if (!_sapp.drop.enabled) {
@@ -14901,7 +14704,7 @@ SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
     #endif
 }
 
-SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
+_SOKOL_PRIVATE void _sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
     SOKOL_ASSERT(_sapp.drop.enabled);
     SOKOL_ASSERT(request);
     SOKOL_ASSERT(request->callback);
@@ -14913,7 +14716,7 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
         if ((index < 0) || (index >= _sapp.drop.num_files)) {
             error_code = SAPP_HTML5_FETCH_ERROR_OTHER;
         }
-        if (sapp_html5_get_dropped_file_size(index) > request->buffer.size) {
+        if (_sapp_html5_get_dropped_file_size(index) > request->buffer.size) {
             error_code = SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL;
         }
         if (SAPP_HTML5_FETCH_ERROR_NO_ERROR != error_code) {
@@ -14937,12 +14740,11 @@ SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request
     #endif
 }
 
-SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
-    SOKOL_ASSERT(_sapp.valid);
+_SOKOL_PRIVATE sapp_environment _sapp_get_environment(void) {
     _SAPP_STRUCT(sapp_environment, res);
-    res.defaults.color_format = sapp_color_format();
-    res.defaults.depth_format = sapp_depth_format();
-    res.defaults.sample_count = sapp_sample_count();
+    res.defaults.color_format = _sapp_color_format();
+    res.defaults.depth_format = _sapp_depth_format();
+    res.defaults.sample_count = _sapp_sample_count();
     #if defined(SOKOL_METAL)
         res.metal.device = (__bridge const void*) _sapp.mtl.device;
     #endif
@@ -14963,8 +14765,7 @@ SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
     return res;
 }
 
-SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
-    SOKOL_ASSERT(_sapp.valid);
+_SOKOL_PRIVATE sapp_swapchain _sapp_acquire_swapchain(void) {
     _SAPP_STRUCT(sapp_swapchain, res);
     #if defined(SOKOL_METAL)
         #if defined(_SAPP_MACOS)
@@ -15030,15 +14831,15 @@ SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
     #if defined(_SAPP_ANY_GL)
         res.gl.framebuffer = _sapp.gl.framebuffer;
     #endif
-    res.width = sapp_width();
-    res.height = sapp_height();
-    res.color_format = sapp_color_format();
-    res.depth_format = sapp_depth_format();
-    res.sample_count = sapp_sample_count();
+    res.width = _sapp_width();
+    res.height = _sapp_height();
+    res.color_format = _sapp_color_format();
+    res.depth_format = _sapp_depth_format();
+    res.sample_count = _sapp_sample_count();
     return res;
 }
 
-SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
+_SOKOL_PRIVATE const void* _sapp_macos_get_window(void) {
     #if defined(_SAPP_MACOS)
         const void* obj = (__bridge const void*) _sapp.macos.window;
         SOKOL_ASSERT(obj);
@@ -15048,7 +14849,7 @@ SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
+_SOKOL_PRIVATE const void* _sapp_ios_get_window(void) {
     #if defined(_SAPP_IOS)
         const void* obj = (__bridge const void*) _sapp.ios.window;
         SOKOL_ASSERT(obj);
@@ -15058,17 +14859,15 @@ SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
-    SOKOL_ASSERT(_sapp.valid);
-#if defined(SOKOL_D3D11)
-    return _sapp.dxgi.swapchain;
-#else
-    return 0;
-#endif
+_SOKOL_PRIVATE const void* _sapp_d3d11_get_swap_chain(void) {
+    #if defined(SOKOL_D3D11)
+        return _sapp.dxgi.swapchain;
+    #else
+        return 0;
+    #endif
 }
 
-SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
-    SOKOL_ASSERT(_sapp.valid);
+_SOKOL_PRIVATE const void* _sapp_win32_get_hwnd(void) {
     #if defined(_SAPP_WIN32)
         return _sapp.win32.hwnd;
     #else
@@ -15076,8 +14875,7 @@ SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
     #endif
 }
 
-SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
-    SOKOL_ASSERT(_sapp.valid);
+_SOKOL_PRIVATE int _sapp_gl_get_major_version(void) {
     #if defined(_SAPP_ANY_GL)
         return _sapp.desc.gl.major_version;
     #else
@@ -15085,8 +14883,7 @@ SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
     #endif
 }
 
-SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
-    SOKOL_ASSERT(_sapp.valid);
+_SOKOL_PRIVATE int _sapp_gl_get_minor_version(void) {
     #if defined(_SAPP_ANY_GL)
         return _sapp.desc.gl.minor_version;
     #else
@@ -15094,7 +14891,7 @@ SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
     #endif
 }
 
-SOKOL_API_IMPL bool sapp_gl_is_gles(void) {
+_SOKOL_PRIVATE bool _sapp_gl_is_gles(void) {
     #if defined(SOKOL_GLES3)
         return true;
     #else
@@ -15102,7 +14899,7 @@ SOKOL_API_IMPL bool sapp_gl_is_gles(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_x11_get_window(void) {
+_SOKOL_PRIVATE const void* _sapp_x11_get_window(void) {
     #if defined(_SAPP_LINUX)
         return (void*)_sapp.x11.window;
     #else
@@ -15110,7 +14907,7 @@ SOKOL_API_IMPL const void* sapp_x11_get_window(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_x11_get_display(void) {
+_SOKOL_PRIVATE const void* _sapp_x11_get_display(void) {
     #if defined(_SAPP_LINUX)
         return (void*)_sapp.x11.display;
     #else
@@ -15118,9 +14915,27 @@ SOKOL_API_IMPL const void* sapp_x11_get_display(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
-    // NOTE: _sapp.valid is not asserted here because sapp_android_get_native_activity()
-    // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
+_SOKOL_PRIVATE const void* _sapp_egl_get_display(void) {
+    #if defined(_SAPP_ANDROID)
+        return _sapp.android.display;
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
+        return _sapp.egl.display;
+    #else
+        return 0;
+    #endif
+}
+
+_SOKOL_PRIVATE const void* _sapp_egl_get_context(void) {
+    #if defined(_SAPP_ANDROID)
+        return _sapp.android.context;
+    #elif defined(_SAPP_LINUX) && defined(_SAPP_EGL)
+        return _sapp.egl.context;
+    #else
+        return 0;
+    #endif
+}
+
+_SOKOL_PRIVATE const void* _sapp_android_get_native_activity(void) {
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.activity;
     #else
@@ -15128,7 +14943,7 @@ SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
     #endif
 }
 
-SOKOL_API_IMPL const void* sapp_android_get_native_window(void) {
+_SOKOL_PRIVATE const void* _sapp_android_get_native_window(void) {
     #if defined(_SAPP_ANDROID)
         return (void*)_sapp.android.current.window;
     #else
@@ -15136,7 +14951,395 @@ SOKOL_API_IMPL const void* sapp_android_get_native_window(void) {
     #endif
 }
 
+_SOKOL_PRIVATE sapp_desc _sapp_desc_defaults(const sapp_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT((desc->allocator.alloc_fn && desc->allocator.free_fn) || (!desc->allocator.alloc_fn && !desc->allocator.free_fn));
+    sapp_desc res = *desc;
+    res.depth_format = _sapp_def(res.depth_format, SAPP_PIXELFORMAT_DEPTH);
+    res.composite_mode = _sapp_def(res.composite_mode, SAPP_COMPOSITEMODE_OPAQUE);
+    res.sample_count = _sapp_def(res.sample_count, 1);
+    res.swap_interval = _sapp_def(res.swap_interval, 1);
+    if (0 == res.gl.major_version) {
+        #if defined(SOKOL_GLCORE)
+            res.gl.major_version = 4;
+            #if defined(_SAPP_APPLE)
+                res.gl.minor_version = 1;
+            #else
+                res.gl.minor_version = 3;
+            #endif
+        #elif defined(SOKOL_GLES3)
+            res.gl.major_version = 3;
+            #if defined(_SAPP_ANDROID) || defined(_SAPP_LINUX)
+                res.gl.minor_version = 1;
+            #else
+                res.gl.minor_version = 0;
+            #endif
+        #endif
+    }
+    res.html5.canvas_selector = _sapp_def(res.html5.canvas_selector, "#canvas");
+    res.clipboard_size = _sapp_def(res.clipboard_size, 8192);
+    res.max_dropped_files = _sapp_def(res.max_dropped_files, 1);
+    res.max_dropped_file_path_length = _sapp_def(res.max_dropped_file_path_length, 2048);
+    res.window_title = _sapp_def(res.window_title, "sokol");
+    return res;
+}
+
+_SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc) {
+    SOKOL_ASSERT(desc);
+    SOKOL_ASSERT(desc->width >= 0);
+    SOKOL_ASSERT(desc->height >= 0);
+    SOKOL_ASSERT(desc->sample_count >= 0);
+    SOKOL_ASSERT(desc->swap_interval >= 0);
+    SOKOL_ASSERT(desc->clipboard_size >= 0);
+    SOKOL_ASSERT(desc->max_dropped_files >= 0);
+    SOKOL_ASSERT(desc->max_dropped_file_path_length >= 0);
+    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
+    _sapp.desc = _sapp_desc_defaults(desc);
+    _sapp_assert_desc(&_sapp.desc);
+    _sapp.first_frame = true;
+    // NOTE: _sapp.desc.width/height may be 0! Platform backends need to deal with this
+    _sapp.window_width = _sapp.desc.width;
+    _sapp.window_height = _sapp.desc.height;
+    _sapp.framebuffer_width = _sapp.window_width;
+    _sapp.framebuffer_height = _sapp.window_height;
+    _sapp_strcpy(_sapp.desc.html5.canvas_selector, _sapp.html5_canvas_selector, sizeof(_sapp.html5_canvas_selector));
+    _sapp.desc.html5.canvas_selector = _sapp.html5_canvas_selector;
+    _sapp.html5_ask_leave_site = _sapp.desc.html5.ask_leave_site;
+    _sapp.clipboard.enabled = _sapp.desc.enable_clipboard;
+    if (_sapp.clipboard.enabled) {
+        _sapp.clipboard.buf_size = _sapp.desc.clipboard_size;
+        _sapp.clipboard.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.clipboard.buf_size);
+    }
+    _sapp.drop.enabled = _sapp.desc.enable_dragndrop;
+    if (_sapp.drop.enabled) {
+        _sapp.drop.max_files = _sapp.desc.max_dropped_files;
+        _sapp.drop.max_path_length = _sapp.desc.max_dropped_file_path_length;
+        _sapp.drop.buf_size = _sapp.drop.max_files * _sapp.drop.max_path_length;
+        _sapp.drop.buffer = (char*) _sapp_malloc_clear((size_t)_sapp.drop.buf_size);
+    }
+    _sapp_strcpy(_sapp.desc.window_title, _sapp.window_title, sizeof(_sapp.window_title));
+    _sapp.desc.window_title = _sapp.window_title;
+    _sapp.dpi_scale = 1.0f;
+    _sapp.fullscreen = _sapp.desc.fullscreen;
+    _sapp.mouse.shown = true;
+    _sapp_timing_init(&_sapp.timing);
+}
+
+_SOKOL_PRIVATE void _sapp_discard_state(void) {
+    if (_sapp.clipboard.enabled) {
+        SOKOL_ASSERT(_sapp.clipboard.buffer);
+        _sapp_free((void*)_sapp.clipboard.buffer);
+    }
+    if (_sapp.drop.enabled) {
+        SOKOL_ASSERT(_sapp.drop.buffer);
+        _sapp_free((void*)_sapp.drop.buffer);
+    }
+    if (_sapp.default_icon_pixels) {
+        _sapp_free((void*)_sapp.default_icon_pixels);
+    }
+    // FIXME FIXME FIXME: needs to go into a different place
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        _sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
+    }
+    _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
+}
+
+// >>public
+#if defined(SOKOL_NO_ENTRY)
+SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
+    SOKOL_ASSERT(desc);
+    _sapp_run(desc);
+}
+
+/* this is just a stub so the linker doesn't complain */
+sapp_desc sokol_main(int argc, char* argv[]) {
+    _SOKOL_UNUSED(argc);
+    _SOKOL_UNUSED(argv);
+    _SAPP_STRUCT(sapp_desc, desc);
+    return desc;
+}
+#else
+/* likewise, in normal mode, sapp_run() is just an empty stub */
+SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
+    _SOKOL_UNUSED(desc);
+}
+#endif
+
+SOKOL_API_IMPL bool sapp_isvalid(void) {
+    return _sapp.valid;
+}
+
+SOKOL_API_IMPL void* sapp_userdata(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.desc.user_data;
+}
+
+SOKOL_API_IMPL sapp_desc sapp_query_desc(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.desc;
+}
+
+SOKOL_API_IMPL uint64_t sapp_frame_count(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.frame_count;
+}
+
+SOKOL_API_IMPL double sapp_frame_duration(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_frame_duration();
+}
+
+SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.timing.dt;
+}
+
+SOKOL_API_IMPL int sapp_width(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_width();
+    return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
+}
+
+SOKOL_API_IMPL float sapp_widthf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_width();
+}
+
+SOKOL_API_IMPL int sapp_height(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_height();
+}
+
+SOKOL_API_IMPL float sapp_heightf(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return (float)_sapp_height();
+}
+
+SOKOL_API_IMPL sapp_pixel_format sapp_color_format(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_color_format();
+}
+
+SOKOL_API_IMPL sapp_pixel_format sapp_depth_format(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_depth_format();
+}
+
+SOKOL_API_IMPL int sapp_sample_count(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_sample_count();
+}
+
+SOKOL_API_IMPL bool sapp_high_dpi(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.desc.high_dpi && (_sapp.dpi_scale >= 1.5f);
+}
+
+SOKOL_API_IMPL float sapp_dpi_scale(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.dpi_scale;
+}
+
+SOKOL_API_IMPL void sapp_show_keyboard(bool show) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_show_keyboard(show);
+}
+
+SOKOL_API_IMPL bool sapp_keyboard_shown(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.onscreen_keyboard_shown;
+}
+
+SOKOL_API_IMPL bool sapp_is_fullscreen(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.fullscreen;
+}
+
+SOKOL_API_IMPL void sapp_toggle_fullscreen(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_toggle_fullscreen();
+}
+
+/* NOTE that sapp_show_mouse() does not "stack" like the Win32 or macOS API functions! */
+SOKOL_API_IMPL void sapp_show_mouse(bool show) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_show_mouse(show);
+}
+
+SOKOL_API_IMPL bool sapp_mouse_shown(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.mouse.shown;
+}
+
+SOKOL_API_IMPL void sapp_lock_mouse(bool lock) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_lock_mouse(lock);
+}
+
+SOKOL_API_IMPL bool sapp_mouse_locked(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.mouse.locked;
+}
+
+SOKOL_API_IMPL void sapp_set_mouse_cursor(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_set_mouse_cursor(cursor);
+}
+
+SOKOL_API_IMPL sapp_mouse_cursor sapp_get_mouse_cursor(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp.mouse.current_cursor;
+}
+
+SOKOL_API_IMPL sapp_mouse_cursor sapp_bind_mouse_cursor_image(sapp_mouse_cursor cursor, const sapp_image_desc* desc) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_bind_mouse_cursor_image(cursor, desc);
+}
+
+SOKOL_API_IMPL void sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_unbind_mouse_cursor_image(cursor);
+}
+
+SOKOL_API_IMPL void sapp_request_quit(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp.quit_requested = true;
+}
+
+SOKOL_API_IMPL void sapp_cancel_quit(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp.quit_requested = false;
+}
+
+SOKOL_API_IMPL void sapp_quit(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp.quit_ordered = true;
+}
+
+SOKOL_API_IMPL void sapp_consume_event(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp.event_consumed = true;
+}
+
+/* NOTE: on HTML5, sapp_set_clipboard_string() must be called from within event handler! */
+SOKOL_API_IMPL void sapp_set_clipboard_string(const char* str) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_set_clipboard_string(str);
+}
+
+SOKOL_API_IMPL const char* sapp_get_clipboard_string(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_get_clipboard_string();
+}
+
+SOKOL_API_IMPL void sapp_set_window_title(const char* title) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_set_window_title(title);
+}
+
+SOKOL_API_IMPL void sapp_set_icon(const sapp_icon_desc* desc) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_set_icon(desc);
+}
+
+SOKOL_API_IMPL int sapp_get_num_dropped_files(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_get_num_dropped_files();
+}
+
+SOKOL_API_IMPL const char* sapp_get_dropped_file_path(int index) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_get_dropped_file_path(index);
+}
+
+SOKOL_API_IMPL uint32_t sapp_html5_get_dropped_file_size(int index) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_html5_get_dropped_file_size(index);
+}
+
+SOKOL_API_IMPL void sapp_html5_fetch_dropped_file(const sapp_html5_fetch_request* request) {
+    SOKOL_ASSERT(_sapp.valid);
+    _sapp_html5_fetch_dropped_file(request);
+}
+
+SOKOL_API_IMPL sapp_environment sapp_get_environment(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_get_environment();
+}
+
+SOKOL_API_IMPL sapp_swapchain sapp_acquire_swapchain(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_acquire_swapchain();
+}
+
+SOKOL_API_IMPL const void* sapp_macos_get_window(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_macos_get_window();
+}
+
+SOKOL_API_IMPL const void* sapp_ios_get_window(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_ios_get_window();
+}
+
+SOKOL_API_IMPL const void* sapp_d3d11_get_swap_chain(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_d3d11_get_swap_chain();
+}
+
+SOKOL_API_IMPL const void* sapp_win32_get_hwnd(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_win32_get_hwnd();
+}
+
+SOKOL_API_IMPL int sapp_gl_get_major_version(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_gl_get_major_version();
+}
+
+SOKOL_API_IMPL int sapp_gl_get_minor_version(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_gl_get_minor_version();
+}
+
+SOKOL_API_IMPL bool sapp_gl_is_gles(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_gl_is_gles();
+}
+
+SOKOL_API_IMPL const void* sapp_x11_get_window(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_x11_get_window();
+}
+
+SOKOL_API_IMPL const void* sapp_x11_get_display(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_x11_get_display();
+}
+
+SOKOL_API_IMPL const void* sapp_egl_get_display(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_egl_get_display();
+}
+
+SOKOL_API_IMPL const void* sapp_egl_get_context(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_egl_get_context();
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_activity(void) {
+    // NOTE: _sapp.valid is not asserted here because sapp_android_get_native_activity()
+    // needs to be callable from within sokol_main() (see: https://github.com/floooh/sokol/issues/708)
+    return _sapp_android_get_native_activity();
+}
+
+SOKOL_API_IMPL const void* sapp_android_get_native_window(void) {
+    SOKOL_ASSERT(_sapp.valid);
+    return _sapp_android_get_native_window();
+}
+
 SOKOL_API_IMPL void sapp_html5_ask_leave_site(bool ask) {
+    SOKOL_ASSERT(_sapp.valid);
     _sapp.html5_ask_leave_site = ask;
 }
 
