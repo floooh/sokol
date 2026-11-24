@@ -2329,12 +2329,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 
 #endif // SOKOL_APP_INCLUDED
 
-// ██ ███    ███ ██████  ██      ███████ ███    ███ ███████ ███    ██ ████████  █████  ████████ ██  ██████  ███    ██
-// ██ ████  ████ ██   ██ ██      ██      ████  ████ ██      ████   ██    ██    ██   ██    ██    ██ ██    ██ ████   ██
-// ██ ██ ████ ██ ██████  ██      █████   ██ ████ ██ █████   ██ ██  ██    ██    ███████    ██    ██ ██    ██ ██ ██  ██
-// ██ ██  ██  ██ ██      ██      ██      ██  ██  ██ ██      ██  ██ ██    ██    ██   ██    ██    ██ ██    ██ ██  ██ ██
-// ██ ██      ██ ██      ███████ ███████ ██      ██ ███████ ██   ████    ██    ██   ██    ██    ██  ██████  ██   ████
-//
 // >>implementation
 #ifdef SOKOL_APP_IMPL
 #define SOKOL_APP_IMPL_INCLUDED (1)
@@ -2621,12 +2615,6 @@ inline void sapp_run(const sapp_desc& desc) { return sapp_run(&desc); }
 #endif
 
 
-// ███████ ██████   █████  ███    ███ ███████     ████████ ██ ███    ███ ██ ███    ██  ██████
-// ██      ██   ██ ██   ██ ████  ████ ██             ██    ██ ████  ████ ██ ████   ██ ██
-// █████   ██████  ███████ ██ ████ ██ █████          ██    ██ ██ ████ ██ ██ ██ ██  ██ ██   ███
-// ██      ██   ██ ██   ██ ██  ██  ██ ██             ██    ██ ██  ██  ██ ██ ██  ██ ██ ██    ██
-// ██      ██   ██ ██   ██ ██      ██ ███████        ██    ██ ██      ██ ██ ██   ████  ██████
-//
 // >>frame timing
 typedef struct {
     #if defined(_SAPP_APPLE)
@@ -2768,13 +2756,7 @@ _SOKOL_PRIVATE double _sapp_timing_get(_sapp_timing_t* t) {
     return t->smooth_dt;
 }
 
-// ███████ ████████ ██████  ██    ██  ██████ ████████ ███████
-// ██         ██    ██   ██ ██    ██ ██         ██    ██
-// ███████    ██    ██████  ██    ██ ██         ██    ███████
-//      ██    ██    ██   ██ ██    ██ ██         ██         ██
-// ███████    ██    ██   ██  ██████   ██████    ██    ███████
-//
-// >> structs
+// >>structs
 #if defined(SOKOL_WGPU)
 typedef struct {
     WGPUInstance instance;
@@ -3390,12 +3372,6 @@ typedef struct {
 } _sapp_t;
 static _sapp_t _sapp;
 
-// ██       ██████   ██████   ██████  ██ ███    ██  ██████
-// ██      ██    ██ ██       ██       ██ ████   ██ ██
-// ██      ██    ██ ██   ███ ██   ███ ██ ██ ██  ██ ██   ███
-// ██      ██    ██ ██    ██ ██    ██ ██ ██  ██ ██ ██    ██
-// ███████  ██████   ██████   ██████  ██ ██   ████  ██████
-//
 // >>logging
 #if defined(SOKOL_DEBUG)
 #define _SAPP_LOGITEM_XMACRO(item,msg) #item ": " msg,
@@ -3432,12 +3408,6 @@ static void _sapp_log(sapp_log_item log_item, uint32_t log_level, const char* ms
     }
 }
 
-// ███    ███ ███████ ███    ███  ██████  ██████  ██    ██
-// ████  ████ ██      ████  ████ ██    ██ ██   ██  ██  ██
-// ██ ████ ██ █████   ██ ████ ██ ██    ██ ██████    ████
-// ██  ██  ██ ██      ██  ██  ██ ██    ██ ██   ██    ██
-// ██      ██ ███████ ██      ██  ██████  ██   ██    ██
-//
 // >>memory
 _SOKOL_PRIVATE void _sapp_clear(void* ptr, size_t size) {
     SOKOL_ASSERT(ptr && (size > 0));
@@ -3472,12 +3442,6 @@ _SOKOL_PRIVATE void _sapp_free(void* ptr) {
     }
 }
 
-// ██   ██ ███████ ██      ██████  ███████ ██████  ███████
-// ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
-// ███████ █████   ██      ██████  █████   ██████  ███████
-// ██   ██ ██      ██      ██      ██      ██   ██      ██
-// ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
-//
 // >>helpers
 
 // round float to int and at least 1
@@ -3892,12 +3856,6 @@ _SOKOL_PRIVATE void _sapp_setup_default_icon(void) {
     SOKOL_ASSERT(dst == dst_end);
 }
 
-// ██     ██  ██████  ██████  ██    ██
-// ██     ██ ██       ██   ██ ██    ██
-// ██  █  ██ ██   ███ ██████  ██    ██
-// ██ ███ ██ ██    ██ ██      ██    ██
-//  ███ ███   ██████  ██       ██████
-//
 // >>wgpu
 #if defined(SOKOL_WGPU)
 
@@ -4399,12 +4357,6 @@ _SOKOL_PRIVATE void _sapp_wgpu_frame(void) {
 }
 #endif // SOKOL_WGPU
 
-// ██    ██ ██    ██ ██      ██   ██  █████  ███    ██
-// ██    ██ ██    ██ ██      ██  ██  ██   ██ ████   ██
-// ██    ██ ██    ██ ██      █████   ███████ ██ ██  ██
-//  ██  ██  ██    ██ ██      ██  ██  ██   ██ ██  ██ ██
-//   ████    ██████  ███████ ██   ██ ██   ██ ██   ████
-//
 // >>vulkan
 // >>vk
 #if defined(SOKOL_VULKAN)
@@ -5330,12 +5282,6 @@ _SOKOL_PRIVATE void _sapp_vk_frame(void) {
 
 #endif // SOKOL_VULKAN
 
-//  █████  ██████  ██████  ██      ███████
-// ██   ██ ██   ██ ██   ██ ██      ██
-// ███████ ██████  ██████  ██      █████
-// ██   ██ ██      ██      ██      ██
-// ██   ██ ██      ██      ███████ ███████
-//
 // >>apple
 #if defined(_SAPP_APPLE)
 
@@ -5443,12 +5389,6 @@ _SOKOL_PRIVATE id<CAMetalDrawable> _sapp_mtl_swapchain_next(void) {
 #endif
 
 
-// ███    ███  █████   ██████  ██████  ███████
-// ████  ████ ██   ██ ██      ██    ██ ██
-// ██ ████ ██ ███████ ██      ██    ██ ███████
-// ██  ██  ██ ██   ██ ██      ██    ██      ██
-// ██      ██ ██   ██  ██████  ██████  ███████
-//
 // >>macos
 #if defined(_SAPP_MACOS)
 
@@ -6734,12 +6674,6 @@ static void _sapp_gl_make_current(void) {
 
 #endif // macOS
 
-// ██  ██████  ███████
-// ██ ██    ██ ██
-// ██ ██    ██ ███████
-// ██ ██    ██      ██
-// ██  ██████  ███████
-//
 // >>ios
 #if defined(_SAPP_IOS)
 
@@ -7257,12 +7191,6 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 
 #endif /* _SAPP_APPLE */
 
-// ███████ ███    ███ ███████  ██████ ██████  ██ ██████  ████████ ███████ ███    ██
-// ██      ████  ████ ██      ██      ██   ██ ██ ██   ██    ██    ██      ████   ██
-// █████   ██ ████ ██ ███████ ██      ██████  ██ ██████     ██    █████   ██ ██  ██
-// ██      ██  ██  ██      ██ ██      ██   ██ ██ ██         ██    ██      ██  ██ ██
-// ███████ ██      ██ ███████  ██████ ██   ██ ██ ██         ██    ███████ ██   ████
-//
 // >>emscripten
 #if defined(_SAPP_EMSCRIPTEN)
 
@@ -8438,12 +8366,6 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_EMSCRIPTEN */
 
-//  ██████  ██          ██   ██ ███████ ██      ██████  ███████ ██████  ███████
-// ██       ██          ██   ██ ██      ██      ██   ██ ██      ██   ██ ██
-// ██   ███ ██          ███████ █████   ██      ██████  █████   ██████  ███████
-// ██    ██ ██          ██   ██ ██      ██      ██      ██      ██   ██      ██
-//  ██████  ███████     ██   ██ ███████ ███████ ██      ███████ ██   ██ ███████
-//
 // >>gl helpers
 #if defined(SOKOL_GLCORE)
 typedef struct {
@@ -8659,12 +8581,6 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 }
 #endif
 
-// ██     ██ ██ ███    ██ ██████   ██████  ██     ██ ███████
-// ██     ██ ██ ████   ██ ██   ██ ██    ██ ██     ██ ██
-// ██  █  ██ ██ ██ ██  ██ ██   ██ ██    ██ ██  █  ██ ███████
-// ██ ███ ██ ██ ██  ██ ██ ██   ██ ██    ██ ██ ███ ██      ██
-//  ███ ███  ██ ██   ████ ██████   ██████   ███ ███  ███████
-//
 // >>windows
 #if defined(_SAPP_WIN32)
 _SOKOL_PRIVATE bool _sapp_win32_utf8_to_wide(const char* src, wchar_t* dst, int dst_num_bytes) {
@@ -10806,12 +10722,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 #endif /* _SAPP_WIN32 */
 
-//  █████  ███    ██ ██████  ██████   ██████  ██ ██████
-// ██   ██ ████   ██ ██   ██ ██   ██ ██    ██ ██ ██   ██
-// ███████ ██ ██  ██ ██   ██ ██████  ██    ██ ██ ██   ██
-// ██   ██ ██  ██ ██ ██   ██ ██   ██ ██    ██ ██ ██   ██
-// ██   ██ ██   ████ ██████  ██   ██  ██████  ██ ██████
-//
 // >>android
 #if defined(_SAPP_ANDROID)
 
@@ -11557,12 +11467,6 @@ void ANativeActivity_onCreate(ANativeActivity* activity, void* saved_state, size
 
 #endif /* _SAPP_ANDROID */
 
-// ██      ██ ███    ██ ██    ██ ██   ██
-// ██      ██ ████   ██ ██    ██  ██ ██
-// ██      ██ ██ ██  ██ ██    ██   ███
-// ██      ██ ██  ██ ██ ██    ██  ██ ██
-// ███████ ██ ██   ████  ██████  ██   ██
-//
 // >>linux
 #if defined(_SAPP_LINUX)
 
@@ -14537,12 +14441,8 @@ int main(int argc, char* argv[]) {
 #endif /* SOKOL_NO_ENTRY */
 #endif /* _SAPP_LINUX */
 
-// ██████  ██    ██ ██████  ██      ██  ██████
-// ██   ██ ██    ██ ██   ██ ██      ██ ██
-// ██████  ██    ██ ██████  ██      ██ ██
-// ██      ██    ██ ██   ██ ██      ██ ██
-// ██       ██████  ██████  ███████ ██  ██████
-//
+// >>private
+
 // >>public
 #if defined(SOKOL_NO_ENTRY)
 SOKOL_API_IMPL void sapp_run(const sapp_desc* desc) {
