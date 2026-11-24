@@ -6864,7 +6864,8 @@ _SOKOL_PRIVATE bool _sapp_macos_mtl_update_framebuffer_dimensions(NSRect view_bo
 #if defined(_SAPP_IOS) && defined(SOKOL_METAL)
 _SOKOL_PRIVATE void _sapp_ios_mtl_timing_init(void) {
     _sapp.mtl.timing.timestamp = 0.0;
-    _sapp.mtl.timing.frame_duration_sec = 1.0 / [NSScreen.mainScreen maximumFramesPerSecond];
+    const NSInteger max_fps = _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
+    _sapp.mtl.timing.frame_duration_sec = 1.0 / max_fps;
 }
 
 _SOKOL_PRIVATE void _sapp_ios_mtl_timing_update(void) {
@@ -6888,7 +6889,8 @@ _SOKOL_PRIVATE void _sapp_ios_mtl_start_display_link(void) {
     SOKOL_ASSERT(nil == _sapp.mtl.display_link);
     SOKOL_ASSERT(nil != _sapp.ios.view);
     _sapp.mtl.display_link = [CADisplayLink displayLinkWithTarget:_sapp.ios.view selector:@selector(displayLinkFired:)];
-    const float preferred_fps = [NSScreen.mainScreen maximumFramesPerSecond] / _sapp.desc.swap_interval;
+    const NSInteger max_fps = _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
+    const float preferred_fps = (float)max_fps / (float)_sapp.desc.swap_interval;
     const CAFrameRateRange frame_rate_range = { preferred_fps, preferred_fps, preferred_fps };
     _sapp.mtl.display_link.preferredFrameRateRange = frame_rate_range;
     [_sapp.mtl.display_link addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -7123,7 +7125,8 @@ _SOKOL_PRIVATE void _sapp_ios_gles3_init(UIWindowScene* windowScene) {
     }
     _sapp.ios.view_ctrl = [[GLKViewController alloc] init];
     _sapp.ios.view_ctrl.view = _sapp.ios.view;
-    _sapp.ios.view_ctrl.preferredFramesPerSecond = [NSScreen.mainScreen maximumFramesPerSecond] / _sapp.desc.swap_interval;
+    const NSInteger max_fps = _sapp.ios.window.windowScene.screen.maximumFramesPerSecond;
+    _sapp.ios.view_ctrl.preferredFramesPerSecond = max_fps / _sapp.desc.swap_interval;
     _sapp.ios.window.rootViewController = _sapp.ios.view_ctrl;
 }
 
