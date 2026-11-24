@@ -15040,7 +15040,6 @@ SOKOL_API_IMPL double sapp_frame_duration_unfiltered(void) {
 SOKOL_API_IMPL int sapp_width(void) {
     SOKOL_ASSERT(_sapp.valid);
     return _sapp_width();
-    return (_sapp.framebuffer_width > 0) ? _sapp.framebuffer_width : 1;
 }
 
 SOKOL_API_IMPL float sapp_widthf(void) {
