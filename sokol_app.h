@@ -3380,6 +3380,7 @@ static _sapp_t _sapp;
 _SOKOL_PRIVATE void _sapp_init_state(const sapp_desc* desc);
 _SOKOL_PRIVATE void _sapp_discard_state(void);
 _SOKOL_PRIVATE void _sapp_set_icon(const sapp_icon_desc* desc);
+_SOKOL_PRIVATE void _sapp_cleanup(void);
 
 //>>logging
 #if defined(SOKOL_DEBUG)
@@ -3482,7 +3483,7 @@ _SOKOL_PRIVATE void _sapp_call_frame(void) {
 }
 
 _SOKOL_PRIVATE void _sapp_call_cleanup(void) {
-    if (!_sapp.cleanup_called) {
+    if (_sapp.init_called && !_sapp.cleanup_called) {
         if (_sapp.desc.cleanup_cb) {
             _sapp.desc.cleanup_cb();
         } else if (_sapp.desc.cleanup_userdata_cb) {
@@ -7726,7 +7727,7 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 
 - (void)applicationWillTerminate:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
-    _sapp_call_cleanup();
+    _sapp_cleanup();
     _sapp_macos_discard_state();
     _sapp_discard_state();
 }
@@ -8366,7 +8367,7 @@ _SOKOL_PRIVATE void _sapp_ios_show_keyboard(bool shown) {
 */
 - (void)applicationWillTerminate:(UIApplication *)application {
     _SOKOL_UNUSED(application);
-    _sapp_call_cleanup();
+    _sapp_cleanup();
     _sapp_ios_discard_state();
     _sapp_discard_state();
 }
@@ -9604,11 +9605,11 @@ _SOKOL_PRIVATE EM_BOOL _sapp_emsc_frame_animation_loop(double time, void* userDa
         }
     }
     if (_sapp.quit_ordered) {
+        _sapp_cleanup();
         _sapp_emsc_unregister_eventhandlers();
         #if defined(SOKOL_WGPU)
             _sapp_wgpu_discard();
         #endif
-        _sapp_call_cleanup();
         _sapp_discard_state();
         return EM_FALSE;
     }
@@ -10954,7 +10955,7 @@ _SOKOL_PRIVATE void _sapp_win32_run(const sapp_desc* desc) {
         // update mouse-lock state
         _sapp_win32_update_mouse_lock();
     }
-    _sapp_call_cleanup();
+    _sapp_cleanup();
 
     #if defined(SOKOL_D3D11)
         _sapp_d3d11_destroy_default_render_target();
@@ -11230,9 +11231,7 @@ _SOKOL_PRIVATE void _sapp_android_update_dimensions(ANativeWindow* window, bool 
 _SOKOL_PRIVATE void _sapp_android_cleanup(void) {
     if (_sapp.android.surface != EGL_NO_SURFACE) {
         /* egl context is bound, cleanup gracefully */
-        if (_sapp.init_called && !_sapp.cleanup_called) {
-            _sapp_call_cleanup();
-        }
+        _sapp_cleanup();
     }
     /* always try to cleanup by destroying egl context */
     _sapp_android_cleanup_egl();
@@ -14278,7 +14277,7 @@ _SOKOL_PRIVATE void _sapp_linux_run(const sapp_desc* desc) {
             }
         }
     }
-    _sapp_call_cleanup();
+    _sapp_cleanup();
     #if defined(_SAPP_GLX)
         _sapp_glx_destroy_context();
     #elif defined(_SAPP_EGL)
@@ -14500,6 +14499,12 @@ _SOKOL_PRIVATE void _sapp_unbind_mouse_cursor_image(sapp_mouse_cursor cursor) {
         #elif defined(_SAPP_LINUX)
         _sapp_x11_destroy_custom_mouse_cursor(cursor);
         #endif
+    }
+}
+
+_SOKOL_PRIVATE void _sapp_unbind_mouse_cursor_images(void) {
+    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
+        _sapp_unbind_mouse_cursor_image((sapp_mouse_cursor)i);
     }
 }
 
@@ -14980,11 +14985,12 @@ _SOKOL_PRIVATE void _sapp_discard_state(void) {
     if (_sapp.default_icon_pixels) {
         _sapp_free((void*)_sapp.default_icon_pixels);
     }
-    // FIXME FIXME FIXME: needs to go into a different place
-    for (int i = 0; i < _SAPP_MOUSECURSOR_NUM; i++) {
-        _sapp_unbind_mouse_cursor_image((sapp_mouse_cursor) i);
-    }
     _SAPP_CLEAR_ARC_STRUCT(_sapp_t, _sapp);
+}
+
+_SOKOL_PRIVATE void _sapp_cleanup(void) {
+    _sapp_call_cleanup();
+    _sapp_unbind_mouse_cursor_images();
 }
 
 //>>public
