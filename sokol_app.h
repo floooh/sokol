@@ -14191,10 +14191,6 @@ _SOKOL_PRIVATE void _sapp_x11_process_event(XEvent* event) {
     }
 }
 
-#if defined(_SAPP_EGL)
-
-#endif // _SAPP_EGL
-
 _SOKOL_PRIVATE void _sapp_linux_frame(void) {
     _sapp_x11_update_dimensions_from_window_size();
     #if defined(SOKOL_WGPU)
@@ -14663,8 +14659,7 @@ _SOKOL_PRIVATE void _sapp_html5_fetch_dropped_file(const sapp_html5_fetch_reques
         sapp_html5_fetch_error error_code = SAPP_HTML5_FETCH_ERROR_NO_ERROR;
         if ((index < 0) || (index >= _sapp.drop.num_files)) {
             error_code = SAPP_HTML5_FETCH_ERROR_OTHER;
-        }
-        if (_sapp_html5_get_dropped_file_size(index) > request->buffer.size) {
+        } else if (_sapp_html5_get_dropped_file_size(index) > request->buffer.size) {
             error_code = SAPP_HTML5_FETCH_ERROR_BUFFER_TOO_SMALL;
         }
         if (SAPP_HTML5_FETCH_ERROR_NO_ERROR != error_code) {
